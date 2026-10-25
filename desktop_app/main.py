@@ -25,6 +25,7 @@ def main():
     parser.add_argument("--ui-verify",metavar="OUTPUT_DIR",help="显示应用窗口，通过控件操作完成修改、生成、保存和独立核对")
     parser.add_argument("--shap-verify",metavar="OUTPUT_DIR",help="后台核对第四模块完整参数、生成和导出")
     parser.add_argument("--word-verify",metavar="OUTPUT_DIR",help="后台核对Word病例生成完整流程")
+    parser.add_argument("--word-groups-verify",metavar="OUTPUT_DIR",help="核对自定义组别导入、指标改名与Excel导出")
     parser.add_argument("--word-source",help="Word流程验证的docx来源")
     parser.add_argument("--open-tool",choices=["category","numeric","word","shap"],help="启动时打开指定工具")
     args=parser.parse_args()
@@ -38,7 +39,7 @@ def main():
         (Path(args.self_test)/"self_test_passed.json").write_text(json.dumps({"passed":True,"folder":str(result.folder),"images":len(result.images)},ensure_ascii=False,indent=2),encoding="utf-8")
         return 0
     from PySide6.QtCore import QTimer, Qt, QCoreApplication, QEvent
-    if args.ui_verify or args.shap_verify or args.word_verify:
+    if args.ui_verify or args.shap_verify or args.word_verify or args.word_groups_verify:
         from PySide6.QtWidgets import QApplication
         QApplication.setAttribute(Qt.AA_DontUseNativeDialogs,True)
     from clinical_studio.app import create_application
@@ -62,6 +63,12 @@ def main():
             window.verification_passed=verify_word(window,args.word_verify,args.word_source)
             app.quit()
         QTimer.singleShot(100,verify_word_flow)
+    if args.word_groups_verify:
+        from clinical_studio.group_verify import verify_groups
+        def verify_group_flow():
+            window.verification_passed=verify_groups(window,args.word_groups_verify)
+            app.quit()
+        QTimer.singleShot(100,verify_group_flow)
     if args.screenshot:
         def capture():
             window.grab().save(args.screenshot); app.quit()
@@ -71,7 +78,7 @@ def main():
     # may otherwise visit signal-connected buttons after their Qt parent is gone.
     window.deleteLater()
     QCoreApplication.sendPostedEvents(None,QEvent.DeferredDelete)
-    if args.shap_verify or args.word_verify:
+    if args.shap_verify or args.word_verify or args.word_groups_verify:
         return 0 if window.verification_passed else 1
     if args.ui_verify:
         return 0 if verifier.passed else 1
@@ -85,7 +92,7 @@ if __name__=="__main__":
         code=main()
     except Exception:
         import traceback
-        flag=next((f for f in ("--self-test","--ui-verify","--shap-verify","--word-verify") if f in sys.argv),None)
+        flag=next((f for f in ("--self-test","--ui-verify","--shap-verify","--word-verify","--word-groups-verify") if f in sys.argv),None)
         if flag and sys.argv.index(flag)+1<len(sys.argv):
             target=Path(sys.argv[sys.argv.index(flag)+1]);target.mkdir(parents=True,exist_ok=True)
             (target/"fatal_error.json").write_text(json.dumps({"passed":False,"traceback":traceback.format_exc()},ensure_ascii=False,indent=2),encoding="utf-8")

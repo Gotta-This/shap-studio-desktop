@@ -98,6 +98,7 @@ class StrictVerifier(SuiteVerifier):
     def word(self):
         tool=self.enter('word');b=self.hub.boards[3]
         source=self.root/'工具3_测试Word.docx';make_word_fixture(source);self.save_dialog(b.controls['import-word'],source)
+        tool.group_inputs[0].setText('对照组');tool.add_group_input('中药组');tool.confirm_groups()
         self.hub.refresh(force=True)
         self.check('设计导入按钮识别两组指标',self.hub.word_table.rowCount()==2)
         tool.pages.setCurrentIndex(0);tool.same_size.setChecked(False)

@@ -28,7 +28,7 @@ exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name=exe_name, debug=False,
 coll = COLLECT(exe, a.binaries, a.datas, strip=False, upx=False, name=exe_name)
 if is_macos:
     app = BUNDLE(coll, name="科研数据工具集.app", icon=str(root / "clinical_studio" / "assets" / "icon.icns"),
-        bundle_identifier="local.clinicalstudio.shap", version="1.0.4",
+        bundle_identifier="local.clinicalstudio.shap", version="1.0.5",
         info_plist={"NSHighResolutionCapable": True, "NSRequiresAquaSystemAppearance": True,
-                    "NSHumanReadableCopyright": "SHAP 分析工作台 1.0.4",
+                    "NSHumanReadableCopyright": "SHAP 分析工作台 1.0.5",
                     "CFBundleDisplayName": "科研数据工具集"})

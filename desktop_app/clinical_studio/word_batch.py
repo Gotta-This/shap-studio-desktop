@@ -4,7 +4,7 @@ import json
 import math
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QThread, Signal
+from PySide6.QtCore import Qt, QThread, Signal, QTimer
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QApplication, QAbstractItemView, QCheckBox, QComboBox, QFileDialog,
@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
 )
 from .widgets import scroll
 from .word_batch_engine import (
-    GROUPS, default_batch_config, read_word, generate_batch, export_batch, validate_batch,
+    default_batch_config, read_word, generate_batch, export_batch, validate_batch, group_names,
 )
 
 
@@ -49,7 +49,7 @@ class EditableRows(QGroupBox):
 class GroupSettings(QWidget):
     def __init__(self,config):
         super().__init__();self.name=config['name'];self.fields={};layout=QVBoxLayout(self);layout.setContentsMargins(0,0,0,0)
-        self.shared_note=QLabel('本组共用对照组的基础资料规则；例数、有效率与复发率仍可分别设置。');self.shared_note.setWordWrap(True);self.shared_note.hide();layout.addWidget(self.shared_note)
+        self.shared_note=QLabel('本组共用第一个组别的基础资料规则；例数、有效率与复发率仍可分别设置。');self.shared_note.setWordWrap(True);self.shared_note.hide();layout.addWidget(self.shared_note)
         self.sections=QTabWidget();layout.addWidget(self.sections,1)
         group=QGroupBox('组别、性别与病情程度');group.setStyleSheet('QGroupBox{padding:18px 12px 12px;} QLineEdit{padding:4px 8px;min-height:20px;}');form=QFormLayout(group)
         for key,label,value in [('n','本组例数',config['n']),('male','男性占比 %（其余为女性）',config['male']),('light','轻度占比 %',config['severity'][0]),('medium','中度占比 %',config['severity'][1]),('severe','重度占比 %',config['severity'][2])]:
@@ -111,18 +111,27 @@ class WordBatchTool(QWidget):
     HEADERS=['表','指标列名','分组','均数','标准差','小数位','下限（可空）','上限（可空）','数值类型','Word 原文']
     KEYS=['table','name','group','mean','sd','digits','lower','upper','parity','raw']
     def __init__(self):
-        super().__init__();self.worker=None;self.result=None;self.source='';self.config=default_batch_config()
+        super().__init__();self.worker=None;self.result=None;self.source='';self.config=default_batch_config();self.pending_source=None;self.groups_confirmed=True
         layout=QVBoxLayout(self)
-        intro=QLabel('导入 Word 表格，按你配置的人数与基本资料生成两组病例，再一次导出 Excel。')
+        intro=QLabel('导入 Word 表格，按你配置的人数与基本资料生成所选组别的病例，再一次导出 Excel。')
         intro.setWordWrap(True);layout.addWidget(intro)
         row=QHBoxLayout();self.import_button=button('导入 Word（.docx）',self.pick_word,row)
-        self.load_button=button('载入配置',self.load_config,row);self.save_button=button('保存配置',self.save_config,row);row.addStretch();layout.addLayout(row)
+        self.load_button=button('载入配置',self.load_config,row);self.save_button=button('保存配置',self.save_config,row);self.change_groups_button=button('修改组别',self.edit_groups,row);self.change_groups_button.hide();row.addStretch();layout.addLayout(row)
         options=QHBoxLayout();self.use_word_sizes=QCheckBox('采用 Word 表中的例数');self.use_word_rates=QCheckBox('采用 Word 表中的有效／复发比例');options.addWidget(self.use_word_sizes);options.addWidget(self.use_word_rates);options.addStretch();layout.addLayout(options)
-        self.source_label=QLabel('先设置每组例数，再导入 Word。默认保留你输入的人数和比例。');self.source_label.setWordWrap(True);layout.addWidget(self.source_label)
+        self.source_label=QLabel('先导入Word，填写并确认本次组别，再核对指标与生成人数。');self.source_label.setWordWrap(True);layout.addWidget(self.source_label)
+        self.group_panel=QGroupBox('1 · 填写并确认本次要生成的组别');gp=QVBoxLayout(self.group_panel)
+        note=QLabel('每个输入框填写一个Word中的组别原名，可添加或删除。确认后才识别指标列名。');note.setWordWrap(True);gp.addWidget(note)
+        self.group_rows=QWidget();self.group_rows_layout=QVBoxLayout(self.group_rows);self.group_rows_layout.setContentsMargins(0,0,0,0);self.group_inputs=[]
+        self.group_area=scroll(self.group_rows);gp.addWidget(self.group_area)
+        actions=QHBoxLayout();self.add_group_button=button('＋ 添加组别',self.add_group_input,actions);self.match_groups_button=button('匹配Word表格',self.match_groups,actions);self.confirm_groups_button=button('确认组别，识别指标列名',self.confirm_groups,actions);actions.addStretch();gp.addLayout(actions)
+        self.match_summary=QLabel('');self.match_summary.setWordWrap(True);gp.addWidget(self.match_summary)
+        self.match_report=QPlainTextEdit();self.match_report.setReadOnly(True);gp.addWidget(self.match_report,1)
+        layout.addWidget(self.group_panel,1);self.group_panel.hide()
+        self.match_timer=QTimer(self);self.match_timer.setSingleShot(True);self.match_timer.timeout.connect(self.match_groups)
         self.pages=QTabWidget();layout.addWidget(self.pages,1)
         basics=QWidget();base_layout=QVBoxLayout(basics);form=QFormLayout()
-        self.common_n=QSpinBox();self.common_n.setRange(2,5000);self.common_n.setValue(70);self.same_size=QCheckBox('两组使用相同例数');self.same_size.setChecked(True);self.shared_basics=QCheckBox('两组共用基础资料规则（使用对照组的性别、年龄、病程、病情程度和病变范围）');self.shared_basics.setChecked(True)
-        self.total_label=QLabel('对照组 70 例 + 中药组 70 例 = 140 行病例')
+        self.common_n=QSpinBox();self.common_n.setRange(2,5000);self.common_n.setValue(70);self.same_size=QCheckBox('所选组别使用相同例数');self.same_size.setChecked(True);self.shared_basics=QCheckBox('共用第一个组别的基础资料规则（性别、年龄、病程、病情程度和病变范围）');self.shared_basics.setChecked(True)
+        self.total_label=QLabel('')
         counts=QHBoxLayout();counts.addWidget(QLabel('每组例数'));counts.addWidget(self.common_n);counts.addWidget(self.same_size);counts.addWidget(self.total_label);counts.addStretch();base_layout.addLayout(counts)
         self.seed=QLineEdit('12');self.unit=QLineEdit('月');self.seed.setMaximumWidth(160);self.unit.setMaximumWidth(100);seedrow=QHBoxLayout();seedrow.addWidget(QLabel('随机种子'));seedrow.addWidget(self.seed);seedrow.addWidget(QLabel('病程单位'));seedrow.addWidget(self.unit);seedrow.addWidget(self.shared_basics);seedrow.addStretch();base_layout.addLayout(seedrow)
         self.common_n.valueChanged.connect(self.sync_group_controls);self.same_size.toggled.connect(self.sync_group_controls);self.shared_basics.toggled.connect(self.sync_group_controls)
@@ -130,14 +139,15 @@ class WordBatchTool(QWidget):
         self.pages.addTab(basics,'1 · 人数与基本资料')
         self.set_groups(self.config['groups']);self.sync_group_controls()
         metrics=QWidget();ml=QVBoxLayout(metrics)
-        tip=QLabel('每个指标须有两组配置。小数位 0～4；奇数／偶数须为 0 位。上下限非必填。表头、均数和标准差均可修改；空白统计值必须补全。')
+        tip=QLabel('每个指标须配置全部所选组别。双击指标列名即可修改，同一指标的各组列名同步更新。小数位 0～4；奇数／偶数须为 0 位。上下限非必填。表头、均数和标准差均可修改；空白统计值必须补全。')
         tip.setWordWrap(True);ml.addWidget(tip)
         self.metrics=QTableWidget(0,len(self.HEADERS));self.metrics.setHorizontalHeaderLabels(self.HEADERS)
+        self.metrics.setEditTriggers(QAbstractItemView.DoubleClicked|QAbstractItemView.EditKeyPressed|QAbstractItemView.SelectedClicked)
         self.metrics.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
         for i in range(len(self.HEADERS)):self.metrics.setColumnWidth(i,135 if i in (1,9) else 95)
-        self.metrics.setColumnWidth(1,220);self.metrics.setColumnWidth(0,45);ml.addWidget(self.metrics,1)
+        self.metrics.setColumnWidth(1,240);self.metrics.setColumnWidth(2,150);self.metrics.setColumnWidth(0,45);self.metrics.verticalHeader().setDefaultSectionSize(44);self.metrics.verticalHeader().setMinimumSectionSize(44);ml.addWidget(self.metrics,1)
         self.metrics.cellChanged.connect(self.metric_name_changed)
-        row=QHBoxLayout();button('＋ 添加指标（两组）',self.add_indicator,row);button('删除选中的指标（两组）',self.remove_indicator,row);row.addStretch();ml.addLayout(row)
+        row=QHBoxLayout();button('＋ 添加指标（全部组别）',self.add_indicator,row);button('删除选中的指标（全部组别）',self.remove_indicator,row);row.addStretch();ml.addLayout(row)
         self.pages.addTab(metrics,'2 · Word 指标核对')
         self.log=QPlainTextEdit();self.log.setReadOnly(True);self.log.setPlainText('导入后显示识别报告。基本资料的初始比例为示例，请核对后生成。')
         self.pages.addTab(self.log,'识别报告')
@@ -160,14 +170,14 @@ class WordBatchTool(QWidget):
             self.group_tabs.addTab(editor,editor.name)
             editor.fields['n'].textChanged.connect(self.update_total)
         if hasattr(self,'common_n'):
-            equal=groups[0]['n']==groups[1]['n'];self.same_size.blockSignals(True);self.same_size.setChecked(equal);self.same_size.blockSignals(False)
+            equal=len({g['n'] for g in groups})==1;self.same_size.blockSignals(True);self.same_size.setChecked(equal);self.same_size.blockSignals(False)
             self.common_n.blockSignals(True);self.common_n.setValue(groups[0]['n']);self.common_n.blockSignals(False)
             self.sync_group_controls()
     def update_total(self):
         if not getattr(self,'group_editors',None):return
         try:
             counts=[int(e.fields['n'].text()) for e in self.group_editors]
-            self.total_label.setText(f'对照组 {counts[0]} 例 + 中药组 {counts[1]} 例 = {sum(counts)} 行病例')
+            self.total_label.setText(' + '.join(f'{e.name} {n} 例' for e,n in zip(self.group_editors,counts))+f' = {sum(counts)} 行病例')
         except ValueError:self.total_label.setText('请填写有效例数')
 
     def sync_group_controls(self,*args):
@@ -178,7 +188,7 @@ class WordBatchTool(QWidget):
             e.fields['n'].setReadOnly(self.same_size.isChecked())
             e.fields['n'].setVisible(not self.same_size.isChecked())
             e.fields['n'].parentWidget().layout().labelForField(e.fields['n']).setVisible(not self.same_size.isChecked())
-            shared=index==1 and self.shared_basics.isChecked()
+            shared=index>0 and self.shared_basics.isChecked()
             e.shared_note.setVisible(shared)
             for k in ('male','light','medium','severe'):e.fields[k].setEnabled(not shared)
             for control in (e.age,e.course,e.course_digits,e.extent_mode,e.extent,e.extent_ranges,e.extent_digits):control.setEnabled(not shared)
@@ -215,22 +225,24 @@ class WordBatchTool(QWidget):
         for j,key in enumerate(self.KEYS):
             if key in ('group','parity'):
                 combo=QComboBox()
-                for title,value in ([(g,g) for g in GROUPS] if key=='group' else [('任意数值','any'),('奇数','odd'),('偶数','even')]):combo.addItem(title,value)
+                for title,value in ([(e.name,e.name) for e in self.group_editors] if key=='group' else [('任意数值','any'),('奇数','odd'),('偶数','even')]):combo.addItem(title,value)
                 combo.setCurrentIndex(max(0,combo.findData(spec.get(key))));self.metrics.setCellWidget(i,j,combo)
             else:
                 entry=item(spec.get(key,''))
-                if key=='name':entry.setData(Qt.UserRole,spec.get(key,''))
+                if key=='name':
+                    entry.setData(Qt.UserRole,spec.get(key,''));entry.setFlags(entry.flags()|Qt.ItemIsEditable);entry.setToolTip('双击修改此Excel指标列名；同一指标的所有组别同步更新。')
                 self.metrics.setItem(i,j,entry)
     def add_indicator(self):
         existing={self.metrics.item(i,1).text() for i in range(self.metrics.rowCount()) if self.metrics.item(i,1)}
         k=1
         while f'自定义指标{k}' in existing:k+=1
-        for group in GROUPS:self.append_spec(dict(table=0,name=f'自定义指标{k}',group=group,mean=10,sd=2,digits=2,lower=None,upper=None,parity='any',raw='手工配置'))
+        for group in [e.name for e in self.group_editors]:self.append_spec(dict(table=0,name=f'自定义指标{k}',group=group,mean=10,sd=2,digits=2,lower=None,upper=None,parity='any',raw='手工配置'))
     def remove_indicator(self):
         names={self.metrics.item(i.row(),1).text() for i in self.metrics.selectedIndexes() if self.metrics.item(i.row(),1)}
         for i in reversed(range(self.metrics.rowCount())):
             if self.metrics.item(i,1).text() in names:self.metrics.removeRow(i)
     def get_config(self):
+        if not self.groups_confirmed:raise ValueError('请先填写并确认本次Word的组别，再识别指标。')
         specs=[]
         try:
             for i in range(self.metrics.rowCount()):
@@ -243,9 +255,7 @@ class WordBatchTool(QWidget):
                     elif key in ('lower','upper'):value=float(value) if value else None
                     spec[key]=value
                 specs.append(spec)
-            first=self.group_editors[0].values();groups=[first,self.group_editors[1].values(first if self.shared_basics.isChecked() else None)]
-            if self.shared_basics.isChecked():
-                for k in ('male','severity','age','course','course_digits','extent','extent_mode','extent_ranges','extent_digits'):groups[1][k]=deepcopy(groups[0][k])
+            first=self.group_editors[0].values();groups=[first]+[e.values(first if self.shared_basics.isChecked() else None) for e in self.group_editors[1:]]
             config=dict(version=1,seed=int(self.seed.text().strip()),source=self.source,course_unit=self.unit.text().strip(),groups=groups,indicators=specs,shared_basics=self.shared_basics.isChecked(),same_group_size=self.same_size.isChecked(),import_options=dict(sizes=self.use_word_sizes.isChecked(),rates=self.use_word_rates.isChecked()))
         except (ValueError,TypeError) as exc:raise ValueError('请补全有效数字；例数、小数位和种子须为整数，只有上下限可留空。') from exc
         validate_batch(config)
@@ -253,30 +263,96 @@ class WordBatchTool(QWidget):
     def pick_word(self):
         path,_=QFileDialog.getOpenFileName(self,'选择 Word 汇总表','','Word (*.docx)')
         if path:self.import_word(path)
+    def add_group_input(self,name=''):
+        if len(self.group_inputs)>=20:
+            self.message.setText('最多支持20个组别。');return
+        if not isinstance(name,str):name=''
+        row=QWidget();row.setFixedHeight(44);line=QHBoxLayout(row);line.setContentsMargins(0,0,0,0)
+        entry=QLineEdit(name);entry.setFixedHeight(40);entry.setPlaceholderText('填写Word中的组别原名，如观察组、常规治疗组');line.addWidget(entry,1)
+        remove=QPushButton('删除');remove.setFixedHeight(40);line.addWidget(remove)
+        self.group_rows_layout.addWidget(row);self.group_inputs.append(entry);self.resize_group_inputs()
+        def drop():
+            self.group_inputs.remove(entry);self.group_rows_layout.removeWidget(row);row.deleteLater();self.resize_group_inputs();self.match_groups()
+        remove.clicked.connect(drop)
+        entry.textChanged.connect(lambda:self.match_timer.start(200))
+        return entry
+
+    def resize_group_inputs(self):
+        height=max(48,len(self.group_inputs)*50)
+        self.group_rows.setMinimumHeight(height);self.group_area.setFixedHeight(min(156,height))
+
+    def show_group_selection(self,names):
+        self.match_timer.stop()
+        for i in reversed(range(self.group_rows_layout.count())):
+            widget=self.group_rows_layout.takeAt(i).widget();widget.deleteLater()
+        self.group_inputs=[]
+        for name in names:self.add_group_input(name)
+        self.groups_confirmed=False;self.pages.hide();self.group_panel.show();self.generate_button.setEnabled(False)
+        self.match_groups()
+
+    def edit_groups(self):
+        if self.is_running():return
+        if self.source:
+            self.pending_source=self.source;self.show_group_selection([e.name for e in self.group_editors])
+
     def import_word(self,path):
         if self.is_running():return
         try:
-            imported=read_word(path)
-            # Preserve users' baseline settings across imports; update only table-derived sizes/rates.
-            try:groups=[editor.values() for editor in self.group_editors]
-            except ValueError:groups=default_batch_config()['groups']
-            for g in groups:
+            imported=read_word(path,[],parse_indicators=False)
+            self.pending_source=imported.source;self.source_label.setText(f'已导入：{Path(imported.source).name} · Word共{imported.table_count}张表，请填写本次组别。')
+            self.source_label.setToolTip(imported.source);self.change_groups_button.hide()
+            self.show_group_selection(['']);self.message.setText('请填写组别原名，可增加多个组别；确认后自动填充指标列名。')
+        except Exception as exc:self.message.setText('导入失败：'+str(exc))
+
+    def match_groups(self):
+        if not self.pending_source:return None
+        try:
+            names=[e.text().strip() for e in self.group_inputs]
+            filled=[n for n in names if n]
+            if filled:group_names(filled)
+            imported=read_word(self.pending_source,filled,parse_indicators=False)
+            matched=sum(count>0 for count in imported.group_matches.values());table_hits=sum(bool(t['groups']) for t in imported.table_matches)
+            self.match_summary.setText(f'Word表格总数：{imported.table_count} · 匹配到的组别：{matched}/{len(filled)}个 · 匹配表格：{table_hits}张 · 组别数据行：{sum(imported.group_matches.values())}行')
+            lines=[f'{name}：{count}行，出现于{sum(name in t["groups"] for t in imported.table_matches)}张表' for name,count in imported.group_matches.items()]
+            lines+=['', '逐表匹配：']+[f'表{t["table"]}：'+('、'.join(f'{name}（{count}行）' for name,count in t['groups'].items()) or '未匹配到所选组别') for t in imported.table_matches]
+            self.match_report.setPlainText('\n'.join(lines));self.confirm_groups_button.setEnabled(bool(filled) and len(filled)==len(names) and all(imported.group_matches.values()))
+            return imported
+        except Exception as exc:
+            self.match_summary.setText(str(exc));self.confirm_groups_button.setEnabled(False);return None
+
+    def confirm_groups(self):
+        if self.is_running():return
+        try:
+            names=group_names([e.text() for e in self.group_inputs]);matched=self.match_groups()
+            if matched is None or any(not matched.group_matches.get(g) for g in names):
+                raise ValueError('有组别未在Word任何表格中匹配到，请核对组名。')
+            imported=read_word(self.pending_source,names)
+            previous={e.name:e for e in self.group_editors};groups=[]
+            for g in default_batch_config(names)['groups']:
+                if g['name'] in previous:
+                    try:g=previous[g['name']].values()
+                    except ValueError:pass
+                else:g['n']=self.common_n.value()
                 if self.use_word_sizes.isChecked() and g['name'] in imported.group_sizes:g['n']=imported.group_sizes[g['name']]
                 for key,rate in imported.outcome_rates.get(g['name'],{}).items():
                     if self.use_word_rates.isChecked():g['effective' if key=='总有效率' else 'recurrence']=rate
-            self.set_groups(groups);self.set_indicators(imported.indicators);self.source=imported.source
-            self.source_label.setText(f'已导入：{Path(imported.source).name}');self.source_label.setToolTip(imported.source)
-            self.log.setPlainText('\n'.join(imported.messages))
-            self.message.setText(f'读取 {imported.table_count} 张表，识别 {len(imported.indicators)//2} 个指标，Excel 共 {9+len(imported.indicators)//2} 列。请核对人数与基本资料，再生成。')
-            self.log.appendPlainText('Word 例数（仅供核对）：'+json.dumps(imported.group_sizes,ensure_ascii=False)+'\nWord 结局比例（仅供核对）：'+json.dumps(imported.outcome_rates,ensure_ascii=False)+'\n人数及比例是否采用 Word 的值，由导入按钮下方的勾选项控制。')
+                groups.append(g)
+            self.set_groups(groups);self.set_indicators(imported.indicators);self.source=imported.source;self.groups_confirmed=True
+            self.group_panel.hide();self.pages.show();self.generate_button.setEnabled(True);self.change_groups_button.show()
+            count=len({s['name'] for s in imported.indicators})
+            self.source_label.setText(f'Word共{imported.table_count}张表 · 已确认{len(names)}个组别：'+ '、'.join(names))
+            self.log.setPlainText(self.match_summary.text()+'\n'+self.match_report.toPlainText()+'\n\n'+'\n'.join(imported.messages))
+            self.log.appendPlainText('Word例数（仅供核对）：'+json.dumps(imported.group_sizes,ensure_ascii=False)+'\nWord结局比例（仅供核对）：'+json.dumps(imported.outcome_rates,ensure_ascii=False))
+            self.message.setText(f'已匹配{len(names)}个组别，识别{count}个指标，Excel共{9+count}列。双击“指标列名”可修改，各组同步更新。')
             self.pages.setCurrentIndex(1)
-        except Exception as exc:self.message.setText('导入失败：'+str(exc))
+        except Exception as exc:self.message.setText('组别确认失败：'+str(exc))
+
     def load_config(self):
         path,_=QFileDialog.getOpenFileName(self,'载入批量工具配置','','JSON (*.json)')
         if not path:return
         try:
             config=json.loads(Path(path).read_text(encoding='utf-8'));validate_batch(config)
-            self.shared_basics.setChecked(config.get('shared_basics',False));self.set_groups(config['groups']);self.same_size.setChecked(config.get('same_group_size',config['groups'][0]['n']==config['groups'][1]['n']));self.use_word_sizes.setChecked(config.get('import_options',{}).get('sizes',False));self.use_word_rates.setChecked(config.get('import_options',{}).get('rates',False));self.set_indicators(config['indicators']);self.seed.setText(str(config['seed']));self.unit.setText(config.get('course_unit','月'));self.source=config.get('source','');self.source_label.setText('配置来源：'+path);self.message.setText('已载入配置。已有生成结果保持原样，重新生成后更新。')
+            self.shared_basics.setChecked(config.get('shared_basics',False));self.set_groups(config['groups']);self.same_size.setChecked(config.get('same_group_size',len({g['n'] for g in config['groups']})==1));self.use_word_sizes.setChecked(config.get('import_options',{}).get('sizes',False));self.use_word_rates.setChecked(config.get('import_options',{}).get('rates',False));self.set_indicators(config['indicators']);self.seed.setText(str(config['seed']));self.unit.setText(config.get('course_unit','月'));self.source=config.get('source','');self.groups_confirmed=True;self.pending_source=self.source;self.group_panel.hide();self.pages.show();self.generate_button.setEnabled(True);self.change_groups_button.setVisible(bool(self.source));self.source_label.setText('配置来源：'+path);self.message.setText('已载入配置。已有生成结果保持原样，重新生成后更新。')
         except Exception as exc:self.message.setText('载入失败：'+str(exc))
     def save_config(self):
         try:config=self.get_config()
@@ -296,7 +372,8 @@ class WordBatchTool(QWidget):
     def cancel(self):
         if self.is_running():self.worker.requestInterruption();self.cancel_button.setEnabled(False);self.message.setText('正在取消；完成当前指标后停止。')
     def finished(self):
-        for control in [self.generate_button,self.import_button,self.load_button,self.save_button]:control.setEnabled(True)
+        for control in [self.generate_button,self.import_button,self.load_button,self.save_button,self.change_groups_button]:control.setEnabled(True)
+        self.generate_button.setEnabled(self.groups_confirmed)
         self.cancel_button.setEnabled(False)
     def show_result(self,result):
         self.result=result

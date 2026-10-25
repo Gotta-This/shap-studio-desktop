@@ -13,11 +13,13 @@ APP=create_application([])
 class WordRepairTests(unittest.TestCase):
     def setUp(self):self.w=DesktopWindow();self.w.timer.stop();self.w.show();self.tool=self.w.open_module('word');APP.processEvents()
     def tearDown(self):self.w.close();self.w.deleteLater();APP.processEvents()
+    def confirm_default_groups(self):
+        self.tool.group_inputs[0].setText('对照组');self.tool.add_group_input('中药组');self.tool.confirm_groups()
     def test_user_counts_preserved_and_word_counts_are_opt_in(self):
         with tempfile.TemporaryDirectory() as d:
             p=Path(d)/'source.docx';fixture_docx(p);self.tool.common_n.setValue(77);self.tool.group_editors[0].fields['effective'].setText('63')
-            self.tool.import_word(p);c=self.tool.get_config();self.assertEqual([g['n'] for g in c['groups']],[77,77]);self.assertEqual(c['groups'][0]['effective'],63)
-            self.tool.use_word_sizes.setChecked(True);self.tool.import_word(p);self.assertEqual([g['n'] for g in self.tool.get_config()['groups']],[10,12])
+            self.tool.import_word(p);self.confirm_default_groups();c=self.tool.get_config();self.assertEqual([g['n'] for g in c['groups']],[77,77]);self.assertEqual(c['groups'][0]['effective'],63)
+            self.tool.use_word_sizes.setChecked(True);self.tool.import_word(p);self.confirm_default_groups();self.assertEqual([g['n'] for g in self.tool.get_config()['groups']],[10,12])
     def test_shared_basics_and_independent_outcome_settings(self):
         t=self.tool;t.add_indicator();t.group_editors[0].fields['male'].setText('70');t.group_editors[1].fields['male'].setText('20');t.group_editors[1].fields['effective'].setText('91')
         c=t.get_config();self.assertEqual(c['groups'][1]['male'],70);self.assertEqual(c['groups'][1]['effective'],91)
@@ -27,7 +29,7 @@ class WordRepairTests(unittest.TestCase):
         self.assertEqual([s['name'] for s in self.tool.get_config()['indicators']],['前-主要症状']*2)
     def test_unrecognized_numeric_cells_are_marked_and_block_generation(self):
         with tempfile.TemporaryDirectory() as d:
-            p=Path(d)/'incomplete.docx';fixture_docx(p,missing=True);self.tool.import_word(p)
+            p=Path(d)/'incomplete.docx';fixture_docx(p,missing=True);self.tool.import_word(p);self.confirm_default_groups()
             field=self.tool.metrics.item(1,3)
             self.assertEqual(field.background().color().name(),'#fadeda')
             with self.assertRaises(ValueError):self.tool.get_config()

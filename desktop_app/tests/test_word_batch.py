@@ -108,7 +108,7 @@ class WordBatchTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             try:
                 path=Path(d)/'source.docx';fixture_docx(path)
-                tool.use_word_sizes.setChecked(True);tool.import_word(path);self.assertEqual(tool.metrics.rowCount(),4)
+                tool.use_word_sizes.setChecked(True);tool.import_word(path);tool.group_inputs[0].setText('对照组');tool.add_group_input('中药组');tool.confirm_groups();self.assertEqual(tool.metrics.rowCount(),4)
                 self.assertEqual(tool.group_editors[1].fields['n'].text(),'12')
                 tool.generate_button.click();deadline=time.monotonic()+20
                 while tool.is_running() and time.monotonic()<deadline:app.processEvents();time.sleep(.01)

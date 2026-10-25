@@ -5,7 +5,7 @@ positional guesses based on the number of physical cells. No source files change
 """
 from collections import Counter
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import json
 import math
 import os
@@ -34,6 +34,8 @@ class ImportResult:
     messages: list
     source: str
     table_count: int
+    group_matches: dict = field(default_factory=dict)
+    table_matches: list = field(default_factory=list)
 
 
 def _grid(table, with_origins=False):
@@ -79,7 +81,19 @@ def _header(headers, col):
     return (phase+'-' if phase else '')+metric
 
 
-def read_word(path):
+def group_names(names):
+    names=[str(name).strip() for name in names]
+    if not 1<=len(names)<=20 or any(not n or len(n)>100 for n in names):
+        raise ValueError('请填写1～20个组别，每个名称须为1～100个字符。')
+    if len({_clean(n) for n in names})!=len(names):
+        raise ValueError('组别名称不能重复（忽略空格和换行）。')
+    return names
+
+
+def read_word(path, groups=None, *, parse_indicators=True):
+    groups=list(GROUPS) if groups is None else list(groups)
+    if groups:groups=group_names(groups)
+    elif parse_indicators:raise ValueError('请先填写并确认组别。')
     path = Path(path)
     if path.suffix.lower() != '.docx':
         raise ValueError('请选择 .docx 文件；旧版 .doc 请先另存为 .docx。')
@@ -94,36 +108,41 @@ def read_word(path):
     body = root.find(W+'body')
     if body is None:
         raise ValueError('Word 中没有正文。')
-    tables = body.findall(W+'tbl')
+    tables = list(body.iter(W+'tbl'))
     indicators, sizes, rates, messages = [], {}, {}, []
     used_names = set(BASE_COLUMNS+END_COLUMNS)
+    group_matches={g:0 for g in groups};table_matches=[]
     for index, table in enumerate(tables, 1):
         rows,origins = _grid(table,True)
-        group_rows = {g: [row for row in rows if row and _clean(row[0]) == g] for g in GROUPS}
+        group_rows = {g: [row for row in rows if any(_clean(cell)==_clean(g) for cell in row)] for g in groups}
+        matched={g:len(rs) for g,rs in group_rows.items() if rs}
+        table_matches.append(dict(table=index,groups=matched))
+        for g,count in matched.items():group_matches[g]+=count
+        if not parse_indicators:continue
         if not any(group_rows.values()):
-            messages.append(f'表 {index}：未找到对照组／中药组数据行，未导入。')
+            messages.append(f'表 {index}：未找到所选组别数据行，未导入。')
             continue
         if any(len(v)>1 for v in group_rows.values()):
             messages.append(f'表 {index}：同组存在多行，无法自动确定，整表未导入；请人工补录。')
             continue
-        first = min(i for i, row in enumerate(rows) if row and _clean(row[0]) in GROUPS)
+        first = min(i for i,row in enumerate(rows) if any(row in rs for rs in group_rows.values()))
         headers = rows[:first]
         for group, candidates in group_rows.items():
             if not candidates:
                 messages.append(f'表 {index}：缺少{group}行；相关指标会标记为待补全。')
                 continue
             row = candidates[0]
-            count_header = _header(headers,1).lower()
-            if len(row)>1 and ('例数' in count_header or count_header in ('n','样本量')) and _clean(row[1]).isdigit():
-                n = int(_clean(row[1]))
-                if group in sizes and sizes[group]!=n:
-                    messages.append(f'表 {index}：{group}例数 {n} 与此前 {sizes[group]} 不同，请核对配置。')
-                else:
-                    sizes[group] = n
+            for col,value in enumerate(row):
+                count_header = _header(headers,col).lower()
+                if ('例数' in count_header or count_header in ('n','样本量')) and _clean(value).isdigit():
+                    n = int(_clean(value))
+                    if group in sizes and sizes[group]!=n:
+                        messages.append(f'表 {index}：{group}例数 {n} 与此前 {sizes[group]} 不同，请核对配置。')
+                    else:sizes[group] = n
         width = max(map(len, rows), default=0)
         found = 0
-        relevant=[i for i,row in enumerate(rows) if i<first or (row and _clean(row[0]) in GROUPS)]
-        for col in range(1, width):
+        relevant=[i for i,row in enumerate(rows) if i<first or any(row in rs for rs in group_rows.values())]
+        for col in range(width):
             # Word sometimes splits one physical data cell across several grid columns.
             # Import it once when the headers AND both data rows share that same span.
             if col>1 and all(col<len(origins[i]) and origins[i][col] is not None and origins[i][col]==origins[i][col-1] for i in relevant):
@@ -138,10 +157,10 @@ def read_word(path):
                 if name in used_names:
                     name += f'（表{index}列{col+1}）'
                 used_names.add(name)
-                for group in GROUPS:
+                for group in groups:
                     match = matches[group]
                     if not match:
-                        messages.append(f'表 {index} {name} {group}：未识别均数±标准差，生成前请补全或移除该指标的两组行。')
+                        messages.append(f'表 {index} {name} {group}：未识别均数±标准差，生成前请补全或移除该指标的全部组别行。')
                     indicators.append(dict(table=index, name=name, group=group,
                                            mean=float(match[1]) if match else None,
                                            sd=float(match[2]) if match else None,
@@ -160,14 +179,14 @@ def read_word(path):
                         else:
                             messages.append(f'表 {index} {group} {name}：比例未识别，请手动设置。')
         messages.append(f'表 {index}：识别 {found} 个数值指标。')
-    if not indicators:
+    if parse_indicators and not indicators:
         messages.append('未识别到均数±标准差指标，可在指标配置中手动添加。')
     messages.append('基本资料的区间及比例为可编辑初始值，未从 Word 正文推断；请逐项核对。')
     messages.append('各指标按列独立模拟，不还原病例配对、相关性或原文检验结果。')
-    return ImportResult(indicators, sizes, rates, messages, str(path.resolve()), len(tables))
+    return ImportResult(indicators, sizes, rates, messages, str(path.resolve()), len(tables), group_matches, table_matches)
 
 
-def default_batch_config():
+def default_batch_config(groups=GROUPS):
     return dict(version=1, seed=12, source='', course_unit='月', groups=[dict(
         name=g, n=70, male=50., severity=[50.,50.,0.], effective=80., recurrence=10.,
         age=[dict(lower=18, upper=74, percent=100.)],
@@ -175,7 +194,7 @@ def default_batch_config():
         extent_mode='blank', recurrence_scope='all',
         extent=[dict(label='自定义类别',percent=100.)],
         extent_ranges=[dict(lower=1,upper=3,percent=100.)],extent_digits=0)
-        for g in GROUPS], indicators=[])
+        for g in group_names(groups)], indicators=[])
 
 
 def allocation(n, weights):
@@ -201,8 +220,9 @@ def validate_batch(config):
     if not isinstance(seed,int) or isinstance(seed,bool) or not 0<=seed<=4294967295:
         raise ValueError('随机种子须为 0～4294967295 的整数。')
     groups = config.get('groups',[])
-    if [g.get('name') for g in groups] != list(GROUPS):
-        raise ValueError('分组须依次为对照组、中药组。')
+    selected_groups=group_names([g.get('name','') for g in groups])
+    if any(g['name']!=name for g,name in zip(groups,selected_groups)):
+        raise ValueError('分组名称首尾不能含空格。')
     for g in groups:
         n=g.get('n')
         if not isinstance(n,int) or isinstance(n,bool) or not 2<=n<=5000:
@@ -250,15 +270,15 @@ def validate_batch(config):
     specs=config.get('indicators',[])
     if not specs:
         raise ValueError('请导入 Word 或添加至少一个数值指标。')
-    if len(specs)>500:
-        raise ValueError('最多支持 250 个指标（每个指标两组配置）。')
+    if len(specs)>250*len(selected_groups):
+        raise ValueError('最多支持250个指标，每个指标须配置所有所选组别。')
     names={}
     for spec in specs:
         name=spec['name'].strip()
         if not name or name in BASE_COLUMNS+END_COLUMNS or name.startswith('='):
             raise ValueError('指标名不能为空、与固定列重名或以等号开头。')
         group=spec['group']
-        if group not in GROUPS or group in names.setdefault(name,set()):
+        if group not in selected_groups or group in names.setdefault(name,set()):
             raise ValueError(f'{name} 的分组无效或重复。')
         names[name].add(group)
         _finite(spec['mean'],name+'均数')
@@ -274,8 +294,9 @@ def validate_batch(config):
                 _finite(spec[key],name+'边界')
         if spec.get('lower') is not None and spec.get('upper') is not None and spec['lower']>spec['upper']:
             raise ValueError(f'{name} 下限不能超过上限。')
-    if any(gs!=set(GROUPS) for gs in names.values()):
-        raise ValueError('每个指标都须配置对照组和中药组；请补全缺失行。')
+    if any(gs!=set(selected_groups) for gs in names.values()):
+        raise ValueError('每个指标都须配置全部所选组别；请补全缺失行。')
+    if len(names)>250:raise ValueError('最多支持250个指标。')
 
 
 def _categorical(n, labels, weights, rng):
