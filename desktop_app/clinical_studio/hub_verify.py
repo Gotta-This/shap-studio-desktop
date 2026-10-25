@@ -144,7 +144,7 @@ class SuiteVerifier:
         self.check('Word 经导入对话框识别两组指标',tool.metrics.rowCount()==2 and tool.group_editors[0].fields['n'].text()=='10',message=tool.message.text())
         self.tab(tool.pages,0);tool.same_size.setChecked(False);self.type_text(tool.seed,'77')
         for index,count in enumerate(('14','16')):
-            self.tab(tool.group_tabs,index);self.type_text(tool.group_editors[index].fields['n'],count)
+            tool.group_selector.setCurrentIndex(index);self.app.processEvents();self.type_text(tool.group_editors[index].fields['n'],count)
         self.click(tool.generate_button);self.wait_for(tool,self.word_done)
 
     def word_done(self):

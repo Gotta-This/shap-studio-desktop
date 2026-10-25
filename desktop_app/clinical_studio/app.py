@@ -456,4 +456,6 @@ def create_application(argv):
         QFontDatabase.addApplicationFont(str(font))
     from .theme import apply_light_palette
     app.setStyle("Fusion"); apply_light_palette(app); app.setStyleSheet(STYLE)
+    from .input_behavior import install_input_behavior
+    install_input_behavior(app)
     return app

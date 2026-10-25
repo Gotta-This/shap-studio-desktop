@@ -44,7 +44,7 @@ class WordGroupTests(unittest.TestCase):
         self.assertEqual(r.table_count,3);self.assertEqual(r.group_matches,{'观察组':2,'常规治疗组':2})
         self.assertEqual(r.indicators,[]);self.assertIn('2/2',t.match_summary.text());self.assertIn('表3：未匹配',t.match_report.toPlainText())
         t.confirm_groups();self.assertTrue(t.groups_confirmed);self.assertEqual(t.metrics.rowCount(),6)
-        self.assertEqual([e.name for e in t.group_editors],['观察组','常规治疗组']);self.assertIn('观察组 70',t.total_label.text())
+        self.assertEqual([e.name for e in t.group_editors],['观察组','常规治疗组']);self.assertIn('合计140例',t.total_label.text());self.assertIn('观察组',t.group_selector.itemText(0))
     def test_full_name_matching_missing_and_duplicate_groups(self):
         r=read_word(self.path,['观察组']);self.assertEqual(r.group_matches,{'观察组':2});self.assertEqual(len(r.indicators),3)
         t=self.t;t.import_word(self.path);t.group_inputs[0].setText('不存在组');t.confirm_groups();self.assertFalse(t.groups_confirmed);self.assertIn('未在Word',t.message.text())

@@ -188,14 +188,29 @@ class DesktopWindow(QMainWindow):
             editor=self.style_editor();editor.selector.setCurrentIndex(editor.selector.findData(self.style_key))
         self.home_button=self.boards[index].controls['nav-home']
         self.nav_buttons={None:self.home_button,**{k:self.boards[index].controls['nav-'+k] for k in ('category','numeric','word','shap')}}
-        for name,button in self.nav_buttons.items():button.setChecked(name==key)
+        for name,button in self.nav_buttons.items():
+            button.setChecked(name==key);button.clearFocus()
         self.setWindowTitle(self.boards[index].spec['name'].split(' · ',1)[-1]+' · 科研数据工具集')
         self._last_state=None;self.refresh(force=True)
 
     def build_shell(self,b):
+        # Use the same image as the packaged application, replacing the drawn glyph.
+        if b.index==0:b.text(1252,125,'欢迎回来宝宝 🥰')
+        b.suppress(24,28,44,40)
+        brand=PlotImage();brand.show_path(ROOT/'assets'/'icon.png')
+        b.place(brand,(24,28,40,40),'brand-icon')
+        # Hide the original status badge, local-execution card and wide footer.
+        b.suppress(1230,12,160,48)
+        for shape in b.spec['shapes']:
+            if (shape['x']<224 and shape['y']>=767) or (shape['x']>=224 and shape['y']>=890):b.hidden_shapes.add(shape['id'])
+        footer=QLabel('独立参数 · 独立结果 · 自主导出\n科研数据工具集 / UI 2.0\ndbq / 科研工作空间')
+        footer.setWordWrap(True);footer.setAlignment(Qt.AlignLeft|Qt.AlignBottom)
+        footer.setStyleSheet('QLabel{background:transparent;color:#738477;font-size:11px;line-height:140%;padding:0;}')
+        b.place(footer,(20,b.height()-110,184,90),'sidebar-footer')
         for i,(name,target) in enumerate([('home',0),('category',1),('numeric',2),('word',3),('shap',4)]):
             button=b.hotspot((16,141+i*56,192,44),lambda checked=False,t=target:self.show_board(t),'nav-'+name)
             button.setCheckable(True)
+            button.setStyleSheet('QPushButton{border:none;background:transparent;padding:0;} QPushButton:focus{border:none;outline:none;background:transparent;}')
         if b.index:
             b.hotspot((1240,120,140,28),lambda:self.parameter_menu(),'all-parameters')
             b.controls['all-parameters'].setToolTip('全部参数、配置文件与更多操作')
@@ -316,11 +331,10 @@ class DesktopWindow(QMainWindow):
 
     def build_word(self,b):
         tool=self.modules['word']
-        b.suppress(250,200,1150,690)
-        tool.setObjectName('wordWorkflow');tool.setAttribute(Qt.WA_StyledBackground,True)
-        tool.setStyleSheet('QWidget#wordWorkflow{background:#F5F8F5;}')
+        b.suppress(250,200,1160,690)
+        tool.setObjectName('word-workflow');tool.setAttribute(Qt.WA_StyledBackground,True)
         tool.setMinimumSize(0,0)
-        b.place(tool,(260,206,1120,670),'word-workflow')
+        b.place(tool,(260,206,1144,b.height()-154),'word-workflow')
         # Keep import/generate/save entry names for keyboard and automation routing.
         b.controls['import-word']=tool.import_button
         b.controls['generate-word']=tool.generate_button

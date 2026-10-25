@@ -8,7 +8,7 @@ from PySide6.QtCore import Qt, QThread, Signal, QTimer
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QApplication, QAbstractItemView, QCheckBox, QComboBox, QFileDialog,
-    QFormLayout, QGroupBox, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
+    QFormLayout, QGroupBox, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QListWidget, QStackedWidget, QStyledItemDelegate,
     QPlainTextEdit, QPushButton, QSpinBox, QTableWidget, QTableWidgetItem,
     QTabWidget, QVBoxLayout, QWidget,
 )
@@ -27,21 +27,73 @@ def button(text, action, layout):
     return b
 
 
-class EditableRows(QGroupBox):
+WORD_STYLE = """
+QWidget#word-workflow { background: #F5F8F5; }
+QWidget#wordToolbar { background: #FFFFFF; border: 1px solid #DEE8DF; border-radius: 10px; }
+QWidget#word-workflow QTabWidget::pane { background: #FFFFFF; border: none; border-radius: 8px; }
+QWidget#word-workflow QTabBar::tab { background: transparent; color: #637668; padding: 9px 14px; margin: 0 6px 0 0; border-bottom: 2px solid transparent; }
+QWidget#word-workflow QTabBar::tab:selected { color: #193C2C; border-bottom-color: #277453; background: #ECF6EF; }
+QWidget#word-workflow QLineEdit, QWidget#word-workflow QSpinBox, QWidget#word-workflow QComboBox { min-height: 20px; padding: 6px 9px; }
+QWidget#word-workflow QTableWidget QLineEdit { min-height: 0; padding: 0 6px; border: 1px solid #277453; border-radius: 3px; }
+QWidget#word-workflow QListWidget#wordSections { border: none; border-right: 1px solid #DEE8DF; background: #F8FBF8; border-radius: 0; }
+QWidget#word-workflow QListWidget#wordSections::item { padding: 8px 10px; margin: 2px 6px; border-radius: 6px; }
+QWidget#word-workflow QListWidget#wordSections::item:selected { background: #DDF1E4; color: #193C2C; }
+QLabel#wordMuted { color: #637668; font-size: 12px; }
+QLabel#wordTotal { color: #277453; background: #ECF6EF; padding: 5px 10px; border-radius: 6px; }
+QWidget#word-workflow QGroupBox { border: none; margin-top: 0; padding: 14px 10px 8px; background: #FFFFFF; }
+"""
+
+
+class CellEditorDelegate(QStyledItemDelegate):
+    """Fit active editors within the cell, including under Windows scaling."""
+    def createEditor(self,parent,option,index):
+        editor=super().createEditor(parent,option,index)
+        if isinstance(editor,QLineEdit):
+            editor.setStyleSheet('QLineEdit{min-height:0;padding:0 6px;border:1px solid #277453;border-radius:3px;}')
+            editor.setMinimumSize(0,0)
+        return editor
+    def updateEditorGeometry(self,editor,option,index):
+        editor.setGeometry(option.rect.adjusted(1,1,-1,-1))
+
+
+class SettingsSections(QWidget):
+    def __init__(self):
+        super().__init__();layout=QHBoxLayout(self);layout.setContentsMargins(0,0,0,0);layout.setSpacing(12)
+        self.nav=QListWidget();self.nav.setObjectName('wordSections');self.nav.setFixedWidth(132)
+        self.stack=QStackedWidget();layout.addWidget(self.nav);layout.addWidget(self.stack,1)
+        self.nav.currentRowChanged.connect(self.stack.setCurrentIndex)
+    def addTab(self,widget,title):
+        self.stack.addWidget(widget);self.nav.addItem(title)
+        if self.nav.currentRow()<0:self.nav.setCurrentRow(0)
+    def setCurrentIndex(self,index):self.nav.setCurrentRow(index)
+    def currentIndex(self):return self.stack.currentIndex()
+    def count(self):return self.stack.count()
+    def widget(self,index):return self.stack.widget(index)
+
+
+class EditableRows(QWidget):
     def __init__(self,title,headers,rows):
-        super().__init__(title)
-        layout=QVBoxLayout(self)
-        self.table=QTableWidget(0,len(headers));self.table.setHorizontalHeaderLabels(headers)
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.table.setMinimumHeight(150);layout.addWidget(self.table)
-        actions=QHBoxLayout();button('＋ 添加',lambda:self.add(['']*len(headers)),actions)
-        button('删除选中行',self.remove,actions);actions.addStretch();layout.addLayout(actions)
+        super().__init__();layout=QVBoxLayout(self);layout.setContentsMargins(0,0,0,0);layout.setSpacing(8)
+        actions=QHBoxLayout();label=QLabel(title);label.setStyleSheet('font-weight:600;');actions.addWidget(label);actions.addStretch()
+        button('＋ 添加',lambda:self.add(['']*len(headers)),actions);button('删除选中行',self.remove,actions);layout.addLayout(actions)
+        self.table=QTableWidget(0,len(headers));self.table.setItemDelegate(CellEditorDelegate(self.table))
+        self.table.setHorizontalHeaderLabels(headers);self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.table.horizontalHeader().setFixedHeight(34);self.table.verticalHeader().setDefaultSectionSize(36);self.table.verticalHeader().setMinimumSectionSize(36)
+        self.table.verticalHeader().hide();self.table.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.table.setEditTriggers(QAbstractItemView.DoubleClicked|QAbstractItemView.EditKeyPressed|QAbstractItemView.SelectedClicked)
+        layout.addWidget(self.table)
+        if any('占比' in h for h in headers):
+            note=QLabel('占比合计须为100%，请补全每一行。');note.setObjectName('wordMuted');layout.addWidget(note)
         for row in rows:self.add(row)
+        self.resize_table()
+    def resize_table(self):self.table.setFixedHeight(36*max(1,self.table.rowCount())+36)
     def add(self,values):
         i=self.table.rowCount();self.table.insertRow(i)
         for j,v in enumerate(values):self.table.setItem(i,j,item(v))
+        self.resize_table()
     def remove(self):
         for i in sorted({v.row() for v in self.table.selectedIndexes()},reverse=True):self.table.removeRow(i)
+        self.resize_table()
     def values(self):
         return [[self.table.item(i,j).text().strip() if self.table.item(i,j) else '' for j in range(self.table.columnCount())] for i in range(self.table.rowCount())]
 
@@ -49,11 +101,12 @@ class EditableRows(QGroupBox):
 class GroupSettings(QWidget):
     def __init__(self,config):
         super().__init__();self.name=config['name'];self.fields={};layout=QVBoxLayout(self);layout.setContentsMargins(0,0,0,0)
-        self.shared_note=QLabel('本组共用第一个组别的基础资料规则；例数、有效率与复发率仍可分别设置。');self.shared_note.setWordWrap(True);self.shared_note.hide();layout.addWidget(self.shared_note)
-        self.sections=QTabWidget();layout.addWidget(self.sections,1)
-        group=QGroupBox('组别、性别与病情程度');group.setStyleSheet('QGroupBox{padding:18px 12px 12px;} QLineEdit{padding:4px 8px;min-height:20px;}');form=QFormLayout(group)
-        for key,label,value in [('n','本组例数',config['n']),('male','男性占比 %（其余为女性）',config['male']),('light','轻度占比 %',config['severity'][0]),('medium','中度占比 %',config['severity'][1]),('severe','重度占比 %',config['severity'][2])]:
-            field=QLineEdit(str(value));self.fields[key]=field;form.addRow(label,field)
+        self.shared_note=QLabel('本组共用第一个组别的基础资料规则；例数、有效率与复发率仍可分别设置。');self.shared_note.setObjectName('wordMuted');self.shared_note.setWordWrap(True);self.shared_note.hide();layout.addWidget(self.shared_note)
+        self.count_controls=QWidget();count=QHBoxLayout(self.count_controls);count.setContentsMargins(0,0,0,0);self.count_label=QLabel('本组例数');self.fields['n']=QLineEdit(str(config['n']));self.fields['n'].setMaximumWidth(120);count.addWidget(self.count_label);count.addWidget(self.fields['n']);layout.addWidget(self.count_controls)
+        self.sections=SettingsSections();layout.addWidget(self.sections,1)
+        group=QWidget();form=QFormLayout(group);form.setContentsMargins(8,8,8,8);form.setVerticalSpacing(12)
+        for key,label,value in [('male','男性占比 %（其余为女性）',config['male']),('light','轻度占比 %',config['severity'][0]),('medium','中度占比 %',config['severity'][1]),('severe','重度占比 %',config['severity'][2])]:
+            field=QLineEdit(str(value));field.setMaximumWidth(180);self.fields[key]=field;form.addRow(label,field)
         self.sections.addTab(scroll(group),'性别与病情')
         age_page=QWidget();al=QVBoxLayout(age_page)
         note=QLabel('年龄取整数，占比合计100%。可设置10–20、20–30；共用边界20归入后一段，最后一段包含上限。');note.setWordWrap(True);al.addWidget(note)
@@ -72,9 +125,9 @@ class GroupSettings(QWidget):
         def extent_changed():
             mode=self.extent_mode.currentData();self.extent.setVisible(mode=='category');self.extent_ranges.setVisible(mode=='range');self.extent_precision.setVisible(mode=='range')
         self.extent_mode.currentIndexChanged.connect(extent_changed);extent_changed();self.sections.addTab(scroll(extent_page),'病变范围')
-        outcomes=QGroupBox('最后两列的病例结果');of=QFormLayout(outcomes)
+        outcomes=QWidget();of=QFormLayout(outcomes);of.setContentsMargins(8,8,8,8);of.setVerticalSpacing(12)
         for key,label in [('effective','有效占比 %（其余为无效）'),('recurrence','复发占比 %（其余为未复发）')]:
-            field=QLineEdit(str(config[key]));self.fields[key]=field;of.addRow(label,field)
+            field=QLineEdit(str(config[key]));field.setMaximumWidth(180);self.fields[key]=field;of.addRow(label,field)
         self.recurrence_scope=QComboBox();self.recurrence_scope.addItem('该组全部病例','all');self.recurrence_scope.addItem('该组治疗有效者','effective');self.recurrence_scope.setCurrentIndex(max(0,self.recurrence_scope.findData(config.get('recurrence_scope','all'))));of.addRow('复发比例的计算分母',self.recurrence_scope)
         of.addRow(QLabel('Excel 的“总有效率”填有效/无效，“复发率”填复发/未复发。'))
         self.sections.addTab(scroll(outcomes),'有效与复发')
@@ -112,13 +165,13 @@ class WordBatchTool(QWidget):
     KEYS=['table','name','group','mean','sd','digits','lower','upper','parity','raw']
     def __init__(self):
         super().__init__();self.worker=None;self.result=None;self.source='';self.config=default_batch_config();self.pending_source=None;self.groups_confirmed=True
-        layout=QVBoxLayout(self)
-        intro=QLabel('导入 Word 表格，按你配置的人数与基本资料生成所选组别的病例，再一次导出 Excel。')
-        intro.setWordWrap(True);layout.addWidget(intro)
+        self.setObjectName('word-workflow');self.setAttribute(Qt.WA_StyledBackground,True);self.setStyleSheet(WORD_STYLE)
+        layout=QVBoxLayout(self);layout.setContentsMargins(0,0,0,0);layout.setSpacing(10)
+        toolbar=QWidget();toolbar.setObjectName('wordToolbar');top=QVBoxLayout(toolbar);top.setContentsMargins(12,10,12,10);top.setSpacing(8);layout.addWidget(toolbar)
         row=QHBoxLayout();self.import_button=button('导入 Word（.docx）',self.pick_word,row)
-        self.load_button=button('载入配置',self.load_config,row);self.save_button=button('保存配置',self.save_config,row);self.change_groups_button=button('修改组别',self.edit_groups,row);self.change_groups_button.hide();row.addStretch();layout.addLayout(row)
-        options=QHBoxLayout();self.use_word_sizes=QCheckBox('采用 Word 表中的例数');self.use_word_rates=QCheckBox('采用 Word 表中的有效／复发比例');options.addWidget(self.use_word_sizes);options.addWidget(self.use_word_rates);options.addStretch();layout.addLayout(options)
-        self.source_label=QLabel('先导入Word，填写并确认本次组别，再核对指标与生成人数。');self.source_label.setWordWrap(True);layout.addWidget(self.source_label)
+        self.load_button=button('载入配置',self.load_config,row);self.save_button=button('保存配置',self.save_config,row);self.change_groups_button=button('修改组别',self.edit_groups,row);self.change_groups_button.hide();row.addStretch();top.addLayout(row)
+        options=QHBoxLayout();self.use_word_sizes=QCheckBox('采用 Word 表中的例数');self.use_word_rates=QCheckBox('采用 Word 表中的有效／复发比例');options.addWidget(self.use_word_sizes);options.addWidget(self.use_word_rates);options.addStretch();top.addLayout(options)
+        self.source_label=QLabel('先导入Word，填写并确认本次组别，再核对指标与生成人数。');self.source_label.setObjectName('wordMuted');self.source_label.setWordWrap(True);top.addWidget(self.source_label)
         self.group_panel=QGroupBox('1 · 填写并确认本次要生成的组别');gp=QVBoxLayout(self.group_panel)
         note=QLabel('每个输入框填写一个Word中的组别原名，可添加或删除。确认后才识别指标列名。');note.setWordWrap(True);gp.addWidget(note)
         self.group_rows=QWidget();self.group_rows_layout=QVBoxLayout(self.group_rows);self.group_rows_layout.setContentsMargins(0,0,0,0);self.group_inputs=[]
@@ -129,19 +182,25 @@ class WordBatchTool(QWidget):
         layout.addWidget(self.group_panel,1);self.group_panel.hide()
         self.match_timer=QTimer(self);self.match_timer.setSingleShot(True);self.match_timer.timeout.connect(self.match_groups)
         self.pages=QTabWidget();layout.addWidget(self.pages,1)
-        basics=QWidget();base_layout=QVBoxLayout(basics);form=QFormLayout()
-        self.common_n=QSpinBox();self.common_n.setRange(2,5000);self.common_n.setValue(70);self.same_size=QCheckBox('所选组别使用相同例数');self.same_size.setChecked(True);self.shared_basics=QCheckBox('共用第一个组别的基础资料规则（性别、年龄、病程、病情程度和病变范围）');self.shared_basics.setChecked(True)
-        self.total_label=QLabel('')
-        counts=QHBoxLayout();counts.addWidget(QLabel('每组例数'));counts.addWidget(self.common_n);counts.addWidget(self.same_size);counts.addWidget(self.total_label);counts.addStretch();base_layout.addLayout(counts)
-        self.seed=QLineEdit('12');self.unit=QLineEdit('月');self.seed.setMaximumWidth(160);self.unit.setMaximumWidth(100);seedrow=QHBoxLayout();seedrow.addWidget(QLabel('随机种子'));seedrow.addWidget(self.seed);seedrow.addWidget(QLabel('病程单位'));seedrow.addWidget(self.unit);seedrow.addWidget(self.shared_basics);seedrow.addStretch();base_layout.addLayout(seedrow)
+        basics=QWidget();base_layout=QVBoxLayout(basics);base_layout.setContentsMargins(12,12,12,8);base_layout.setSpacing(10)
+        self.common_n=QSpinBox();self.common_n.setRange(2,5000);self.common_n.setValue(70);self.common_n.setFixedWidth(100)
+        self.same_size=QCheckBox('各组使用相同例数');self.same_size.setChecked(True)
+        self.shared_basics=QCheckBox('各组共用基础资料');self.shared_basics.setToolTip('使用第一个组别的性别、年龄、病程、病情程度和病变范围；结局比例始终独立。');self.shared_basics.setChecked(True)
+        self.total_label=QLabel('');self.total_label.setObjectName('wordTotal')
+        self.common_count_label=QLabel('每组');self.individual_count_note=QLabel('在下方切换组别，分别设置例数');self.individual_count_note.setObjectName('wordMuted')
+        counts=QHBoxLayout();counts.addWidget(self.same_size);counts.addSpacing(12);counts.addWidget(self.common_count_label);counts.addWidget(self.common_n);counts.addWidget(self.individual_count_note);counts.addStretch();counts.addWidget(self.total_label);base_layout.addLayout(counts)
+        self.seed=QLineEdit('12');self.unit=QLineEdit('月');self.seed.setFixedWidth(100);self.unit.setFixedWidth(80)
+        seedrow=QHBoxLayout();seedrow.addWidget(QLabel('随机种子'));seedrow.addWidget(self.seed);seedrow.addSpacing(16);seedrow.addWidget(QLabel('病程单位'));seedrow.addWidget(self.unit);seedrow.addStretch();seedrow.addWidget(self.shared_basics);base_layout.addLayout(seedrow)
+        selectrow=QHBoxLayout();selectrow.addWidget(QLabel('配置组别'));self.group_selector=QComboBox();self.group_selector.setMinimumWidth(220);self.group_selector.setMaximumWidth(380);selectrow.addWidget(self.group_selector);selectrow.addSpacing(16);self.group_count_stack=QStackedWidget();self.group_count_stack.setMaximumHeight(40);self.group_count_stack.setMaximumWidth(220);selectrow.addWidget(self.group_count_stack);selectrow.addStretch();base_layout.addLayout(selectrow)
         self.common_n.valueChanged.connect(self.sync_group_controls);self.same_size.toggled.connect(self.sync_group_controls);self.shared_basics.toggled.connect(self.sync_group_controls)
-        self.group_tabs=QTabWidget();base_layout.addWidget(self.group_tabs);self.group_editors=[]
-        self.pages.addTab(basics,'1 · 人数与基本资料')
+        self.group_tabs=QTabWidget();self.group_tabs.tabBar().hide();base_layout.addWidget(self.group_tabs,1);self.group_editors=[]
+        self.group_selector.currentIndexChanged.connect(self.group_tabs.setCurrentIndex);self.group_selector.currentIndexChanged.connect(self.group_count_stack.setCurrentIndex)
+        self.pages.setObjectName('wordPages');self.pages.addTab(basics,'1 · 基础资料')
         self.set_groups(self.config['groups']);self.sync_group_controls()
         metrics=QWidget();ml=QVBoxLayout(metrics)
         tip=QLabel('每个指标须配置全部所选组别。双击指标列名即可修改，同一指标的各组列名同步更新。小数位 0～4；奇数／偶数须为 0 位。上下限非必填。表头、均数和标准差均可修改；空白统计值必须补全。')
         tip.setWordWrap(True);ml.addWidget(tip)
-        self.metrics=QTableWidget(0,len(self.HEADERS));self.metrics.setHorizontalHeaderLabels(self.HEADERS)
+        self.metrics=QTableWidget(0,len(self.HEADERS));self.metrics.setItemDelegate(CellEditorDelegate(self.metrics));self.metrics.setHorizontalHeaderLabels(self.HEADERS)
         self.metrics.setEditTriggers(QAbstractItemView.DoubleClicked|QAbstractItemView.EditKeyPressed|QAbstractItemView.SelectedClicked)
         self.metrics.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
         for i in range(len(self.HEADERS)):self.metrics.setColumnWidth(i,135 if i in (1,9) else 95)
@@ -158,17 +217,21 @@ class WordBatchTool(QWidget):
         row=QHBoxLayout();self.copy_button=button('复制完整数据（含表头）',self.copy_data,row);self.export_button=button('导出 Excel',self.export_data,row);row.addStretch();pl.addLayout(row)
         self.copy_button.setEnabled(False);self.export_button.setEnabled(False)
         self.pages.addTab(preview,'3 · 生成与导出')
-        self.column_hint=QLabel('Excel 列顺序：编号、分组、性别、年龄、病程、病情程度、病变范围 → Word 前后指标 → 总有效率（有效/无效）、复发率（复发/未复发）');self.column_hint.setWordWrap(True);layout.addWidget(self.column_hint)
+        self.column_hint=QLabel('Excel 列顺序：编号、分组、性别、年龄、病程、病情程度、病变范围 → Word 前后指标 → 总有效率（有效/无效）、复发率（复发/未复发）');self.column_hint.setToolTip(self.column_hint.text());self.column_hint.setText('输出顺序：基础资料 → Word指标 → 有效 / 复发结果');self.column_hint.setObjectName('wordMuted');layout.addWidget(self.column_hint)
         row=QHBoxLayout();self.generate_button=button('生成模拟病例数据',self.generate,row);self.generate_button.setObjectName('primary')
         self.cancel_button=button('取消生成',self.cancel,row);self.cancel_button.setEnabled(False);row.addStretch();layout.addLayout(row)
-        self.message=QLabel('');self.message.setWordWrap(True);layout.addWidget(self.message)
+        self.message=QLabel('');self.message.setObjectName('wordMuted');self.message.setWordWrap(True);self.message.setMaximumHeight(36);layout.addWidget(self.message)
     def set_groups(self,groups):
+        while self.group_count_stack.count():
+            control=self.group_count_stack.widget(0);self.group_count_stack.removeWidget(control);control.deleteLater()
         while self.group_tabs.count():
             w=self.group_tabs.widget(0);self.group_tabs.removeTab(0);w.deleteLater()
+        self.group_selector.blockSignals(True);self.group_selector.clear()
         self.group_editors=[GroupSettings(g) for g in groups]
         for editor in self.group_editors:
-            self.group_tabs.addTab(editor,editor.name)
+            self.group_tabs.addTab(editor,editor.name);self.group_selector.addItem(editor.name);self.group_count_stack.addWidget(editor.count_controls)
             editor.fields['n'].textChanged.connect(self.update_total)
+        self.group_selector.blockSignals(False);self.group_selector.setCurrentIndex(0);self.group_tabs.setCurrentIndex(0);self.group_count_stack.setCurrentIndex(0)
         if hasattr(self,'common_n'):
             equal=len({g['n'] for g in groups})==1;self.same_size.blockSignals(True);self.same_size.setChecked(equal);self.same_size.blockSignals(False)
             self.common_n.blockSignals(True);self.common_n.setValue(groups[0]['n']);self.common_n.blockSignals(False)
@@ -177,21 +240,26 @@ class WordBatchTool(QWidget):
         if not getattr(self,'group_editors',None):return
         try:
             counts=[int(e.fields['n'].text()) for e in self.group_editors]
-            self.total_label.setText(' + '.join(f'{e.name} {n} 例' for e,n in zip(self.group_editors,counts))+f' = {sum(counts)} 行病例')
+            self.total_label.setText(f'{len(counts)}个组别 · 合计{sum(counts)}例')
+            for i,(e,n) in enumerate(zip(self.group_editors,counts)):self.group_selector.setItemText(i,f'{e.name} · {n}例')
         except ValueError:self.total_label.setText('请填写有效例数')
 
     def sync_group_controls(self,*args):
         editors=getattr(self,'group_editors',[])
-        self.common_n.setEnabled(self.same_size.isChecked())
+        self.group_count_stack.setVisible(not self.same_size.isChecked())
+        self.common_n.setVisible(self.same_size.isChecked());self.common_count_label.setVisible(self.same_size.isChecked());self.individual_count_note.setVisible(not self.same_size.isChecked())
         for index,e in enumerate(editors):
             if self.same_size.isChecked():e.fields['n'].setText(str(self.common_n.value()))
             e.fields['n'].setReadOnly(self.same_size.isChecked())
             e.fields['n'].setVisible(not self.same_size.isChecked())
-            e.fields['n'].parentWidget().layout().labelForField(e.fields['n']).setVisible(not self.same_size.isChecked())
+            e.count_label.setVisible(not self.same_size.isChecked())
             shared=index>0 and self.shared_basics.isChecked()
+            e.shared_note.setText(f'基础资料共用“{editors[0].name}”的规则；本组例数、有效与复发比例独立设置。')
             e.shared_note.setVisible(shared)
             for k in ('male','light','medium','severe'):e.fields[k].setEnabled(not shared)
             for control in (e.age,e.course,e.course_digits,e.extent_mode,e.extent,e.extent_ranges,e.extent_digits):control.setEnabled(not shared)
+        if editors:
+            self.shared_basics.setText(f'基础资料共用“{editors[0].name}”的规则')
         self.update_total()
 
     def metric_name_changed(self,row,col):
