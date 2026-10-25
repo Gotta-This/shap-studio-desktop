@@ -1,0 +1,290 @@
+{
+  "schema_version": 1,
+  "data": {
+    "n_samples": 800,
+    "positive_rate": 0.15,
+    "random_seed": 42,
+    "label_name": "不良结局",
+    "positive_name": "发生",
+    "negative_name": "未发生",
+    "id_name": "患者ID",
+    "id_prefix": "P_",
+    "id_width": 4,
+    "id_start": 1,
+    "features": [
+      {
+        "key": "crp",
+        "name": "CRP",
+        "kind": "continuous",
+        "positive": {
+          "mean": 70,
+          "std": 10,
+          "min": 20,
+          "max": 100
+        },
+        "negative": {
+          "mean": 55,
+          "std": 12,
+          "min": 20,
+          "max": 100
+        },
+        "transform": "int",
+        "digits": 0
+      },
+      {
+        "key": "csvd",
+        "name": "CSVD总负荷评分",
+        "kind": "continuous",
+        "positive": {
+          "mean": 2.7,
+          "std": 0.8,
+          "min": 0.5,
+          "max": 5
+        },
+        "negative": {
+          "mean": 1.8,
+          "std": 0.5,
+          "min": 0.5,
+          "max": 5
+        },
+        "transform": "round",
+        "digits": 1
+      },
+      {
+        "key": "age",
+        "name": "年龄",
+        "kind": "continuous",
+        "positive": {
+          "mean": 65,
+          "std": 11,
+          "min": 18,
+          "max": 80
+        },
+        "negative": {
+          "mean": 75,
+          "std": 11,
+          "min": 19,
+          "max": 78
+        },
+        "transform": "round",
+        "digits": 1
+      },
+      {
+        "key": "tg",
+        "name": "TG",
+        "kind": "continuous",
+        "positive": {
+          "mean": 5.3,
+          "std": 1.1,
+          "min": 1,
+          "max": 10
+        },
+        "negative": {
+          "mean": 4.3,
+          "std": 1.1,
+          "min": 1,
+          "max": 10
+        },
+        "transform": "int",
+        "digits": 0
+      },
+      {
+        "key": "alb",
+        "name": "Alb",
+        "kind": "continuous",
+        "positive": {
+          "mean": 38,
+          "std": 3,
+          "min": 20,
+          "max": 80
+        },
+        "negative": {
+          "mean": 41,
+          "std": 3,
+          "min": 20,
+          "max": 80
+        },
+        "transform": "round",
+        "digits": 1
+      },
+      {
+        "key": "education",
+        "name": "受教育年限",
+        "kind": "continuous",
+        "positive": {
+          "mean": 8.3,
+          "std": 3.6,
+          "min": 3,
+          "max": 20
+        },
+        "negative": {
+          "mean": 10.8,
+          "std": 5,
+          "min": 3,
+          "max": 20
+        },
+        "transform": "round",
+        "digits": 1
+      },
+      {
+        "key": "hypertension",
+        "name": "高血压史",
+        "kind": "binary",
+        "values": [
+          0,
+          1
+        ],
+        "positive_p": 0.7,
+        "negative_p": 0.5
+      }
+    ]
+  },
+  "model": {
+    "test_size": 0.3,
+    "stratify": true,
+    "split_seed": 42,
+    "random_state": 42,
+    "max_iter": 1000,
+    "solver": "lbfgs",
+    "C": 1.0,
+    "tol": 0.0001,
+    "fit_intercept": true,
+    "penalty": "l2",
+    "l1_ratio": 0.5,
+    "class_weight": "none",
+    "threshold": 0.5
+  },
+  "plots": {
+    "output_dir": "",
+    "formats": [
+      "png"
+    ],
+    "dpi": 300,
+    "show": false,
+    "random_seed": 42,
+    "sample_index": 0,
+    "common": {
+      "font_family": [
+        "Songti SC",
+        "SimSun",
+        "Noto Sans CJK SC",
+        "Microsoft YaHei",
+        "Arial Unicode MS",
+        "DejaVu Sans"
+      ],
+      "font_file": null,
+      "font_size": 11,
+      "title_size": 14,
+      "label_size": 11,
+      "tick_size": 10,
+      "title_weight": "bold",
+      "title_pad": 20,
+      "xlabel_pad": 4,
+      "text_color": "#222222",
+      "value_text_color": "#FFFFFF",
+      "background": "#FFFFFF",
+      "axis_color": "#333333",
+      "axis_width": 1.0,
+      "tick_width": 1.0,
+      "tick_length": 4,
+      "line_color": "#777777",
+      "line_width": 1.0,
+      "line_style": "--",
+      "grid": false,
+      "grid_color": "#DDDDDD",
+      "grid_width": 0.6,
+      "grid_style": ":",
+      "baseline_color": "#666666",
+      "baseline_width": 1.2,
+      "baseline_style": "--",
+      "baseline_alpha": 1.0,
+      "point_size": 20,
+      "point_alpha": 0.85,
+      "point_color": "#2878B5",
+      "low_color": "#2878B5",
+      "high_color": "#D94A48",
+      "positive_color": "#D94A48",
+      "negative_color": "#2878B5",
+      "positive_light": "#F5CBCB",
+      "negative_light": "#C9DDED",
+      "edge_width": 0.6,
+      "separator_width": 2.0,
+      "bar_color": "#2878B5",
+      "figsize": [
+        10,
+        6
+      ]
+    },
+    "plots": {
+      "summary": {
+        "enabled": true,
+        "filename": "shap_summary_plot",
+        "title": "SHAP摘要图 - 特征影响方向",
+        "xlabel": "SHAP值 (正值增加风险, 负值降低风险)",
+        "colorbar_label": "特征值"
+      },
+      "bar": {
+        "enabled": true,
+        "filename": "shap_bar_plot",
+        "title": "",
+        "xlabel": "平均 |SHAP值| (特征影响强度)",
+        "bar_height": 0.65,
+        "value_format": ".3f"
+      },
+      "force": {
+        "enabled": true,
+        "filename": "shap_force_plot",
+        "title": "SHAP力图 - 单个样本的预测解释",
+        "figsize": [
+          14,
+          4
+        ],
+        "font_size": 10,
+        "text_rotation": 15,
+        "line_style": "-",
+        "contribution_threshold": 0.05,
+        "title_y": 0.98,
+        "content_top": 0.88,
+        "ylim": [
+          -0.4,
+          0.52
+        ],
+        "axis_y": 0.15
+      },
+      "waterfall": {
+        "enabled": true,
+        "filename": "shap_waterfall_plot",
+        "title": "SHAP瀑布图 - 单个样本的逐特征贡献",
+        "xlabel": "模型输出 (log-odds)",
+        "figsize": [
+          12,
+          7
+        ],
+        "base_label_y": -0.11,
+        "prediction_label_y": 1.02,
+        "xlabel_pad": 40
+      },
+      "dependence_protective": {
+        "enabled": true,
+        "filename": "shap_dependence_plot_protective",
+        "title": "SHAP依赖图 - {feature}",
+        "feature": null,
+        "interaction_feature": null,
+        "point_color": "#2878B5"
+      },
+      "dependence_risk": {
+        "enabled": true,
+        "filename": "shap_dependence_plot_risk",
+        "title": "SHAP依赖图 - {feature}",
+        "feature": null,
+        "interaction_feature": null,
+        "point_color": "#D94A48"
+      }
+    }
+  },
+  "explanation": {
+    "background_max_samples": 100,
+    "background_seed": 0,
+    "protective_feature": "Alb"
+  }
+}

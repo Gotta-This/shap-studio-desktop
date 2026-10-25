@@ -1,0 +1,62 @@
+name: Build and verify Windows desktop app
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - desktop_app/**
+      - .github/workflows/windows-build.yml
+
+permissions:
+  contents: read
+
+jobs:
+  windows-x64:
+    runs-on: windows-2022
+    timeout-minutes: 35
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: desktop_app
+    env:
+      PYTHONUTF8: '1'
+      QT_QPA_PLATFORM: offscreen
+      QT_OPENGL: software
+      MPLBACKEND: Agg
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+          architecture: x64
+          cache: pip
+          cache-dependency-path: desktop_app/requirements-windows.txt
+      - name: Install installer compiler
+        run: choco install innosetup --yes --no-progress
+      - name: Test, package, run EXE and verify UI/export consistency
+        run: ./build_windows.ps1 -RequireInstaller
+      - name: Upload portable app and installer
+        uses: actions/upload-artifact@v7
+        with:
+          name: SHAPStudio-Windows-x64
+          path: |
+            desktop_app/dist/SHAPStudio-Windows-x64.zip
+            desktop_app/dist/SHAPStudio-Windows-x64.sha256.txt
+            desktop_app/dist/SHAPStudio-Setup-Windows-x64.exe
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+      - name: Upload verification reports and screenshots
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: Windows-verification-evidence
+          path: |
+            desktop_app/verification/windows_packaged/**
+            desktop_app/verification/windows_ui/**
+            desktop_app/build/SHAPStudio/warn-SHAPStudio.txt
+          if-no-files-found: warn
+          retention-days: 14

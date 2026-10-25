@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.venv*/
+build/
+dist/
+verification/
+*.png
+!clinical_studio/assets/icon.png
+.DS_Store
+clinical_studio/assets/*.otf
+clinical_studio/assets/*.download
+github_source/
