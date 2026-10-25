@@ -25,7 +25,7 @@ Assert-Exit 'Install dependencies'
 & $Python prepare_assets.py
 Assert-Exit 'Prepare verified offline font assets'
 if (-not $SkipTests) {
-    & $Python -m unittest discover -s tests -v
+    & $Python run_tests.py
     Assert-Exit 'Unit and export tests'
 }
 & $Python -m PyInstaller --noconfirm --clean SHAPStudio.spec
