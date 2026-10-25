@@ -92,7 +92,7 @@ class WordBatchTests(unittest.TestCase):
             self.assertEqual(w.sheetnames,['模拟病例数据','统计核对','生成配置'])
             self.assertEqual(w.worksheets[0].max_row,23)
             self.assertEqual([cell.value for cell in w.worksheets[0][1]],r['columns'])
-            self.assertEqual(list(w.worksheets[0].values)[1],tuple(r['rows'][0]))
+            self.assertEqual(list(w.worksheets[0].values)[1],tuple(None if v=='' else v for v in r['rows'][0]))
             self.assertEqual(w.worksheets[0].freeze_panes,'A2');w.close()
             # Formula-looking user labels are exported as plain text.
             r['rows'][0][6]='=1+1';export_batch(r,path);w=load_workbook(path)
@@ -108,7 +108,7 @@ class WordBatchTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             try:
                 path=Path(d)/'source.docx';fixture_docx(path)
-                tool.import_word(path);self.assertEqual(tool.metrics.rowCount(),4)
+                tool.use_word_sizes.setChecked(True);tool.import_word(path);self.assertEqual(tool.metrics.rowCount(),4)
                 self.assertEqual(tool.group_editors[1].fields['n'].text(),'12')
                 tool.generate_button.click();deadline=time.monotonic()+20
                 while tool.is_running() and time.monotonic()<deadline:app.processEvents();time.sleep(.01)

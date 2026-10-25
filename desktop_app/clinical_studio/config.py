@@ -28,6 +28,14 @@ def load_config(path):
 
 def validate(config):
     """在创建输出文件和执行计算之前验证所有输入。"""
+    def finite(value):
+        if isinstance(value, dict):
+            for item in value.values(): finite(item)
+        elif isinstance(value, (list, tuple)):
+            for item in value: finite(item)
+        elif isinstance(value, float) and not math.isfinite(value):
+            raise ValueError("所有数值参数必须是有限数值，不能填写 NaN 或无穷大。")
+    finite(config)
     if config.get("schema_version") != 1:
         raise ValueError("不支持的配置文件版本。")
     data, model, plots = config["data"], config["model"], config["plots"]
@@ -75,6 +83,14 @@ def validate(config):
             raise ValueError("随机种子必须是 0～4294967295 的整数。")
     if not .01 <= model["test_size"] <= .99:
         raise ValueError("测试集比例必须在 1%～99% 之间。")
+    if model["solver"] not in ("lbfgs", "liblinear", "newton-cg", "newton-cholesky", "sag", "saga"):
+        raise ValueError("不支持的模型求解器。")
+    if model["penalty"] not in ("l1", "l2", "elasticnet", "none"):
+        raise ValueError("不支持的正则化方式。")
+    if not isinstance(model["max_iter"], int) or model["max_iter"] < 1:
+        raise ValueError("最大迭代次数必须是正整数。")
+    if model["class_weight"] not in ("none", "balanced"):
+        raise ValueError("不支持的类别权重。")
     if not 0 < model["threshold"] < 1 or model["C"] <= 0 or model["tol"] <= 0:
         raise ValueError("分类阈值须在 0～1 之间，C 和收敛容差必须为正。")
     if model["penalty"] in ("l1", "elasticnet") and model["solver"] != "saga":
@@ -86,6 +102,8 @@ def validate(config):
         raise ValueError("L1 混合比例须在 0～1 之间。")
     if config["explanation"]["background_max_samples"] < 1:
         raise ValueError("SHAP 背景样本数至少为 1。")
+    if config["explanation"].get("protective_feature") is not None and config["explanation"]["protective_feature"] not in names:
+        raise ValueError("默认保护因素展示特征已不存在，请重新选择或选择自动。")
     formats = plots["formats"]
     if not formats or any(f not in ("png", "svg", "pdf") for f in formats):
         raise ValueError("请至少选择一种导出格式：PNG、SVG、PDF。")
@@ -99,6 +117,20 @@ def validate(config):
             raise ValueError(f"未知图表类型：{name}")
         style = deepcopy(plots["common"])
         style.update(overrides)
+        from matplotlib.colors import is_color_like
+        for key, value in style.items():
+            if key.endswith("color") or key in ("background", "positive_light", "negative_light"):
+                if not is_color_like(value): raise ValueError(f"{PLOT_NAMES[name]} 的 {key} 颜色无效。")
+        for key in ("font_size", "title_size", "label_size", "tick_size"):
+            if style[key] <= 0: raise ValueError("字号必须大于 0。")
+        for key in ("axis_width", "tick_width", "tick_length", "line_width", "grid_width", "baseline_width", "point_size", "edge_width", "separator_width"):
+            if style[key] < 0: raise ValueError("线宽、刻度长度和散点面积不能为负。")
+        if name == "bar":
+            if style["bar_height"] <= 0: raise ValueError("条形高度必须大于 0。")
+            try: format(0.123, style["value_format"])
+            except (ValueError, TypeError) as exc: raise ValueError("条形数值格式无效，例如 .3f。") from exc
+        if name == "force" and (style["ylim"][0] >= style["ylim"][1] or not 0 < style["content_top"] <= 1):
+            raise ValueError("力图纵向范围必须递增，内容上边界须在 0～1 之间。")
         filename = style["filename"]
         if not filename or any(c in filename for c in '/\\:*?"<>|') or filename in (".", ".."):
             raise ValueError("图片文件名不能为空，也不能包含路径或特殊字符。")

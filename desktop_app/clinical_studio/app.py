@@ -12,52 +12,14 @@ from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QLabel, QPushButton,
     QListWidget, QStackedWidget, QFrame, QFormLayout, QGroupBox, QComboBox, QTabWidget,
     QTableView, QHeaderView, QSplitter, QFileDialog, QMessageBox, QLineEdit, QDialog,
-    QProgressBar, QPlainTextEdit, QScrollArea, QGridLayout, QMenu, QAbstractItemView,
+    QProgressBar, QPlainTextEdit, QScrollArea, QGridLayout, QMenu, QAbstractItemView, QListView, QBoxLayout,
 )
 
 from .config import ROOT, PLOT_NAMES, default_config, load_config, save_config, validate
 from .widgets import ParamForm, ValueField, scroll
 
 
-STYLE = """
-QWidget { font-family: 'Noto Sans CJK SC', 'PingFang SC', sans-serif; font-size: 13px; color: #1E293B; }
-QMainWindow, #workspace { background: #F4F7FA; }
-#sidebar { background: #102B2C; }
-#brand { color: #F8FAFC; font-size: 20px; font-weight: 700; }
-#brandSub { color: #9AC5BF; font-size: 12px; }
-#nav { background: transparent; border: none; outline: none; color: #C4D8D5; }
-#nav::item { padding: 15px 18px; margin: 3px 10px; border-radius: 7px; }
-#nav::item:selected { background: #21514D; color: #FFFFFF; }
-#nav::item:hover { background: #193E3B; }
-#localBadge { color: #A7D7C5; background: #173E39; border-radius: 7px; padding: 12px; }
-#pageTitle { font-size: 25px; font-weight: 700; color: #142F32; }
-#muted { color: #64748B; }
-#card, QGroupBox { background: white; border: 1px solid #DFE7ED; border-radius: 10px; }
-QGroupBox { margin-top: 16px; padding: 18px 12px 12px 12px; font-weight: 600; }
-QGroupBox::title { subcontrol-origin: margin; left: 12px; padding: 0 6px; }
-QLabel { background: transparent; }
-QPushButton { background: white; border: 1px solid #CDD9E1; border-radius: 6px; padding: 8px 13px; }
-QPushButton:hover { background: #EDF5F4; border-color: #7BAFA6; }
-QPushButton:disabled { background: #EFF3F6; color: #94A3B8; border-color: #E2E8F0; }
-#primary { background: #0D7668; color: white; font-weight: 600; border-color: #0D7668; }
-#primary:hover { background: #0A6257; }
-#primary:disabled { background: #92BBB5; color: white; }
-QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox { background: white; border: 1px solid #CCD8E0; border-radius: 5px; padding: 6px; min-height: 21px; }
-QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus { border-color: #0D9488; }
-QLineEdit:disabled, QSpinBox:disabled, QDoubleSpinBox:disabled, QComboBox:disabled { color: #91A0AE; background: #F5F7F9; }
-QComboBox QAbstractItemView { background: white; selection-background-color: #D7EEE9; color: #1E293B; }
-QCheckBox { spacing: 7px; }
-QTabWidget::pane { border: 1px solid #DFE7ED; background: white; border-radius: 7px; }
-QTabBar::tab { background: #EDF2F6; padding: 10px 17px; margin-right: 3px; }
-QTabBar::tab:selected { background: white; color: #0D7668; border-bottom: 2px solid #0D7668; }
-QScrollArea { border: none; background: transparent; }
-QScrollArea > QWidget > QWidget { background: white; }
-QTableView { background: white; alternate-background-color: #F6F9FB; border: 1px solid #DFE7ED; gridline-color: #EAF0F4; selection-background-color: #D9EFEB; selection-color: #173E39; }
-QHeaderView::section { background: #F1F5F8; border: none; border-bottom: 1px solid #DDE5EB; padding: 9px; font-weight: 600; }
-QPlainTextEdit { background: #15282F; color: #CEE3DD; border: none; border-radius: 8px; padding: 12px; font-family: Menlo, monospace; }
-QProgressBar { background: #E5EDEA; border: none; border-radius: 3px; min-height: 6px; max-height: 6px; }
-QProgressBar::chunk { background: #0D9488; }
-"""
+from .theme import STYLE, COLORS
 
 
 def muted(text):
@@ -94,7 +56,7 @@ class DataTableModel(QAbstractTableModel):
 
 class FeatureEditor(QWidget):
     def __init__(self, data):
-        super().__init__(); self.data=data; self.current=-1; self.detail_forms={}
+        super().__init__(); self.data=data; self.current=-1; self.detail_forms={}; self.group_layout=None
         layout=QVBoxLayout(self); layout.setContentsMargins(0,0,0,0)
         self.general=ParamForm({k:v for k,v in data.items() if k != "features"})
         general_box=QGroupBox("样本与字段设置"); form_layout=QVBoxLayout(general_box); form_layout.addWidget(self.general)
@@ -141,7 +103,7 @@ class FeatureEditor(QWidget):
 
     def select(self, index):
         self.commit_feature()
-        self.current=index; self.detail_forms={}
+        self.current=index; self.detail_forms={}; self.group_layout=None
         while self.detail_layout.count():
             item=self.detail_layout.takeAt(0)
             if item.widget(): item.widget().deleteLater()
@@ -150,7 +112,7 @@ class FeatureEditor(QWidget):
         header=QFormLayout(); self.name=QLineEdit(feature["name"]); header.addRow("特征名称",self.name)
         header_widget=QWidget(); header_widget.setLayout(header); self.detail_layout.addWidget(header_widget)
         if feature["kind"]=="continuous":
-            groups=QHBoxLayout()
+            groups=QBoxLayout(QBoxLayout.LeftToRight);self.group_layout=groups
             for key,title in [("positive","阳性组（结局 = 1）"),("negative","阴性组（结局 = 0）")]:
                 box=QGroupBox(title); bl=QVBoxLayout(box)
                 form=ParamForm({k:float(v) for k,v in feature[key].items()})
@@ -164,6 +126,16 @@ class FeatureEditor(QWidget):
             self.detail_forms["binary"]=form; self.detail_layout.addWidget(form)
             self.detail_layout.addWidget(muted("概率针对上方的第二个编码；第一个编码的概率为 1 − 当前概率。"))
         self.detail_layout.addStretch()
+        self.adapt_groups()
+
+    def adapt_groups(self):
+        if self.group_layout is not None:
+            available=self.parentWidget().width() if self.parentWidget() else self.width()
+            direction=QBoxLayout.TopToBottom if available<950 else QBoxLayout.LeftToRight
+            if self.group_layout.direction()!=direction:self.group_layout.setDirection(direction)
+
+    def resizeEvent(self,event):
+        super().resizeEvent(event);self.adapt_groups()
 
     def add_feature(self, kind):
         self.commit_feature()
@@ -220,13 +192,16 @@ class ImagePreview(QDialog):
 
 
 class MainWindow(QMainWindow):
-    def __init__(self,config=None,output=None):
+    def __init__(self,config=None,output=None,embedded=False):
         super().__init__(); self.config=deepcopy(config or default_config()); self.result=None; self.worker=None
-        self.output_root=str(output or (Path.home()/"Documents"/"SHAP分析结果"))
+        self.output_root=str(output or self.config["plots"].get("output_dir") or (Path.home()/"Documents"/"SHAP分析结果"))
         self.setWindowTitle("SHAP 分析工作台"); self.resize(1460,980); self.setMinimumSize(1120,760)
         icon=ROOT/"assets"/"icon.png"
         if icon.exists(): self.setWindowIcon(QIcon(str(icon)))
-        base=QWidget(); outer=QHBoxLayout(base); outer.setContentsMargins(0,0,0,0); outer.setSpacing(0)
+        self.embedded=embedded
+        base=QWidget(); outer=(QVBoxLayout(base) if embedded else QHBoxLayout(base)); outer.setContentsMargins(0,0,0,0); outer.setSpacing(0)
+        if embedded:
+            base.setObjectName("analysisPanel"); base.setAttribute(Qt.WA_StyledBackground,True)
         sidebar=QFrame(); sidebar.setObjectName("sidebar"); sidebar.setFixedWidth(210)
         sl=QVBoxLayout(sidebar); sl.setContentsMargins(0,28,0,20)
         brand=QLabel("SHAP 工作台"); brand.setObjectName("brand"); brand.setContentsMargins(24,0,0,0); sl.addWidget(brand)
@@ -236,7 +211,20 @@ class MainWindow(QMainWindow):
         sl.addWidget(self.nav)
         badge=QLabel("●  本地计算\n\n数据与结果保存在本机"); badge.setObjectName("localBadge"); badge.setContentsMargins(14,8,10,8)
         sl.addWidget(badge); version=QLabel("    版本 1.0.0 · 离线桌面版"); version.setObjectName("brandSub"); sl.addWidget(version)
-        outer.addWidget(sidebar)
+        if embedded:
+            # The four-module shell owns the only vertical navigation rail.
+            self.nav.setParent(base)
+            self.nav.setObjectName("workflowNav")
+            self.nav.setFlow(QListView.LeftToRight); self.nav.setWrapping(False)
+            self.nav.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+            self.nav.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+            self.nav.setFixedHeight(68); self.nav.setSpacing(3)
+            self.nav.setUniformItemSizes(False)
+            self.nav.setContentsMargins(18,0,18,0)
+            sidebar.hide(); sidebar.deleteLater()
+            outer.addWidget(self.nav)
+        else:
+            outer.addWidget(sidebar)
         workspace=QWidget(); workspace.setObjectName("workspace"); wl=QVBoxLayout(workspace); wl.setContentsMargins(28,24,28,16); wl.setSpacing(14)
         top=QHBoxLayout(); self.page_title=QLabel("分析概览"); self.page_title.setObjectName("pageTitle"); top.addWidget(self.page_title); top.addStretch()
         self.import_button=QPushButton("载入配置"); self.save_button=QPushButton("保存配置"); self.run_button=QPushButton("生成数据并分析"); self.run_button.setObjectName("primary")
@@ -247,6 +235,7 @@ class MainWindow(QMainWindow):
         self.progress=QProgressBar(); self.progress.setRange(0,1); self.progress.setValue(0); self.progress.setTextVisible(False); wl.addWidget(self.progress)
         outer.addWidget(workspace,1); self.setCentralWidget(base)
         self.log=QPlainTextEdit(); self.log.setReadOnly(True)
+        self.log.setPlaceholderText("尚无运行记录\n\n设置参数后点击“生成数据并分析”，这里会显示数据生成、模型训练、绘图和保存进度。")
         self.build_pages()
         self.nav.currentRowChanged.connect(self.navigate); self.nav.setCurrentRow(0)
         self.run_button.clicked.connect(lambda:self.start_analysis())
@@ -305,10 +294,11 @@ class MainWindow(QMainWindow):
         page=QWidget(); layout=QVBoxLayout(page); layout.setContentsMargins(0,0,0,0)
         global_config=self.config["plots"]
         self.export_form=ParamForm({k:global_config[k] for k in ("dpi","formats","random_seed","sample_index")})
-        self.export_form.setMaximumHeight(210)
-        layout.addWidget(self.export_form)
         self.style_editor=StyleEditor(global_config,[f["name"] for f in self.config["data"]["features"]])
-        layout.addWidget(self.style_editor,1)
+        # Export settings stay reachable without taking four rows from every plot tab.
+        sections=QTabWidget(); self.style_sections=sections; sections.addTab(self.style_editor,"每张图的样式")
+        sections.addTab(scroll(self.export_form),"导出格式、清晰度与样本")
+        layout.addWidget(sections,1)
         layout.addWidget(muted("PNG 始终保留用于界面预览；SVG / PDF 按勾选导出。透明散点与背景混合后会比原始色值浅。"))
         return page
 
@@ -335,6 +325,7 @@ class MainWindow(QMainWindow):
         self.config["model"].update(self.model_form.values())
         self.config["explanation"].update(self.explanation_form.values())
         self.config["plots"].update(self.export_form.values()); self.style_editor.commit()
+        self.config["plots"]["output_dir"]=self.output_edit.text().strip()
         return deepcopy(self.config)
 
     def navigate(self,index):
@@ -352,21 +343,21 @@ class MainWindow(QMainWindow):
         self.page_title.setText(["分析概览","数据参数","模型与解释","图表样式","结果与导出","运行日志"][index])
 
     def choose_output(self):
-        path=QFileDialog.getExistingDirectory(self,"选择结果保存位置",self.output_edit.text())
+        path=QFileDialog.getExistingDirectory(getattr(self,"advanced_host",self),"选择结果保存位置",self.output_edit.text())
         if path:self.output_edit.setText(path)
 
     def export_config(self):
         try:config=self.collect_config(); validate(config)
         except Exception as exc: QMessageBox.warning(self,"配置未保存",str(exc)); return
-        path,_=QFileDialog.getSaveFileName(self,"保存全部参数配置","SHAP分析参数.json","JSON (*.json)")
+        path,_=QFileDialog.getSaveFileName(getattr(self,"advanced_host",self),"保存全部参数配置","SHAP分析参数.json","JSON (*.json)")
         if path:save_config(config,path); self.status.setText("全部参数配置已保存。")
 
     def import_config(self):
-        path,_=QFileDialog.getOpenFileName(self,"载入参数配置","","JSON (*.json)")
+        path,_=QFileDialog.getOpenFileName(getattr(self,"advanced_host",self),"载入参数配置","","JSON (*.json)")
         if not path:return
         try:config=load_config(path)
         except Exception as exc:QMessageBox.warning(self,"无法载入配置",str(exc));return
-        self.config=config; self.output_root=self.output_edit.text(); index=max(0,self.nav.currentRow()); self.build_pages(); self.stack.setCurrentIndex(index)
+        self.config=config; self.output_root=config["plots"].get("output_dir") or self.output_edit.text(); index=max(0,self.nav.currentRow()); self.build_pages(); self.stack.setCurrentIndex(index)
         self.status.setText("已载入全部参数；最近结果仍对应原运行快照。")
 
     def set_busy(self,busy):
@@ -413,13 +404,14 @@ class MainWindow(QMainWindow):
         self.result_hint.setText(f"本次结果：{result.folder.name} · 参数已随结果保存")
         while self.gallery_layout.count():
             item=self.gallery_layout.takeAt(0)
-            if item.widget():item.widget().deleteLater()
+            if item.widget():
+                tile=item.widget();tile.hide();tile.setParent(None);tile.deleteLater()
         for i,path in enumerate(pngs):
             tile=QFrame(); tile.setObjectName("card"); tl=QVBoxLayout(tile)
             image=QLabel(); image.setAlignment(Qt.AlignCenter)
             image.setPixmap(QPixmap(str(path)).scaled(485,290,Qt.KeepAspectRatio,Qt.SmoothTransformation))
             tl.addWidget(image); label=QLabel(path.name); label.setWordWrap(True); tl.addWidget(label)
-            button=QPushButton("查看大图 / 另存…"); button.clicked.connect(lambda checked=False,p=path:ImagePreview(p,self).exec()); tl.addWidget(button)
+            button=QPushButton("查看大图 / 另存…"); button.clicked.connect(lambda checked=False,p=path:ImagePreview(p,getattr(self,"advanced_host",self)).exec()); tl.addWidget(button)
             self.gallery_layout.addWidget(tile,i//2,i%2)
         if not pngs:self.gallery_layout.addWidget(muted("本次仅生成数据，或全部图表已关闭。"),0,0)
         if result.model is None:
@@ -438,7 +430,7 @@ class MainWindow(QMainWindow):
 
     def copy_results(self):
         if not self.result:QMessageBox.information(self,"暂无结果","请先生成数据或运行分析。");return
-        destination=QFileDialog.getExistingDirectory(self,"另存完整结果")
+        destination=QFileDialog.getExistingDirectory(getattr(self,"advanced_host",self),"另存完整结果")
         if destination:
             try:
                 from .engine import copy_results
@@ -456,9 +448,12 @@ def create_application(argv):
     app.setApplicationName("科研数据工具集"); app.setOrganizationName("ClinicalStudio")
     for font in (ROOT/"assets").glob("NotoSansCJKsc-*.otf"):
         QFontDatabase.addApplicationFont(str(font))
+    ui_font=ROOT/"assets"/"NotoSansSC-UI.ttf"
+    if ui_font.exists():QFontDatabase.addApplicationFont(str(ui_font))
     # 字体下拉框与绘图引擎共享这些随 Matplotlib 打包的字体。
     import matplotlib
     for font in (Path(matplotlib.get_data_path())/"fonts"/"ttf").glob("DejaVu*.ttf"):
         QFontDatabase.addApplicationFont(str(font))
-    app.setStyle("Fusion"); app.setStyleSheet(STYLE)
+    from .theme import apply_light_palette
+    app.setStyle("Fusion"); apply_light_palette(app); app.setStyleSheet(STYLE)
     return app

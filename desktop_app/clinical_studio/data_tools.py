@@ -2,34 +2,72 @@
 import csv
 from pathlib import Path
 from PySide6.QtCore import QThread, Signal, Qt
+from PySide6.QtGui import QPainter, QColor
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QGroupBox, QLabel,
     QPushButton, QTableWidget, QTableWidgetItem, QHeaderView, QLineEdit,
-    QSpinBox, QComboBox, QRadioButton, QPlainTextEdit, QApplication, QFileDialog,
+    QSpinBox, QComboBox, QRadioButton, QPlainTextEdit, QApplication, QFileDialog, QSplitter,
 )
 from .data_tools_engine import category_numbers, category_summary, numeric_numbers, statistics, format_values
 from .widgets import scroll
+from .theme import COLORS
+
+
+class DistributionPreview(QWidget):
+    """Native UI histogram of the generated values; does not change saved data."""
+    def __init__(self):
+        super().__init__(); self.values=[]; self.setMinimumHeight(120); self.setMaximumHeight(175)
+        self.setAccessibleName('生成数值的实际分布')
+
+    def paintEvent(self,event):
+        if not self.values:return
+        painter=QPainter(self);painter.setRenderHint(QPainter.Antialiasing)
+        low,high=min(self.values),max(self.values);counts=[0]*12
+        for value in self.values:
+            counts[min(11,int((value-low)/(high-low)*12)) if high>low else 5]+=1
+        peak=max(counts);w=(self.width()-36)/12;bottom=self.height()-25
+        painter.setPen(QColor(COLORS['muted']));painter.drawText(8,self.height()-5,f'{low:g}')
+        painter.drawText(self.width()-85,self.height()-23,77,20,Qt.AlignRight,f'{high:g}')
+        painter.setPen(Qt.NoPen)
+        for i,count in enumerate(counts):
+            h=(bottom-12)*count/peak;painter.setBrush(QColor(COLORS['primary'] if count==peak else '#A8D4B8'))
+            painter.drawRoundedRect(int(18+i*w),int(bottom-h),max(2,int(w-5)),int(h),4,4)
+
+
+def split_panels(layout, left, result):
+    splitter=QSplitter(Qt.Horizontal);splitter.setChildrenCollapsible(False)
+    splitter.addWidget(scroll(left));splitter.addWidget(result)
+    splitter.widget(0).setMinimumWidth(315);result.setMinimumWidth(360)
+    splitter.setStretchFactor(0,2);splitter.setStretchFactor(1,3);splitter.setSizes([410,650])
+    layout.addWidget(splitter);return splitter
 
 
 class NumberWorker(QThread):
     result_ready=Signal(object)
     failed=Signal(str)
+    cancelled=Signal()
     def __init__(self, options, parent=None):
         super().__init__(parent); self.options=options
     def run(self):
+        from .data_tools_engine import GenerationCancelled
         try:
-            self.result_ready.emit((self.options,numeric_numbers(**self.options)))
+            values=numeric_numbers(**self.options,cancelled=self.isInterruptionRequested)
+            if self.isInterruptionRequested():raise GenerationCancelled()
+            self.result_ready.emit((self.options,values))
+        except GenerationCancelled:self.cancelled.emit()
         except Exception as exc:
             self.failed.emit(str(exc))
 
 
 class ResultPanel(QGroupBox):
-    def __init__(self, column_name='Value', default_name='模拟数列'):
+    def __init__(self, column_name='Value', default_name='模拟数列', histogram=False):
         super().__init__('生成结果 · 可直接复制')
-        self.values=[];self.digits=None;self.column_name=column_name;self.default_name=default_name;self.last_save_path=None
+        self.values=[];self.digits=None;self.column_name=column_name;self.default_name=default_name;self.last_save_path=None;self.csv_r_style=False
         layout=QVBoxLayout(self)
-        self.summary=QLabel('尚未生成数据');self.summary.setWordWrap(True);layout.addWidget(self.summary)
+        self.summary=QLabel('尚未生成数据');self.summary.setWordWrap(True);self.summary.setObjectName('sectionTitle');layout.addWidget(self.summary)
         self.details=QLabel('');self.details.setWordWrap(True);layout.addWidget(self.details)
+        self.histogram=DistributionPreview() if histogram else None
+        if self.histogram is not None:layout.addWidget(self.histogram);self.histogram.hide()
         row=QHBoxLayout();row.addWidget(QLabel('排列格式'))
         self.format=QComboBox()
         for title,value in [('每行一个数字','line'),('逗号分隔','comma'),('空格分隔','space'),('R 向量 c(...)','r')]:
@@ -44,10 +82,14 @@ class ResultPanel(QGroupBox):
         self.output.setPlainText(format_values(self.values,self.format.currentData(),self.digits) if self.values else '')
     def set_values(self,values,digits=None):
         self.values=values;self.digits=digits;self.message.clear();self.render()
+        if self.histogram is not None:
+            self.histogram.values=list(values);self.histogram.setVisible(bool(values));self.histogram.update()
     def copy(self):
+        from .feedback import copy_text,notify
         if self.values:
-            QApplication.clipboard().setText(self.output.toPlainText());self.message.setText('已复制全部数据。')
-        else:self.message.setText('请先生成数据。')
+            copy_text(self,self.output.toPlainText());self.message.setText('复制成功，已复制全部数据。')
+        else:
+            self.message.setText('请先生成数据。');notify(self,'尚无数据，请先生成。',success=False)
 
     def save(self):
         if not self.values:self.message.setText('请先生成数据。');return
@@ -66,8 +108,12 @@ class ResultPanel(QGroupBox):
                     for cell in sheet['A'][1:]:cell.number_format='0'+('.'+'0'*self.digits if self.digits else '')
                 book.save(path);book.close()
             else:
-                with path.open('w',encoding='utf-8-sig',newline='') as stream:
-                    writer=csv.writer(stream);writer.writerow([self.column_name]);writer.writerows([[v] for v in self.values])
+                with path.open('w',encoding='utf-8' if self.csv_r_style else 'utf-8-sig',newline='') as stream:
+                    if self.csv_r_style:
+                        csv.writer(stream,quoting=csv.QUOTE_ALL,lineterminator='\n').writerow([self.column_name])
+                        csv.writer(stream,lineterminator='\n').writerows([[format_values([v])] for v in self.values])
+                    else:
+                        writer=csv.writer(stream);writer.writerow([self.column_name]);writer.writerows([[v] for v in self.values])
             self.last_save_path=path;self.message.setText('已保存：'+str(path))
         except Exception as exc:self.message.setText('保存失败：'+str(exc))
 
@@ -80,11 +126,11 @@ class CategoryTool(QWidget):
         self.table=QTableWidget(0,2);self.table.setHorizontalHeaderLabels(['数字','数量']);self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch);left.addWidget(self.table,1)
         row=QHBoxLayout();add=QPushButton('＋ 添加数字');remove=QPushButton('删除选中行');row.addWidget(add);row.addWidget(remove);left.addLayout(row)
         self.seed=QLineEdit('12');self.seed.setPlaceholderText('留空，每次生成新排列');form=QFormLayout();form.addRow('随机种子（可选）',self.seed);left.addLayout(form)
-        hint=QLabel('同样参数和种子可复现；与 HTML 第一个工具一致。\n与 R 相同种子的具体排列不同。总数量上限 100,000。');hint.setWordWrap(True);left.addWidget(hint)
+        hint=QLabel('同样参数和种子可复现；与 R 3.6 及以上默认 set.seed / sample 一致。\n每行一个数值，可直接复制至 Excel。总数量上限 100,000。');hint.setWordWrap(True);left.addWidget(hint)
         self.generate_button=QPushButton('生成随机数列');self.generate_button.setObjectName('primary');left.addWidget(self.generate_button)
         self.error=QLabel('');self.error.setWordWrap(True);self.error.setStyleSheet('color:#B34334');left.addWidget(self.error)
         self.code=QLabel('');self.code.setWordWrap(True);left.addWidget(self.code)
-        self.result=ResultPanel('RandomValue','自定义类别数列');layout.addWidget(group,1);layout.addWidget(self.result,2)
+        self.result=ResultPanel('RandomValue','random_numbers_28_93_57');self.result.csv_r_style=True;self.splitter=split_panels(layout,group,self.result)
         add.clicked.connect(lambda:self.add_row());remove.clicked.connect(self.remove_row);self.generate_button.clicked.connect(self.generate)
         self.add_row('1','28');self.add_row('0','93');self.generate()
     def add_row(self,value='',count=''):
@@ -105,6 +151,17 @@ class CategoryTool(QWidget):
             self.code.setText('numbers <- c('+', '.join(f'rep({v:g}, {n})' for v,n in categories)+')')
         except (ValueError,OverflowError) as exc:self.error.setText(str(exc))
 
+    def original_report(self):
+        from collections import Counter
+        values=self.result.values
+        head='\n'.join(f'{i+1:>3} {format_values([v])}' for i,v in enumerate(values[:10]))
+        counts=Counter(values)
+        table='\n'.join(f'{format_values([v])}: {counts[v]}' for v in sorted(counts))
+        return ('前10行数据:\n    RandomValue\n'+head+'\n\n数据结构:\n'
+            +f"'data.frame': {len(values)} obs. of 1 variable:\n $ RandomValue: num "
+            +' '.join(format_values([v]) for v in values[:10])+'\n\n各类别计数:\n'+table
+            +f'\n\n文件包含 {len(values)} 个观测值\n\n完整数列（每行一个，无行号）:\n'+format_values(values))
+
 
 class NumericTool(QWidget):
     def __init__(self):
@@ -122,9 +179,11 @@ class NumericTool(QWidget):
         modes.addWidget(self.target);modes.addWidget(self.range_mode);left.addLayout(modes)
         self.target.toggled.connect(self.mode_changed)
         self.generate_button=QPushButton('生成模拟数据');self.generate_button.setObjectName('primary');left.addWidget(self.generate_button)
+        self.stop_button=QPushButton('停止');self.stop_button.setEnabled(False);left.addWidget(self.stop_button)
+        self.stop_button.clicked.connect(self.stop_generation)
         self.error=QLabel('');self.error.setWordWrap(True);self.error.setStyleSheet('color:#B34334');left.addWidget(self.error)
         note=QLabel('样本标准差使用 n−1。统计目标为近似匹配，结果不保证正态分布。\n\n上下限可留空；按范围均匀随机模式需填写两个边界。\n\n生成结果仅为模拟数据，请核对实际统计值与偏差。');note.setWordWrap(True);left.addWidget(note);left.addStretch()
-        self.result=ResultPanel('Value','均数标准差模拟数据');layout.addWidget(group,1);layout.addWidget(self.result,2)
+        self.result=ResultPanel('Value','均数标准差模拟数据',histogram=True);self.splitter=split_panels(layout,group,self.result)
         self.generate_button.clicked.connect(self.generate)
     def mode_changed(self):
         self.mean.setEnabled(self.target.isChecked());self.sd.setEnabled(self.target.isChecked())
@@ -135,16 +194,22 @@ class NumericTool(QWidget):
             options['seed']=self.seed.text() if self.seed.text().strip() else None
         except ValueError:self.error.setText('请填写有效数字；上下限可以留空。');return
         self.error.clear();self.generate_button.setEnabled(False);self.generate_button.setText('正在生成…')
-        self.worker=NumberWorker(options,self);self.worker.result_ready.connect(self.show_result);self.worker.failed.connect(self.error.setText);self.worker.finished.connect(self.finished);self.worker.start()
+        self.stop_button.setEnabled(True)
+        self.worker=NumberWorker(options,self);self.worker.result_ready.connect(self.show_result);self.worker.failed.connect(self.error.setText);self.worker.cancelled.connect(self.stopped);self.worker.finished.connect(self.finished);self.worker.start()
+    def stop_generation(self):
+        if self.is_running():self.worker.requestInterruption();self.stop_button.setEnabled(False)
+    def stopped(self):
+        self.result.message.setText('已停止生成。'+('上次结果已保留。' if self.result.values else ''))
     def show_result(self,payload):
-        options,values=payload;mean,sd=statistics(values);self.result.set_values(values,options['digits'])
+        if self.worker and self.worker.isInterruptionRequested():self.stopped();return
+        options,values=payload;self.result_options=dict(options);mean,sd=statistics(values);self.result.set_values(values,options['digits'])
         self.result.summary.setText(f'实际均数：{mean:.4f} · 样本标准差：{sd:.4f} · 例数：{len(values)}')
         detail=f'实际范围：{min(values):g} ～ {max(values):g}'
         if options['mode']=='target':detail+=f"\n均数偏差：{mean-options['mean']:+.4f} · 标准差偏差：{sd-options['sd']:+.4f}"
         else:detail+='\n均匀随机抽样，不约束均数和标准差。'
         self.result.details.setText(detail);self.result.message.setText('已生成，请核对实际统计结果。')
     def finished(self):
-        self.generate_button.setEnabled(True);self.generate_button.setText('生成模拟数据')
+        self.generate_button.setEnabled(True);self.generate_button.setText('生成模拟数据');self.stop_button.setEnabled(False)
     def is_running(self):
         return self.worker is not None and self.worker.isRunning()
 

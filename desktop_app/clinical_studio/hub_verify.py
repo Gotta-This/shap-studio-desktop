@@ -139,9 +139,10 @@ class SuiteVerifier:
     def word(self):
         tool=self.enter('word')
         source=self.root/'工具3_测试Word.docx';make_word_fixture(source)
+        tool.use_word_sizes.setChecked(True)
         self.save_dialog(tool.import_button,source)
         self.check('Word 经导入对话框识别两组指标',tool.metrics.rowCount()==2 and tool.group_editors[0].fields['n'].text()=='10',message=tool.message.text())
-        self.tab(tool.pages,0);self.type_text(tool.seed,'77')
+        self.tab(tool.pages,0);tool.same_size.setChecked(False);self.type_text(tool.seed,'77')
         for index,count in enumerate(('14','16')):
             self.tab(tool.group_tabs,index);self.type_text(tool.group_editors[index].fields['n'],count)
         self.click(tool.generate_button);self.wait_for(tool,self.word_done)
@@ -161,7 +162,7 @@ class SuiteVerifier:
         rows=list(book['模拟病例数据'].values)
         same=rows[0]==tuple(tool.result['columns']) and len(rows)==len(tool.result['rows'])+1
         for exported,expected in zip(rows[1:],tool.result['rows']):
-            same=bool(same and all(abs(a-b)<1e-10 if isinstance(a,(int,float)) and isinstance(b,(int,float)) else a==b for a,b in zip(exported,expected)))
+            same=bool(same and all(abs(a-b)<1e-10 if isinstance(a,(int,float)) and isinstance(b,(int,float)) else a==(None if b=='' else b) for a,b in zip(exported,expected)))
         self.check('Word 导出 Excel 全部单元与界面结果一致',same,sheets=book.sheetnames)
         book.close()
         self.word_snapshot=json.dumps(dict(config=tool.get_config(),result=tool.result),ensure_ascii=False,sort_keys=True)

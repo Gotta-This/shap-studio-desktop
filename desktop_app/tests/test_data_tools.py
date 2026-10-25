@@ -10,6 +10,16 @@ from clinical_studio.data_tools_engine import category_numbers, numeric_numbers,
 APP=create_application([])
 
 class DataToolTests(unittest.TestCase):
+    def test_full_sequences_match_actual_r_reference(self):
+        import json
+        from pathlib import Path
+        reference=json.loads((Path(__file__).parent/'fixtures/r-category.json').read_text())
+        for case in reference['cases']:
+            with self.subTest(seed=case['seed'],n=len(case['values'])):
+                self.assertEqual(category_numbers([tuple(x) for x in case['categories']],str(case['seed'])),case['values'])
+        for seed in ['abc','12.5','2147483648','-2147483648']:
+            with self.assertRaises(ValueError):category_numbers([(1,28),(0,93)],seed)
+
     def test_categories_and_repeatability(self):
         categories=[(1,28),(0,93),(2,10),(3,15)]
         result=category_numbers(categories,'12')

@@ -5,7 +5,7 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules, copy
 
 root = Path(SPECPATH)
 is_macos = sys.platform == "darwin"
-exe_name = "SHAP分析工作台" if is_macos else "SHAPStudio"
+exe_name = "科研数据工具集" if is_macos else "SHAPStudio"
 datas = [(str(root / "clinical_studio" / "defaults.json"), "clinical_studio"),
          (str(root / "clinical_studio" / "assets"), "clinical_studio/assets")]
 datas += collect_data_files("shap", include_py_files=True)
@@ -27,8 +27,8 @@ exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name=exe_name, debug=False,
     icon=str(root / "clinical_studio" / "assets" / "icon.ico") if not is_macos else None)
 coll = COLLECT(exe, a.binaries, a.datas, strip=False, upx=False, name=exe_name)
 if is_macos:
-    app = BUNDLE(coll, name="SHAP分析工作台.app", icon=str(root / "clinical_studio" / "assets" / "icon.icns"),
-        bundle_identifier="local.clinicalstudio.shap", version="1.0.0",
-        info_plist={"NSHighResolutionCapable": True,
-                    "NSHumanReadableCopyright": "SHAP 分析工作台 1.0.0",
+    app = BUNDLE(coll, name="科研数据工具集.app", icon=str(root / "clinical_studio" / "assets" / "icon.icns"),
+        bundle_identifier="local.clinicalstudio.shap", version="1.0.4",
+        info_plist={"NSHighResolutionCapable": True, "NSRequiresAquaSystemAppearance": True,
+                    "NSHumanReadableCopyright": "SHAP 分析工作台 1.0.4",
                     "CFBundleDisplayName": "科研数据工具集"})

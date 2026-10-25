@@ -10,7 +10,7 @@ import traceback
 from PySide6.QtCore import Qt,QTimer,QPoint
 from PySide6.QtGui import QInputMethodEvent
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication,QLineEdit,QComboBox,QCheckBox,QScrollArea,QFileDialog,QPushButton,QMessageBox,QDialogButtonBox
+from PySide6.QtWidgets import QApplication,QLineEdit,QComboBox,QCheckBox,QScrollArea,QFileDialog,QPushButton,QMessageBox,QDialogButtonBox,QTabWidget
 
 from .config import default_config,PLOT_NAMES
 
@@ -52,10 +52,22 @@ class UiVerifier:
         self.events.append({"action":message,**detail});print(message,flush=True)
 
     def ensure(self,widget):
-        parent=widget.parentWidget()
+        # Follow the visible navigation when a redesigned page groups fields in tabs.
+        ancestors=[]; parent=widget.parentWidget()
         while parent:
-            if isinstance(parent,QScrollArea):parent.ensureWidgetVisible(widget,20,20)
+            if isinstance(parent,QTabWidget):ancestors.append(parent)
             parent=parent.parentWidget()
+        for tabs in reversed(ancestors):
+            for i in range(tabs.count()):
+                if tabs.widget(i).isAncestorOf(widget) and tabs.currentIndex()!=i:
+                    QTest.mouseClick(tabs.tabBar(),Qt.LeftButton,pos=tabs.tabBar().tabRect(i).center())
+                    self.app.processEvents();break
+        areas=[];parent=widget.parentWidget()
+        while parent:
+            if isinstance(parent,QScrollArea):areas.append(parent)
+            parent=parent.parentWidget()
+        for area in reversed(areas):
+            area.ensureWidgetVisible(widget,20,20);self.app.processEvents()
         self.app.processEvents()
 
     def click(self,widget):
@@ -82,6 +94,11 @@ class UiVerifier:
         index=combo.findData(value)
         if index<0:index=combo.findText(str(value),Qt.MatchExactly)
         if index<0:raise AssertionError(f"下拉选项不存在：{value}")
+        if combo.objectName()=="plotSelector":
+            choices=combo.parentWidget().plot_list;self.ensure(choices)
+            item=choices.item(index);choices.scrollToItem(item);self.app.processEvents()
+            QTest.mouseClick(choices.viewport(),Qt.LeftButton,pos=choices.visualItemRect(item).center())
+            self.app.processEvents();return
         self.ensure(combo);combo.setFocus()
         combo.showPopup();self.app.processEvents()
         item=combo.model().index(index,combo.modelColumn(),combo.rootModelIndex())
@@ -126,7 +143,7 @@ class UiVerifier:
         QTest.mouseClick(tabs.tabBar(),Qt.LeftButton,pos=tabs.tabBar().tabRect(index).center());self.app.processEvents()
 
     def shot(self,name):
-        self.app.processEvents();self.window.grab().save(str(self.shots/(name+".png")))
+        self.app.processEvents();getattr(self.window,'advanced_host',self.window).grab().save(str(self.shots/(name+".png")))
 
     def style_field(self,key,value):
         editor=self.window.style_editor;field=editor.fields[key]
@@ -150,7 +167,9 @@ class UiVerifier:
             self.log("开始真实窗口控件操作",platform=sys.platform,runtime="bundled" if getattr(sys,"frozen",False) else "source",
                      qt_platform=QApplication.platformName())
             self.type_text(self.window.output_edit,str(self.root/"runs"))
+            self.log("设置结果目录，进入数据参数")
             self.navigate(1);editor=self.window.data_editor
+            self.log("打开数据参数页")
             self.tab(editor.tabs,1)
             changes=dict(n_samples=420,positive_rate=.30,random_seed=20261025,label_name="模拟不良结局",positive_name="发生事件",
                          negative_name="未发生事件",id_name="病例编号",id_prefix="CASE-",id_width=5,id_start=101)
@@ -211,6 +230,7 @@ class UiVerifier:
                 if name.startswith("dependence_"):
                     feature="白蛋白_UI" if name.endswith("protective") else "CRP_UI"
                     self.style_field("feature",feature);self.expected["plots"]["plots"][name]["feature"]=feature
+            self.expected["plots"]["output_dir"]=str(self.root/"runs")
             self.check("运行前：全部控件值与逐项预期一致",self.window.collect_config()==self.expected)
             (self.root/"expected_ui_settings.json").write_text(json.dumps(self.expected,ensure_ascii=False,indent=2),encoding="utf-8")
             self.log("点击生成数据并分析")

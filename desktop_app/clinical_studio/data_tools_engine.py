@@ -4,22 +4,6 @@ import random
 from collections import Counter
 
 
-def _html_random(seed):
-    """Same string seed and 32-bit generator as the original HTML tool."""
-    mask = 0xffffffff
-    h = 2166136261
-    raw = str(seed).encode('utf-16-le', errors='surrogatepass')
-    for i in range(0, len(raw), 2):
-        h = ((h ^ int.from_bytes(raw[i:i+2], 'little')) * 16777619) & mask
-    def draw():
-        nonlocal h
-        h = (h + 0x6D2B79F5) & mask
-        t = ((h ^ (h >> 15)) * (h | 1)) & mask
-        t ^= (t + (((t ^ (t >> 7)) * (t | 61)) & mask)) & mask
-        return ((t ^ (t >> 14)) & mask) / 4294967296
-    return draw
-
-
 def category_numbers(categories, seed='12'):
     result = []
     for value, count in categories:
@@ -30,11 +14,8 @@ def category_numbers(categories, seed='12'):
         result.extend([value] * count)
     if not result:
         raise ValueError('总数量须在 1～100,000 之间。')
-    draw = _html_random(seed) if seed != '' else random.SystemRandom().random
-    for i in range(len(result)-1, 0, -1):
-        j = math.floor(draw() * (i+1))
-        result[i], result[j] = result[j], result[i]
-    return result
+    from .r_compat import sample_categories
+    return sample_categories(result,seed)
 
 
 def statistics(values):
@@ -43,7 +24,13 @@ def statistics(values):
     return mean, sd
 
 
-def numeric_numbers(n=70, mean=27.92, sd=14.87, digits=0, lower=None, upper=None, mode='target', seed=None):
+class GenerationCancelled(Exception):pass
+
+
+def numeric_numbers(n=70, mean=27.92, sd=14.87, digits=0, lower=None, upper=None, mode='target', seed=None, cancelled=None):
+    def check_cancelled():
+        if cancelled and cancelled():raise GenerationCancelled()
+    check_cancelled()
     if not isinstance(n, int) or not 2 <= n <= 5000 or digits not in range(5):
         raise ValueError('例数须为 2～5000，小数位数须为 0～4。')
     if mode not in ('target', 'range'):
@@ -71,7 +58,11 @@ def numeric_numbers(n=70, mean=27.92, sd=14.87, digits=0, lower=None, upper=None
                 raise ValueError('目标标准差超出当前范围可实现的界限。')
     rng=random.Random(seed)
     if mode=='range':
-        return [rng.randint(lo,hi)/f for _ in range(n)]
+        result=[]
+        for i in range(n):
+            if i%256==0:check_cancelled()
+            result.append(rng.randint(lo,hi)/f)
+        return result
     m,s=mean*f,sd*f
     clamp=lambda x:max(lo,min(hi,math.floor(x+.5)))
     a=[clamp(rng.gauss(m,s)) for _ in range(n)]
@@ -81,6 +72,7 @@ def numeric_numbers(n=70, mean=27.92, sd=14.87, digits=0, lower=None, upper=None
         return ((total-ts)/n/scale)**2+((sq-tq)/(n*scale*scale))**2
     current=score(total,sq)
     for k in range(180000):
+        if k%256==0:check_cancelled()
         if current<1e-20:
             break
         i=rng.randrange(n);old=a[i]

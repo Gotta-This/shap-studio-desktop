@@ -4,7 +4,7 @@ from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QFormLayout, QLineEdit, QPushButton,
     QColorDialog, QFileDialog, QCheckBox, QComboBox, QFontComboBox,
-    QDoubleSpinBox, QSpinBox, QScrollArea, QTabWidget, QLabel,
+    QDoubleSpinBox, QSpinBox, QScrollArea, QTabWidget, QLabel, QListWidget,
 )
 
 LABELS = {
@@ -54,6 +54,9 @@ def scroll(widget):
     area = QScrollArea()
     area.setWidgetResizable(True)
     area.setFrameShape(QScrollArea.NoFrame)
+    if widget.objectName() != "homePage":
+        widget.setProperty("surface",True)
+        widget.setAttribute(Qt.WA_StyledBackground,True)
     area.setWidget(widget)
     return area
 
@@ -97,6 +100,14 @@ class FileField(QWidget):
         if path: self.text.setText(path)
 
     def value(self): return self.text.text().strip() or None
+
+
+class CompactDoubleSpinBox(QDoubleSpinBox):
+    """Retain numeric precision while displaying only meaningful decimals."""
+    def textFromValue(self, value):
+        text = super().textFromValue(value)
+        separator = self.locale().decimalPoint()
+        return text.rstrip("0").removesuffix(separator) if separator in text else text
 
 
 class ValueField(QWidget):
@@ -143,17 +154,17 @@ class ValueField(QWidget):
             self.editor = QWidget(); row = QHBoxLayout(self.editor); row.setContentsMargins(0, 0, 0, 0)
             self.pair = []
             for i, item in enumerate(value):
-                field = QDoubleSpinBox(); field.setRange(-1e6, 1e6); field.setDecimals(3); field.setValue(float(item))
+                field = CompactDoubleSpinBox(); field.setRange(-1e6, 1e6); field.setDecimals(12); field.setValue(float(item))
                 field.setKeyboardTracking(False); row.addWidget(field); self.pair.append(field)
                 if i == 0: row.addWidget(QLabel("×" if key == "figsize" else "至"))
-        elif isinstance(value, int) and key not in ("mean", "std", "min", "max"):
+        elif isinstance(value, int) and key not in ("mean", "std", "min", "max", "font_size", "title_size", "label_size", "tick_size", "title_pad", "xlabel_pad", "point_size", "tick_length", "text_rotation"):
             if "seed" in key or key == "random_state":
                 self.editor = QLineEdit(str(value)); self.editor.setPlaceholderText("0～4294967295")
             else:
                 self.editor = QSpinBox(); self.editor.setRange(0, 1000000); self.editor.setValue(value)
                 self.editor.setKeyboardTracking(False)
-        elif isinstance(value, float) or key in ("mean", "std", "min", "max"):
-            self.editor = QDoubleSpinBox(); self.editor.setDecimals(6)
+        elif isinstance(value, float) or key in ("mean", "std", "min", "max", "font_size", "title_size", "label_size", "tick_size", "title_pad", "xlabel_pad", "point_size", "tick_length", "text_rotation"):
+            self.editor = CompactDoubleSpinBox(); self.editor.setDecimals(12)
             self.editor.setRange(-1e9, 1e9)
             if self.percent:
                 self.editor.setRange(0, 100); self.editor.setSuffix(" %")
@@ -165,7 +176,7 @@ class ValueField(QWidget):
         else:
             self.editor = QLineEdit("" if value is None else str(value))
         layout.addWidget(self.editor)
-        self.setMinimumWidth(240)
+        self.setMinimumWidth(180)
         self.setMaximumWidth(760)
 
     def value(self):
@@ -218,14 +229,23 @@ class StyleEditor(QWidget):
         self.config, self.features = config, features
         self.current, self.fields, self.overrides = None, {}, {}
         layout = QVBoxLayout(self); layout.setContentsMargins(0, 0, 0, 0)
-        self.selector = QComboBox()
+        self.selector = QComboBox(self)
+        self.selector.setObjectName("plotSelector")
         self.selector.addItem("公共样式 · 所有图的默认设置", "common")
         for key, label in PLOT_NAMES.items(): self.selector.addItem(label, key)
-        layout.addWidget(self.selector)
+        self.plot_list = QListWidget(); self.plot_list.setObjectName("plotList")
+        self.plot_list.setMinimumWidth(185); self.plot_list.setMaximumWidth(230)
+        for i in range(self.selector.count()): self.plot_list.addItem(self.selector.itemText(i))
+        self.selector.hide()
         tip = QLabel("每张图默认继承公共设置。勾选“单独设置”后，仅对该图生效。不同图只使用适用的参数。")
         tip.setWordWrap(True); tip.setObjectName("muted"); layout.addWidget(tip)
-        self.tabs = QTabWidget(); layout.addWidget(self.tabs)
+        body = QHBoxLayout(); body.setSpacing(18)
+        body.addWidget(self.plot_list)
+        self.tabs = QTabWidget(); body.addWidget(self.tabs,1); layout.addLayout(body,1)
+        self.plot_list.currentRowChanged.connect(self.selector.setCurrentIndex)
+        self.selector.currentIndexChanged.connect(self.plot_list.setCurrentRow)
         self.selector.currentIndexChanged.connect(self.switch)
+        self.plot_list.setCurrentRow(0)
         self.switch()
 
     def commit(self):

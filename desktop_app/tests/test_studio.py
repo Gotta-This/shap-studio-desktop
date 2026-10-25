@@ -1,8 +1,9 @@
 """数值兼容、全参数界面往返及导出集成验证。"""
 import os
+import tempfile
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-os.environ.setdefault("MPLCONFIGDIR", "/private/tmp/dbq-matplotlib-check")
-os.environ.setdefault("NUMBA_CACHE_DIR", "/private/tmp/dbq-numba")
+os.environ.setdefault("MPLCONFIGDIR", os.path.join(tempfile.gettempdir(), 'dbq-matplotlib-check'))
+os.environ.setdefault("NUMBA_CACHE_DIR", os.path.join(tempfile.gettempdir(), 'dbq-numba'))
 import json
 from pathlib import Path
 import tempfile
@@ -75,7 +76,7 @@ class GuiTests(unittest.TestCase):
     def tearDown(self):self.window.close(); self.window.deleteLater(); APP.processEvents()
 
     def test_full_config_roundtrip_and_every_style_field_exposed(self):
-        original=default_config()
+        original=default_config(); original["plots"]["output_dir"]=self.window.output_edit.text()
         actual=self.window.collect_config()
         self.assertEqual(actual,original)
         pd.testing.assert_frame_equal(generate_dataset(actual)[0],generate_dataset(original)[0])
@@ -106,7 +107,8 @@ class GuiTests(unittest.TestCase):
             editor.list.setCurrentRow(index)
             editor.commit_feature()
         actual=self.window.collect_config()
-        self.assertEqual(actual,default_config())
+        expected=default_config(); expected["plots"]["output_dir"]=self.window.output_edit.text()
+        self.assertEqual(actual,expected)
         pd.testing.assert_frame_equal(generate_dataset(actual)[0],generate_dataset(default_config())[0])
         editor.move_feature(-1)
         self.assertEqual(editor.current,5)
