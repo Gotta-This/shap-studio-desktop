@@ -212,7 +212,7 @@ class UiVerifier:
                     feature="白蛋白_UI" if name.endswith("protective") else "CRP_UI"
                     self.style_field("feature",feature);self.expected["plots"]["plots"][name]["feature"]=feature
             self.check("运行前：全部控件值与逐项预期一致",self.window.collect_config()==self.expected)
-            (self.root/"expected_ui_settings.json").write_text(json.dumps(self.expected,ensure_ascii=False,indent=2))
+            (self.root/"expected_ui_settings.json").write_text(json.dumps(self.expected,ensure_ascii=False,indent=2),encoding="utf-8")
             self.log("点击生成数据并分析")
             self.click(self.window.run_button)
             QTimer.singleShot(250,self.wait_result)
@@ -277,8 +277,8 @@ class UiVerifier:
         result=self.window.result
         self.check("输出来自打包后的运行环境",getattr(sys,"frozen",False),executable=sys.executable)
         self.check("运行实际打包 App 的 Qt 界面控件",QApplication.platformName() in ("offscreen","cocoa","windows","xcb","wayland"),platform=QApplication.platformName())
-        exported=json.loads((result.folder/"parameters.json").read_text())
-        saved=json.loads((self.root/"从界面保存的配置.json").read_text())
+        exported=json.loads((result.folder/"parameters.json").read_text(encoding="utf-8"))
+        saved=json.loads((self.root/"从界面保存的配置.json").read_text(encoding="utf-8"))
         self.check("导出参数与界面全部设置一致",exported==self.expected)
         self.check("界面保存的配置与运行快照一致",saved==exported)
         # 独立实现原始随机抽样顺序，不调用应用的 generate_dataset。
