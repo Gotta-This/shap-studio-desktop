@@ -10,7 +10,7 @@ import traceback
 from PySide6.QtCore import Qt,QTimer,QPoint
 from PySide6.QtGui import QInputMethodEvent
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication,QLineEdit,QComboBox,QCheckBox,QScrollArea,QFileDialog,QPushButton,QMessageBox
+from PySide6.QtWidgets import QApplication,QLineEdit,QComboBox,QCheckBox,QScrollArea,QFileDialog,QPushButton,QMessageBox,QDialogButtonBox
 
 from .config import default_config,PLOT_NAMES
 
@@ -244,12 +244,26 @@ class UiVerifier:
                 if not isinstance(dialog,QFileDialog):raise AssertionError("未打开文件保存/目录选择对话框")
                 edit=dialog.findChild(QLineEdit,"fileNameEdit")
                 if edit is None:raise AssertionError("对话框中未找到文件名输入框")
-                self.type_text(edit,str(path));QTest.keyClick(edit,Qt.Key_Return)
+                # Windows 文件名补全会吞掉 Return；提交编辑后明确点击接受按钮。
+                self.type_text(edit,path.as_posix())
+                box=dialog.findChild(QDialogButtonBox)
+                accept=next((b for b in box.buttons() if box.buttonRole(b)==QDialogButtonBox.AcceptRole),None) if box else None
+                if accept is None:raise AssertionError("对话框中未找到保存/选择按钮")
+                self.log("点击对话框保存按钮",path=str(path),button=accept.text())
+                self.click(accept)
             except Exception as error:
                 errors.append(error)
                 if QApplication.activeModalWidget():QApplication.activeModalWidget().reject()
+        def timeout():
+            dialog=QApplication.activeModalWidget()
+            if isinstance(dialog,QFileDialog):
+                dialog.grab().save(str(self.shots/"保存对话框超时.png"))
+                errors.append(TimeoutError(f"保存对话框未关闭：{path}"));dialog.reject()
+        guard=QTimer();guard.setSingleShot(True);guard.timeout.connect(timeout);guard.start(10000)
         QTimer.singleShot(250,fill);self.click(button)
+        guard.stop()
         if errors:raise errors[0]
+        if not path.exists():raise AssertionError(f"对话框未保存目标：{path}")
         self.log("通过文件对话框保存",path=str(path))
 
     def save_single_image(self):
