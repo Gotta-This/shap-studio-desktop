@@ -126,6 +126,7 @@ class DataToolsPage(QWidget):
     def __init__(self):
         super().__init__();layout=QVBoxLayout(self);layout.setContentsMargins(0,0,0,0)
         note=QLabel('独立数据工具 · 无需运行模型分析 · 参数与结果在切换工具时保留');note.setWordWrap(True);layout.addWidget(note)
-        self.tabs=QTabWidget();self.category=CategoryTool();self.numeric=NumericTool()
-        self.tabs.addTab(scroll(self.category),'自定义类别数列');self.tabs.addTab(scroll(self.numeric),'均数 / 标准差模拟数据');layout.addWidget(self.tabs,1)
-    def is_running(self):return self.numeric.is_running()
+        from .word_batch import WordBatchTool
+        self.tabs=QTabWidget();self.category=CategoryTool();self.numeric=NumericTool();self.word_batch=WordBatchTool()
+        self.tabs.addTab(scroll(self.category),'自定义类别数列');self.tabs.addTab(scroll(self.numeric),'均数 / 标准差模拟数据');self.tabs.addTab(self.word_batch,'Word 批量模拟数据');layout.addWidget(self.tabs,1)
+    def is_running(self):return self.numeric.is_running() or self.word_batch.is_running()
