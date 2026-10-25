@@ -1,0 +1,92 @@
+name: Publish verified Windows release
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/publish-release.yml
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_RUN: '40193418140'
+      EXPECTED_COMMIT: 9e7e268c96a7fa4d34a1fc339d6bb56ad78372a1
+      RELEASE_TAG: v1.0.0
+    steps:
+      - name: Download the verified Windows build and evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh run view "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" --json headSha,conclusion > source-run.json
+          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" --name SHAPStudio-Windows-x64 --dir downloads
+          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" --name Windows-verification-evidence --dir evidence
+      - name: Verify checksums, reports and release source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib,json,os,shutil,zipfile
+          from pathlib import Path
+          run=json.loads(Path('source-run.json').read_text())
+          assert run['headSha']==os.environ['EXPECTED_COMMIT'] and run['conclusion']=='success'
+          expected={
+              'SHAPStudio-Setup-Windows-x64.exe':'01a8e816de1b71e0fdb6743bb0c255ce7cfe93a6f416cb46e4eff9a09cf98203',
+              'SHAPStudio-Windows-x64.zip':'abc3ff77af7c2999c2442faa4e402f240d47d6760e2034952da8596de415411f',
+          }
+          for filename,sha in expected.items():
+              with (Path('downloads')/filename).open('rb') as stream:
+                  assert hashlib.file_digest(stream,'sha256').hexdigest()==sha,filename
+          ui=Path('evidence/verification/windows_ui')
+          report_names=['ui_verification.json','four_module_verification.json','svg_export_verification.json']
+          for filename in report_names:
+              assert json.loads((ui/filename).read_text(encoding='utf-8'))['passed'],filename
+          out=Path('release');out.mkdir()
+          shutil.copyfile('downloads/SHAPStudio-Setup-Windows-x64.exe',out/'ResearchDataTools-Setup-Windows-x64.exe')
+          shutil.copyfile('downloads/SHAPStudio-Windows-x64.zip',out/'ResearchDataTools-Portable-Windows-x64.zip')
+          with zipfile.ZipFile(out/'verification-reports.zip','w',zipfile.ZIP_DEFLATED) as archive:
+              for filename in report_names:archive.write(ui/filename,filename)
+              archive.write(ui/'expected_ui_settings.json','expected_ui_settings.json')
+          sums=[]
+          for path in sorted(out.iterdir()):
+              with path.open('rb') as stream:sha=hashlib.file_digest(stream,'sha256').hexdigest()
+              sums.append(sha+'  '+path.name)
+          (out/'SHA256SUMS.txt').write_text('\n'.join(sums)+'\n',encoding='utf-8')
+          Path('release-notes.md').write_text('''四个独立功能模块：
+          1. 自定义类别数列（固定数量后随机打乱）。
+          2. 均数 / 标准差模拟数据。
+          3. Word 一键生成 Excel（依据汇总统计生成模拟数据）。
+          4. 模拟数据生图（逻辑回归及六类 SHAP 图）。
+
+          Windows x64，内置 Python 环境，无需另外安装 Python。
+          安装版：ResearchDataTools-Setup-Windows-x64.exe。
+          便携版：解压 ResearchDataTools-Portable-Windows-x64.zip，保留完整目录并运行 SHAPStudio.exe。
+
+          验证：17 项回归测试、20 项四模块界面与隔离检查、77 项生图导出核对、6 张 SVG 颜色/字体/线宽独立检查全部通过。实际打包 EXE 在 Windows 环境中后台操作界面、生成并保存 CSV、Excel、PNG、SVG、PDF。
+          均数/标准差模拟采用近似匹配，界面和导出报告保留实际统计结果及偏差。
+          校验值见 SHA256SUMS.txt，详细验证记录见 verification-reports.zip。
+
+          Source: 9e7e268c96a7fa4d34a1fc339d6bb56ad78372a1
+          Build: https://github.com/Gotta-This/shap-studio-desktop/actions/runs/40193418140
+          ''',encoding='utf-8')
+          print('Verified tested source, binary checksums and all UI/export reports.')
+          PY
+      - name: Create draft and upload the verified assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --target "$EXPECTED_COMMIT" --draft --title '科研数据工具集 v1.0.0（Windows x64）' --notes-file release-notes.md
+          gh release upload "$RELEASE_TAG" release/* --repo "$GITHUB_REPOSITORY"
+      - name: Publish release
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json url,tagName,isDraft,assets
