@@ -1,7 +1,5 @@
-# SHAP Studio Desktop
+# 科研数据工具集
 
-离线桌面数据生成、逻辑回归和 SHAP 分析工作台，内置 Python 运行环境。
+四个平级且独立的桌面功能：自定义类别数列、均数/标准差模拟数据、Word 一键生成 Excel、模拟数据生图。内置 Python 环境。
 
-源码及使用说明见 `desktop_app/README.md`，Windows 构建说明见 `desktop_app/WINDOWS.md`。
-
-包含固定类别数量随机数列及均数/标准差模拟数据工具。Windows Actions 构建后执行 EXE 自检、界面操作、数据及图片导出一致性核对，通过后上传便携版、安装程序与验证报告。
+详见 desktop_app/README.md。Windows 构建后实际操作四个模块并核对导出文件及隔离状态，通过后上传便携版、安装版与验证证据。

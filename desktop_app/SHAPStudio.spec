@@ -31,4 +31,4 @@ if is_macos:
         bundle_identifier="local.clinicalstudio.shap", version="1.0.0",
         info_plist={"NSHighResolutionCapable": True,
                     "NSHumanReadableCopyright": "SHAP 分析工作台 1.0.0",
-                    "CFBundleDisplayName": "SHAP分析工作台"})
+                    "CFBundleDisplayName": "科研数据工具集"})

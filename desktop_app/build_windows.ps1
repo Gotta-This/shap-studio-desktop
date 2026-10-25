@@ -50,6 +50,8 @@ function Run-Packaged([string]$Flag, [string]$Destination, [string]$Marker) {
 
 Run-Packaged '--self-test' (Join-Path $PSScriptRoot 'verification\windows_packaged') 'self_test_passed.json'
 Run-Packaged '--ui-verify' (Join-Path $PSScriptRoot 'verification\windows_ui') 'ui_verification.json'
+$Modules = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'verification\windows_ui\four_module_verification.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+if (-not $Modules.passed) { throw 'Independent module UI and export verification failed.' }
 & $Python verify_ui_exports.py (Join-Path $PSScriptRoot 'verification\windows_ui')
 Assert-Exit 'Independently verify SVG colors, embedded glyphs and stroke widths'
 Compress-Archive -Path 'dist\SHAPStudio' -DestinationPath 'dist\SHAPStudio-Windows-x64.zip' -Force

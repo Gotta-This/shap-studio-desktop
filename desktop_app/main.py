@@ -37,11 +37,12 @@ def main():
     if args.ui_verify:
         from PySide6.QtWidgets import QApplication
         QApplication.setAttribute(Qt.AA_DontUseNativeDialogs,True)
-    from clinical_studio.app import create_application,MainWindow
-    app=create_application(sys.argv); window=MainWindow(config,args.output); window.show()
+    from clinical_studio.app import create_application
+    from clinical_studio.hub import DesktopWindow
+    app=create_application(sys.argv); window=DesktopWindow(config,args.output); window.show()
     if args.ui_verify:
-        from clinical_studio.ui_verify import UiVerifier
-        verifier=UiVerifier(window,args.ui_verify,app)
+        from clinical_studio.hub_verify import SuiteVerifier
+        verifier=SuiteVerifier(window,args.ui_verify,app)
         QTimer.singleShot(900,verifier.start)
     if args.screenshot:
         def capture():

@@ -236,7 +236,7 @@ class UiVerifier:
             QTimer.singleShot(150,self.app.quit)
         except Exception as error:self.fail(error)
 
-    def save_dialog(self,button,path):
+    def save_dialog(self,button,path,must_exist=True):
         errors=[]
         def fill():
             try:
@@ -245,6 +245,10 @@ class UiVerifier:
                 poll.stop()
                 edit=dialog.findChild(QLineEdit,"fileNameEdit")
                 if edit is None:raise AssertionError("对话框中未找到文件名输入框")
+                types=dialog.findChild(QComboBox,"fileTypeCombo")
+                if types and path.suffix:
+                    matching=next((i for i in range(types.count()) if ('*'+path.suffix.lower()) in types.itemText(i).lower()),None)
+                    if matching is not None and types.currentIndex()!=matching:self.combo(types,types.itemText(matching))
                 # Windows 文件名补全会吞掉 Return；提交编辑后明确点击接受按钮。
                 self.type_text(edit,path.as_posix())
                 box=dialog.findChild(QDialogButtonBox)
@@ -265,7 +269,7 @@ class UiVerifier:
         self.click(button)
         poll.stop();guard.stop()
         if errors:raise errors[0]
-        if not path.exists():raise AssertionError(f"对话框未保存目标：{path}")
+        if must_exist and not path.exists():raise AssertionError(f"对话框未保存目标：{path}")
         self.log("通过文件对话框保存",path=str(path))
 
     def save_single_image(self):

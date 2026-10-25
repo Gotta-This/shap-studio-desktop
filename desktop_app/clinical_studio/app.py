@@ -232,7 +232,7 @@ class MainWindow(QMainWindow):
         brand=QLabel("SHAP 工作台"); brand.setObjectName("brand"); brand.setContentsMargins(24,0,0,0); sl.addWidget(brand)
         sub=QLabel("数据生成 · 模型解释"); sub.setObjectName("brandSub"); sub.setContentsMargins(24,8,0,20); sl.addWidget(sub)
         self.nav=QListWidget(); self.nav.setObjectName("nav")
-        self.nav.addItems(["概览", "数据参数", "模型与解释", "图表样式", "结果与导出", "运行日志", "数据工具集"])
+        self.nav.addItems(["概览", "数据参数", "模型与解释", "图表样式", "结果与导出", "运行日志"])
         sl.addWidget(self.nav)
         badge=QLabel("●  本地计算\n\n数据与结果保存在本机"); badge.setObjectName("localBadge"); badge.setContentsMargins(14,8,10,8)
         sl.addWidget(badge); version=QLabel("    版本 1.0.0 · 离线桌面版"); version.setObjectName("brandSub"); sl.addWidget(version)
@@ -256,17 +256,13 @@ class MainWindow(QMainWindow):
         # 导入配置后重建参数页，已保存的结果仍保留。
         for i in range(self.stack.count()-1,-1,-1):
             widget=self.stack.widget(i); self.stack.removeWidget(widget)
-            if widget is not self.log and widget is not getattr(self,"data_tools_page",None): widget.deleteLater()
+            if widget is not self.log: widget.deleteLater()
         self.build_overview()
         self.data_editor=FeatureEditor(self.config["data"]); self.stack.addWidget(scroll(self.data_editor))
         self.model_page=self.make_model_page(); self.stack.addWidget(self.model_page)
         self.style_page=self.make_style_page(); self.stack.addWidget(self.style_page)
         self.results_page=self.make_results_page(); self.stack.addWidget(self.results_page)
         self.stack.addWidget(self.log)
-        if not hasattr(self,"data_tools_page"):
-            from .data_tools import DataToolsPage
-            self.data_tools_page=DataToolsPage()
-        self.stack.addWidget(self.data_tools_page)
         if self.result: self.show_result(self.result)
 
     def build_overview(self):
@@ -353,9 +349,7 @@ class MainWindow(QMainWindow):
         except ValueError as exc:
             self.status.setText(str(exc))
         self.stack.setCurrentIndex(index)
-        self.page_title.setText(["分析概览","数据参数","模型与解释","图表样式","结果与导出","运行日志","数据工具集"][index])
-        for button in (self.import_button,self.save_button,self.run_button):
-            button.setVisible(index != 6)
+        self.page_title.setText(["分析概览","数据参数","模型与解释","图表样式","结果与导出","运行日志"][index])
 
     def choose_output(self):
         path=QFileDialog.getExistingDirectory(self,"选择结果保存位置",self.output_edit.text())
@@ -452,8 +446,6 @@ class MainWindow(QMainWindow):
             except Exception as exc:QMessageBox.warning(self,"保存失败",str(exc))
 
     def closeEvent(self,event):
-        if self.data_tools_page.is_running():
-            QMessageBox.information(self,"任务仍在运行","请等待模拟数据生成完成后关闭应用。");event.ignore();return
         if self.worker and self.worker.isRunning():
             QMessageBox.information(self,"任务仍在运行","请等待当前分析完成后关闭应用。");event.ignore()
         else:event.accept()
@@ -461,7 +453,7 @@ class MainWindow(QMainWindow):
 
 def create_application(argv):
     app=QApplication.instance() or QApplication(argv)
-    app.setApplicationName("SHAP 分析工作台"); app.setOrganizationName("ClinicalStudio")
+    app.setApplicationName("科研数据工具集"); app.setOrganizationName("ClinicalStudio")
     for font in (ROOT/"assets").glob("NotoSansCJKsc-*.otf"):
         QFontDatabase.addApplicationFont(str(font))
     # 字体下拉框与绘图引擎共享这些随 Matplotlib 打包的字体。

@@ -1,9 +1,9 @@
 ﻿[Setup]
 AppId={{54785D43-52BB-41EC-BD0F-6EAEB7595061}
-AppName=SHAP 分析工作台
+AppName=科研数据工具集
 AppVersion=1.0.0
 DefaultDirName={localappdata}\Programs\SHAPStudio
-DefaultGroupName=SHAP Studio
+DefaultGroupName=科研数据工具集
 PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
@@ -22,8 +22,8 @@ Name: desktopicon; Description: "Create a desktop shortcut"; Flags: unchecked
 Source: "dist\SHAPStudio\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{group}\SHAP Studio"; Filename: "{app}\SHAPStudio.exe"
-Name: "{autodesktop}\SHAP Studio"; Filename: "{app}\SHAPStudio.exe"; Tasks: desktopicon
+Name: "{group}\科研数据工具集"; Filename: "{app}\SHAPStudio.exe"
+Name: "{autodesktop}\科研数据工具集"; Filename: "{app}\SHAPStudio.exe"; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\SHAPStudio.exe"; Description: "Launch SHAP Studio"; Flags: nowait postinstall skipifsilent

@@ -1,9 +1,11 @@
-"""Native offline tools for category shuffling and statistical simulation."""
+"""Independent category and numerical tool widgets."""
+import csv
+from pathlib import Path
 from PySide6.QtCore import QThread, Signal, Qt
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QGroupBox, QLabel,
     QPushButton, QTableWidget, QTableWidgetItem, QHeaderView, QLineEdit,
-    QSpinBox, QComboBox, QRadioButton, QPlainTextEdit, QTabWidget, QApplication,
+    QSpinBox, QComboBox, QRadioButton, QPlainTextEdit, QApplication, QFileDialog,
 )
 from .data_tools_engine import category_numbers, category_summary, numeric_numbers, statistics, format_values
 from .widgets import scroll
@@ -22,9 +24,9 @@ class NumberWorker(QThread):
 
 
 class ResultPanel(QGroupBox):
-    def __init__(self):
+    def __init__(self, column_name='Value', default_name='模拟数列'):
         super().__init__('生成结果 · 可直接复制')
-        self.values=[];self.digits=None
+        self.values=[];self.digits=None;self.column_name=column_name;self.default_name=default_name;self.last_save_path=None
         layout=QVBoxLayout(self)
         self.summary=QLabel('尚未生成数据');self.summary.setWordWrap(True);layout.addWidget(self.summary)
         self.details=QLabel('');self.details.setWordWrap(True);layout.addWidget(self.details)
@@ -34,10 +36,10 @@ class ResultPanel(QGroupBox):
             self.format.addItem(title,value)
         row.addWidget(self.format);row.addStretch();layout.addLayout(row)
         self.output=QPlainTextEdit();self.output.setReadOnly(True);self.output.setPlaceholderText('生成后的数列显示在这里，可全选复制。');layout.addWidget(self.output,1)
-        row=QHBoxLayout();select=QPushButton('全选');copy=QPushButton('复制全部');copy.setObjectName('primary');row.addWidget(select);row.addStretch();row.addWidget(copy);layout.addLayout(row)
+        row=QHBoxLayout();select=QPushButton('全选');self.copy_button=QPushButton('复制全部');self.save_button=QPushButton('保存数据…');self.copy_button.setObjectName('primary');row.addWidget(select);row.addStretch();row.addWidget(self.save_button);row.addWidget(self.copy_button);layout.addLayout(row)
         self.message=QLabel('');self.message.setWordWrap(True);layout.addWidget(self.message)
         self.format.currentIndexChanged.connect(self.render)
-        select.clicked.connect(self.output.selectAll);copy.clicked.connect(self.copy)
+        select.clicked.connect(self.output.selectAll);self.copy_button.clicked.connect(self.copy);self.save_button.clicked.connect(self.save)
     def render(self):
         self.output.setPlainText(format_values(self.values,self.format.currentData(),self.digits) if self.values else '')
     def set_values(self,values,digits=None):
@@ -46,6 +48,28 @@ class ResultPanel(QGroupBox):
         if self.values:
             QApplication.clipboard().setText(self.output.toPlainText());self.message.setText('已复制全部数据。')
         else:self.message.setText('请先生成数据。')
+
+    def save(self):
+        if not self.values:self.message.setText('请先生成数据。');return
+        initial=str(self.last_save_path or Path.home()/'Documents'/(self.default_name+'.csv'))
+        filename,kind=QFileDialog.getSaveFileName(self,'保存生成数据',initial,'CSV (*.csv);;Excel (*.xlsx)')
+        if not filename:return
+        path=Path(filename)
+        if path.suffix.lower() not in ('.csv','.xlsx'):path=path.with_suffix('.xlsx' if 'xlsx' in kind else '.csv')
+        try:
+            if path.suffix.lower()=='.xlsx':
+                from openpyxl import Workbook
+                book=Workbook();sheet=book.active;sheet.title='生成数据';sheet.append([self.column_name])
+                for value in self.values:sheet.append([value])
+                sheet.freeze_panes='A2';sheet.column_dimensions['A'].width=24
+                if self.digits is not None:
+                    for cell in sheet['A'][1:]:cell.number_format='0'+('.'+'0'*self.digits if self.digits else '')
+                book.save(path);book.close()
+            else:
+                with path.open('w',encoding='utf-8-sig',newline='') as stream:
+                    writer=csv.writer(stream);writer.writerow([self.column_name]);writer.writerows([[v] for v in self.values])
+            self.last_save_path=path;self.message.setText('已保存：'+str(path))
+        except Exception as exc:self.message.setText('保存失败：'+str(exc))
 
 
 class CategoryTool(QWidget):
@@ -60,7 +84,7 @@ class CategoryTool(QWidget):
         self.generate_button=QPushButton('生成随机数列');self.generate_button.setObjectName('primary');left.addWidget(self.generate_button)
         self.error=QLabel('');self.error.setWordWrap(True);self.error.setStyleSheet('color:#B34334');left.addWidget(self.error)
         self.code=QLabel('');self.code.setWordWrap(True);left.addWidget(self.code)
-        self.result=ResultPanel();layout.addWidget(group,1);layout.addWidget(self.result,2)
+        self.result=ResultPanel('RandomValue','自定义类别数列');layout.addWidget(group,1);layout.addWidget(self.result,2)
         add.clicked.connect(lambda:self.add_row());remove.clicked.connect(self.remove_row);self.generate_button.clicked.connect(self.generate)
         self.add_row('1','28');self.add_row('0','93');self.generate()
     def add_row(self,value='',count=''):
@@ -89,8 +113,10 @@ class NumericTool(QWidget):
         self.mean=QLineEdit('27.92');self.sd=QLineEdit('14.87');self.n=QSpinBox();self.n.setRange(2,5000);self.n.setValue(70)
         self.digits=QComboBox();self.digits.addItems(['0','1','2','3','4'])
         self.lower=QLineEdit('7');self.upper=QLineEdit('50')
+        self.seed=QLineEdit();self.seed.setPlaceholderText('留空，每次生成新数据')
         for field in [self.lower,self.upper]:field.setPlaceholderText('不限制（可留空）')
         for title,widget in [('均数',self.mean),('标准差',self.sd),('例数',self.n),('小数点后位数',self.digits),('最小值',self.lower),('最大值',self.upper)]:form.addRow(title,widget)
+        form.addRow('随机种子（可选）',self.seed)
         form.setLabelAlignment(Qt.AlignRight);left.addWidget(fields)
         modes=QHBoxLayout();self.target=QRadioButton('按均数标准差');self.range_mode=QRadioButton('按最大最小值');self.target.setChecked(True)
         modes.addWidget(self.target);modes.addWidget(self.range_mode);left.addLayout(modes)
@@ -98,7 +124,7 @@ class NumericTool(QWidget):
         self.generate_button=QPushButton('生成模拟数据');self.generate_button.setObjectName('primary');left.addWidget(self.generate_button)
         self.error=QLabel('');self.error.setWordWrap(True);self.error.setStyleSheet('color:#B34334');left.addWidget(self.error)
         note=QLabel('样本标准差使用 n−1。统计目标为近似匹配，结果不保证正态分布。\n\n上下限可留空；按范围均匀随机模式需填写两个边界。\n\n生成结果仅为模拟数据，请核对实际统计值与偏差。');note.setWordWrap(True);left.addWidget(note);left.addStretch()
-        self.result=ResultPanel();layout.addWidget(group,1);layout.addWidget(self.result,2)
+        self.result=ResultPanel('Value','均数标准差模拟数据');layout.addWidget(group,1);layout.addWidget(self.result,2)
         self.generate_button.clicked.connect(self.generate)
     def mode_changed(self):
         self.mean.setEnabled(self.target.isChecked());self.sd.setEnabled(self.target.isChecked())
@@ -106,6 +132,7 @@ class NumericTool(QWidget):
         if self.is_running():return
         try:
             options=dict(n=self.n.value(),digits=int(self.digits.currentText()),mean=float(self.mean.text()) if self.target.isChecked() else 0.,sd=float(self.sd.text()) if self.target.isChecked() else 0.,lower=float(self.lower.text()) if self.lower.text().strip() else None,upper=float(self.upper.text()) if self.upper.text().strip() else None,mode='target' if self.target.isChecked() else 'range')
+            options['seed']=self.seed.text() if self.seed.text().strip() else None
         except ValueError:self.error.setText('请填写有效数字；上下限可以留空。');return
         self.error.clear();self.generate_button.setEnabled(False);self.generate_button.setText('正在生成…')
         self.worker=NumberWorker(options,self);self.worker.result_ready.connect(self.show_result);self.worker.failed.connect(self.error.setText);self.worker.finished.connect(self.finished);self.worker.start()
@@ -122,10 +149,3 @@ class NumericTool(QWidget):
         return self.worker is not None and self.worker.isRunning()
 
 
-class DataToolsPage(QWidget):
-    def __init__(self):
-        super().__init__();layout=QVBoxLayout(self);layout.setContentsMargins(0,0,0,0)
-        note=QLabel('独立数据工具 · 无需运行模型分析 · 参数与结果在切换工具时保留');note.setWordWrap(True);layout.addWidget(note)
-        self.tabs=QTabWidget();self.category=CategoryTool();self.numeric=NumericTool()
-        self.tabs.addTab(scroll(self.category),'自定义类别数列');self.tabs.addTab(scroll(self.numeric),'均数 / 标准差模拟数据');layout.addWidget(self.tabs,1)
-    def is_running(self):return self.numeric.is_running()

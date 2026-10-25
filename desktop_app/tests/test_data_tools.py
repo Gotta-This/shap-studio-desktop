@@ -33,36 +33,45 @@ class DataToolTests(unittest.TestCase):
             with self.assertRaises(ValueError):numeric_numbers(**options)
 
     def test_app_entry_generation_copy_and_persistence(self):
-        window=MainWindow();window.show();APP.processEvents()
+        from clinical_studio.hub import DesktopWindow
+        from PySide6.QtWidgets import QFileDialog
+        from unittest.mock import patch
+        from pathlib import Path
+        import csv
+        import tempfile
+        window=DesktopWindow();window.show();APP.processEvents()
+        numeric=None
         try:
-            self.assertEqual(window.nav.count(),7)
-            window.nav.setCurrentRow(6);APP.processEvents()
-            tools=window.data_tools_page
-            self.assertIs(window.stack.currentWidget(),tools)
-            self.assertFalse(window.run_button.isVisible())
-            tools.category.add_row('2','5');tools.category.generate_button.click()
-            self.assertEqual(Counter(tools.category.result.values),{1:28,0:93,2:5})
-            tools.category.result.copy()
-            self.assertEqual(APP.clipboard().text(),tools.category.result.output.toPlainText())
-            tools.tabs.setCurrentIndex(1);tools.numeric.lower.clear();tools.numeric.upper.clear()
-            tools.numeric.generate_button.click()
+            self.assertEqual(len(window.launch_buttons),4)
+            category=window.open_module('category')
+            category.add_row('2','5');category.generate_button.click()
+            self.assertEqual(Counter(category.result.values),{1:28,0:93,2:5})
+            category.result.copy();self.assertEqual(APP.clipboard().text(),category.result.output.toPlainText())
+            numeric=window.open_module('numeric');numeric.lower.clear();numeric.upper.clear();numeric.seed.setText('42')
+            numeric.generate_button.click()
             deadline=time.monotonic()+15
-            while tools.numeric.is_running() and time.monotonic()<deadline:
-                APP.processEvents();time.sleep(.01)
-            APP.processEvents();self.assertFalse(tools.numeric.is_running())
-            self.assertEqual(len(tools.numeric.result.values),70)
-            tools.numeric.result.copy();self.assertEqual(APP.clipboard().text(),tools.numeric.result.output.toPlainText())
-            previous=tools.numeric.result.values[:]
-            window.nav.setCurrentRow(0);window.nav.setCurrentRow(6)
-            window.build_pages();window.stack.setCurrentIndex(6);APP.processEvents()
-            self.assertIs(window.data_tools_page,tools);self.assertEqual(tools.numeric.result.values,previous)
-            tools.numeric.range_mode.setChecked(True);tools.numeric.generate_button.click()
+            while numeric.is_running() and time.monotonic()<deadline:APP.processEvents();time.sleep(.01)
+            APP.processEvents();self.assertFalse(numeric.is_running());self.assertEqual(len(numeric.result.values),70)
+            numeric.result.copy();self.assertEqual(APP.clipboard().text(),numeric.result.output.toPlainText())
+            previous=numeric.result.values[:]
+            window.show_home();window.open_module('category');window.show_home();window.open_module('numeric')
+            self.assertEqual(numeric.result.values,previous)
+            self.assertEqual(Counter(category.result.values),{1:28,0:93,2:5})
+            with tempfile.TemporaryDirectory() as directory:
+                csv_path=Path(directory)/'类别.csv';xlsx_path=Path(directory)/'数值.xlsx'
+                with patch.object(QFileDialog,'getSaveFileName',return_value=(str(csv_path),'CSV')):category.result.save_button.click()
+                with csv_path.open(encoding='utf-8-sig',newline='') as stream:rows=list(csv.reader(stream))
+                self.assertEqual([float(row[0]) for row in rows[1:]],category.result.values)
+                with patch.object(QFileDialog,'getSaveFileName',return_value=(str(xlsx_path),'Excel')):numeric.result.save_button.click()
+                from openpyxl import load_workbook
+                workbook=load_workbook(xlsx_path,data_only=True);self.assertEqual([row[0] for row in list(workbook.active.values)[1:]],previous);workbook.close()
+                self.assertNotEqual(category.result.last_save_path,numeric.result.last_save_path)
+            numeric.range_mode.setChecked(True);numeric.generate_button.click()
             deadline=time.monotonic()+5
-            while tools.numeric.is_running() and time.monotonic()<deadline:
-                APP.processEvents();time.sleep(.01)
-            APP.processEvents();self.assertIn('两个边界',tools.numeric.error.text())
+            while numeric.is_running() and time.monotonic()<deadline:APP.processEvents();time.sleep(.01)
+            APP.processEvents();self.assertIn('两个边界',numeric.error.text())
         finally:
-            if window.data_tools_page.numeric.worker:window.data_tools_page.numeric.worker.wait(15000)
+            if numeric and numeric.worker:numeric.worker.wait(15000)
             window.close();window.deleteLater();APP.processEvents()
 
 if __name__=='__main__':unittest.main()
