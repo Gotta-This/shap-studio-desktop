@@ -39,7 +39,7 @@ def verify_word(window,directory,source):
         check('两组有效和复发比例独立',config['groups'][1]['effective']==90 and config['groups'][1]['recurrence']==20)
         shot('02-word-all-indicators')
         path=root/'configuration.json';QFileDialog.getSaveFileName=lambda *a,**kw:(str(path),'JSON');tool.save_button.click()
-        check('完整配置保存',json.loads(path.read_text())==config)
+        check('完整配置保存',json.loads(path.read_text(encoding="utf-8"))==config)
         tool.seed.setText('99');QFileDialog.getOpenFileName=lambda *a,**kw:(str(path),'JSON');tool.load_button.click();check('完整配置载入往返一致',tool.get_config()==config)
         tool.generate_button.click();wait(tool);check('实际按钮生成成功',tool.result is not None)
         r=tool.result;check('140例和39列',len(r['rows'])==140 and len(r['columns'])==39)
@@ -59,7 +59,7 @@ def verify_word(window,directory,source):
         data=list(book.worksheets[0].values);check('Excel每个单元格与生成结果一致',list(data[0])==r['columns'] and [list(row) for row in data[1:]]==r['rows']);book.close()
         shot('03-generated-cases-and-export')
         before=r;window.open_module('category');window.open_module('word');check('切换工具保留第三模块参数和结果',tool.result is before and tool.get_config()==config)
-        report=dict(passed=True,checks=checks,source=str(source),runtime='bundled' if getattr(sys,'frozen',False) else 'source',rows=140,columns=r['columns'],numeric_checks=[v for v in r['checks'] if 'actual_mean' in v]);(root/'verification.json').write_text(json.dumps(report,ensure_ascii=False,indent=2));return True
+        report=dict(passed=True,checks=checks,source=str(source),runtime='bundled' if getattr(sys,'frozen',False) else 'source',rows=140,columns=r['columns'],numeric_checks=[v for v in r['checks'] if 'actual_mean' in v]);(root/'verification.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding="utf-8");return True
     except Exception:
-        (root/'verification.json').write_text(json.dumps(dict(passed=False,checks=checks,traceback=traceback.format_exc()),ensure_ascii=False,indent=2));return False
+        (root/'verification.json').write_text(json.dumps(dict(passed=False,checks=checks,traceback=traceback.format_exc()),ensure_ascii=False,indent=2),encoding="utf-8");return False
     finally:QFileDialog.getOpenFileName=original_open;QFileDialog.getSaveFileName=original_save

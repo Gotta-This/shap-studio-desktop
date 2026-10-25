@@ -79,7 +79,7 @@ def verify(window,directory):
         dialog_edit(window.boards[6].controls['style-parameters'],export_edit)
         expected=tool.collect_config();check('容差1e-8未被输入控件吞掉',expected['model']['tol']==1e-8)
         path=root/'ui-parameters.json';QFileDialog.getSaveFileName=lambda *a,**kw:(str(path),'JSON')
-        tool.export_config();saved=json.loads(path.read_text());check('配置保存与完整界面一致',saved==expected)
+        tool.export_config();saved=json.loads(path.read_text(encoding="utf-8"));check('配置保存与完整界面一致',saved==expected)
         QFileDialog.getOpenFileName=lambda *a,**kw:(str(path),'JSON')
         tool.import_config();check('配置重新载入保持所有参数',tool.collect_config()==expected)
         window.refresh(force=True)
@@ -94,7 +94,7 @@ def verify(window,directory):
         check('数据采用新ID字段',result.data.iloc[0,0]=='VERIFY-0001')
         check('六图三格式共18文件',len(result.images)==18 and all(p.stat().st_size>100 for p in result.images))
         check('六图颜色字体线宽对象检查全部通过',len(result.audit)==6 and all(a['passed'] for a in result.audit.values()))
-        check('运行参数与UI完全一致',json.loads((result.folder/'parameters.json').read_text())==expected)
+        check('运行参数与UI完全一致',json.loads((result.folder/'parameters.json').read_text(encoding="utf-8"))==expected)
         import pandas as pd
         pd.testing.assert_frame_equal(pd.read_excel(result.folder/'clinical_prediction_dataset_with_protective.xlsx'),result.data)
         check('Excel逐单元格与实际数据一致',True)
@@ -109,10 +109,10 @@ def verify(window,directory):
         check('样式预览来自实际图表',window.style_preview.path==str(next(p for p in result.images if p.name=='shap_summary_plot.png')))
         check('其他模块保持未实例化',set(window.modules)=={'shap'})
         report=dict(passed=True,checks=checks,folder=str(result.folder),runtime='bundled' if getattr(sys,'frozen',False) else 'source')
-        (root/'verification.json').write_text(json.dumps(report,ensure_ascii=False,indent=2));return True
+        (root/'verification.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding="utf-8");return True
     except Exception:
         import traceback
-        (root/'verification.json').write_text(json.dumps(dict(passed=False,checks=checks,traceback=traceback.format_exc()),ensure_ascii=False,indent=2));return False
+        (root/'verification.json').write_text(json.dumps(dict(passed=False,checks=checks,traceback=traceback.format_exc()),ensure_ascii=False,indent=2),encoding="utf-8");return False
     finally:
         QMessageBox.warning=original_warning;QMessageBox.information=original_info
         QFileDialog.getSaveFileName=original_save;QFileDialog.getExistingDirectory=original_dir;QFileDialog.getOpenFileName=original_open
