@@ -21,12 +21,13 @@ class DataToolTests(unittest.TestCase):
 
     def test_numeric_constraints_and_statistics(self):
         for lo,hi in [(7,50),(None,None),(7,None),(None,50)]:
-            a=numeric_numbers(lower=lo,upper=hi)
+            # 近似优化使用固定随机样本，让同一精度检查可在各平台复现。
+            a=numeric_numbers(lower=lo,upper=hi,seed=42)
             self.assertEqual(len(a),70)
             self.assertTrue(all(x==int(x) and (lo is None or x>=lo) and (hi is None or x<=hi) for x in a))
             m,s=statistics(a);self.assertLess(abs(m-27.92),.15);self.assertLess(abs(s-14.87),.2)
         self.assertEqual(numeric_numbers(n=10,mean=5,sd=0),[5]*10)
-        a=numeric_numbers(n=100,lower=1.23,upper=1.25,digits=2,mode='range')
+        a=numeric_numbers(n=100,lower=1.23,upper=1.25,digits=2,mode='range',seed=42)
         self.assertTrue(all(x in (1.23,1.24,1.25) for x in a))
         for options in [dict(mode='range'),dict(lower=7,upper=50,sd=100),dict(lower=50,upper=7),dict(sd=-1)]:
             with self.assertRaises(ValueError):numeric_numbers(**options)
