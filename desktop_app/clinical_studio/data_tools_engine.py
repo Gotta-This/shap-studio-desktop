@@ -43,7 +43,7 @@ def statistics(values):
     return mean, sd
 
 
-def numeric_numbers(n=70, mean=27.92, sd=14.87, digits=0, lower=None, upper=None, mode='target'):
+def numeric_numbers(n=70, mean=27.92, sd=14.87, digits=0, lower=None, upper=None, mode='target', seed=None):
     if not isinstance(n, int) or not 2 <= n <= 5000 or digits not in range(5):
         raise ValueError('例数须为 2～5000，小数位数须为 0～4。')
     if mode not in ('target', 'range'):
@@ -69,7 +69,7 @@ def numeric_numbers(n=70, mean=27.92, sd=14.87, digits=0, lower=None, upper=None
             max_sd=math.sqrt(max(0,(hi/f-mean)*(mean-lo/f)*n/(n-1)))
             if sd>max_sd+1e-9:
                 raise ValueError('目标标准差超出当前范围可实现的界限。')
-    rng=random.Random()
+    rng=random.Random(seed)
     if mode=='range':
         return [rng.randint(lo,hi)/f for _ in range(n)]
     m,s=mean*f,sd*f
