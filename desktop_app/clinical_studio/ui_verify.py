@@ -241,7 +241,8 @@ class UiVerifier:
         def fill():
             try:
                 dialog=QApplication.activeModalWidget()
-                if not isinstance(dialog,QFileDialog):raise AssertionError("未打开文件保存/目录选择对话框")
+                if not isinstance(dialog,QFileDialog) or not dialog.isVisible():return
+                poll.stop()
                 edit=dialog.findChild(QLineEdit,"fileNameEdit")
                 if edit is None:raise AssertionError("对话框中未找到文件名输入框")
                 # Windows 文件名补全会吞掉 Return；提交编辑后明确点击接受按钮。
@@ -259,9 +260,10 @@ class UiVerifier:
             if isinstance(dialog,QFileDialog):
                 dialog.grab().save(str(self.shots/"保存对话框超时.png"))
                 errors.append(TimeoutError(f"保存对话框未关闭：{path}"));dialog.reject()
-        guard=QTimer();guard.setSingleShot(True);guard.timeout.connect(timeout);guard.start(10000)
-        QTimer.singleShot(250,fill);self.click(button)
-        guard.stop()
+        guard=QTimer();guard.setSingleShot(True);guard.timeout.connect(timeout);guard.start(20000)
+        poll=QTimer();poll.timeout.connect(fill);poll.start(100)
+        self.click(button)
+        poll.stop();guard.stop()
         if errors:raise errors[0]
         if not path.exists():raise AssertionError(f"对话框未保存目标：{path}")
         self.log("通过文件对话框保存",path=str(path))
@@ -273,14 +275,24 @@ class UiVerifier:
         def in_preview():
             try:
                 preview=QApplication.activeModalWidget()
-                save=next(b for b in preview.findChildren(QPushButton) if b.text().startswith("另存此图"))
+                if preview is None or not preview.isVisible():return
+                save=next((b for b in preview.findChildren(QPushButton) if b.text().startswith("另存此图")),None)
+                if save is None:return
+                poll.stop()
                 self.save_dialog(save,path)
                 self.shot("09_另存图片后的结果页面")
                 QTest.keyClick(preview,Qt.Key_Escape)
             except Exception as error:
                 errors.append(error)
                 if QApplication.activeModalWidget():QApplication.activeModalWidget().reject()
-        QTimer.singleShot(250,in_preview);self.click(button)
+        def timeout():
+            preview=QApplication.activeModalWidget()
+            errors.append(TimeoutError("图片预览未完成保存"))
+            if preview:preview.reject()
+        guard=QTimer();guard.setSingleShot(True);guard.timeout.connect(timeout);guard.start(30000)
+        poll=QTimer();poll.timeout.connect(in_preview);poll.start(100)
+        self.click(button)
+        poll.stop();guard.stop()
         if errors:raise errors[0]
         self.check("单图另存文件存在",path.is_file())
 
