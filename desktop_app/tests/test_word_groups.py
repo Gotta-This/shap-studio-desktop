@@ -79,4 +79,45 @@ class WordGroupTests(unittest.TestCase):
         t.edit_groups();self.assertFalse(t.groups_confirmed)
         with patch.object(QFileDialog,'getOpenFileName',return_value=(str(p),'JSON')):t.load_config()
         self.assertEqual(t.get_config(),c);self.assertTrue(t.groups_confirmed)
+
+    def test_new_word_clears_previous_results_metrics_and_group_rules(self):
+        from unittest.mock import patch
+        from PySide6.QtWidgets import QFileDialog
+        self.select(['观察组','常规治疗组']);t=self.t;t.common_n.setValue(8)
+        groups=t.get_config()['groups']
+        for group in groups:
+            group.update(age=[dict(lower=99,upper=99,percent=100.)],effective=99.,
+                         extent_mode='category',extent=[dict(label='旧文档专属类别',percent=100.)])
+        t.set_groups(groups);t.add_indicator()
+        t.show_result(generate_batch(t.get_config()))
+        self.assertIsNotNone(t.result);self.assertTrue(t.export_button.isEnabled())
+        other=Path(self.tmp.name)/'new.docx'
+        with ZipFile(self.path) as old,ZipFile(other,'w') as new:
+            root=ET.fromstring(old.read('word/document.xml'))
+            for text in root.iter(W+'t'):
+                if text.text=='氧合指数':text.text='新文档指标'
+            new.writestr('word/document.xml',ET.tostring(root))
+        t.import_word(other)
+        self.assertIsNone(t.result);self.assertEqual(t.metrics.rowCount(),0)
+        self.assertEqual(t.preview.rowCount(),0);self.assertEqual(t.preview.columnCount(),0)
+        self.assertFalse(t.copy_button.isEnabled());self.assertFalse(t.export_button.isEnabled())
+        with patch.object(QFileDialog,'getSaveFileName') as save:
+            t.export_data();save.assert_not_called()
+        t.group_inputs[0].setText('观察组');t.add_group_input('常规治疗组');t.confirm_groups()
+        config=t.get_config();names={s['name'] for s in config['indicators']}
+        self.assertIn('新文档指标',names);self.assertNotIn('氧合指数',names)
+        self.assertFalse(any(name.startswith('自定义指标') for name in names))
+        for group in config['groups']:
+            self.assertEqual(group['extent_mode'],'blank')
+            self.assertNotEqual(group['age'],groups[0]['age']);self.assertEqual(group['effective'],80.)
+        result=generate_batch(config)
+        self.assertTrue(all(row[6]=='' for row in result['rows']))
+        self.assertEqual(result['config']['source'],str(other.resolve()))
+
+    def test_editing_groups_in_same_word_keeps_rules_but_invalidates_result(self):
+        self.select(['观察组','常规治疗组']);t=self.t;t.common_n.setValue(8)
+        t.group_editors[0].fields['effective'].setText('63')
+        t.show_result(generate_batch(t.get_config()))
+        t.edit_groups();self.assertIsNone(t.result);t.confirm_groups()
+        self.assertEqual(t.get_config()['groups'][0]['effective'],63.)
 if __name__=='__main__':unittest.main()

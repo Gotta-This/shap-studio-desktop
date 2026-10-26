@@ -330,6 +330,7 @@ class DesktopWindow(QMainWindow):
         self.numeric_stats.setEditTriggers(QAbstractItemView.NoEditTriggers)
 
     def build_word(self,b):
+        b.text(260,156,'导入正文与表格 → 核对分组与参数 → 生成病例 → 保存 Excel。')
         tool=self.modules['word']
         b.suppress(250,200,1160,690)
         tool.setObjectName('word-workflow');tool.setAttribute(Qt.WA_StyledBackground,True)

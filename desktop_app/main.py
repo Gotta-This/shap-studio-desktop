@@ -29,6 +29,7 @@ def main():
     parser.add_argument("--word-layout-verify",metavar="OUTPUT_DIR",help="核对Word基础资料布局和单元格编辑框")
     parser.add_argument("--input-verify",metavar="OUTPUT_DIR",help="核对整个App的下拉框滚轮保护")
     parser.add_argument("--shell-verify",metavar="OUTPUT_DIR",help="核对自适应高度、精简顶部栏与左下页脚")
+    parser.add_argument("--prose-verify",metavar="OUTPUT_DIR",help="核对正文一般资料识别、冲突检查和导出")
     parser.add_argument("--word-source",help="Word流程验证的docx来源")
     parser.add_argument("--open-tool",choices=["category","numeric","word","shap"],help="启动时打开指定工具")
     args=parser.parse_args()
@@ -42,7 +43,7 @@ def main():
         (Path(args.self_test)/"self_test_passed.json").write_text(json.dumps({"passed":True,"folder":str(result.folder),"images":len(result.images)},ensure_ascii=False,indent=2),encoding="utf-8")
         return 0
     from PySide6.QtCore import QTimer, Qt, QCoreApplication, QEvent
-    if args.ui_verify or args.shap_verify or args.word_verify or args.word_groups_verify or args.word_layout_verify or args.input_verify or args.shell_verify:
+    if args.ui_verify or args.shap_verify or args.word_verify or args.word_groups_verify or args.word_layout_verify or args.input_verify or args.shell_verify or args.prose_verify:
         from PySide6.QtWidgets import QApplication
         QApplication.setAttribute(Qt.AA_DontUseNativeDialogs,True)
     from clinical_studio.app import create_application
@@ -90,6 +91,12 @@ def main():
             window.verification_passed=verify_shell(window,args.shell_verify)
             app.quit()
         QTimer.singleShot(100,verify_shell_flow)
+    if args.prose_verify:
+        from clinical_studio.prose_verify import verify_prose
+        def verify_prose_flow():
+            window.verification_passed=verify_prose(window,args.prose_verify)
+            app.quit()
+        QTimer.singleShot(100,verify_prose_flow)
     if args.screenshot:
         def capture():
             window.grab().save(args.screenshot); app.quit()
@@ -99,7 +106,7 @@ def main():
     # may otherwise visit signal-connected buttons after their Qt parent is gone.
     window.deleteLater()
     QCoreApplication.sendPostedEvents(None,QEvent.DeferredDelete)
-    if args.shap_verify or args.word_verify or args.word_groups_verify or args.word_layout_verify or args.input_verify or args.shell_verify:
+    if args.shap_verify or args.word_verify or args.word_groups_verify or args.word_layout_verify or args.input_verify or args.shell_verify or args.prose_verify:
         return 0 if window.verification_passed else 1
     if args.ui_verify:
         return 0 if verifier.passed else 1
@@ -113,7 +120,7 @@ if __name__=="__main__":
         code=main()
     except Exception:
         import traceback
-        flag=next((f for f in ("--self-test","--ui-verify","--shap-verify","--word-verify","--word-groups-verify","--word-layout-verify","--input-verify","--shell-verify") if f in sys.argv),None)
+        flag=next((f for f in ("--self-test","--ui-verify","--shap-verify","--word-verify","--word-groups-verify","--word-layout-verify","--input-verify","--shell-verify","--prose-verify") if f in sys.argv),None)
         if flag and sys.argv.index(flag)+1<len(sys.argv):
             target=Path(sys.argv[sys.argv.index(flag)+1]);target.mkdir(parents=True,exist_ok=True)
             (target/"fatal_error.json").write_text(json.dumps({"passed":False,"traceback":traceback.format_exc()},ensure_ascii=False,indent=2),encoding="utf-8")

@@ -18,6 +18,7 @@ def verify_layout(window,directory):
     try:
         check('自定义组别与导出完整流程仍通过',verify_groups(window,root/'groups'))
         tool=window.open_module('word');c=default_batch_config(['常规护理组','综合干预组'])
+        tool.leave_unknown_blank.setChecked(False)  # This fixture explicitly tests manual clinical rules.
         for g in c['groups']:
             g.update(n=25,extent_mode='category',extent=[dict(label='E1',percent=30),dict(label='E2',percent=40),dict(label='E3',percent=30)])
         tool.set_groups(c['groups']);tool.set_indicators([dict(table=1,name='治疗前评分',group=g['name'],mean=10,sd=2,digits=2,lower=None,upper=None,parity='any',raw='10±2') for g in c['groups']]);tool.source_label.setText('当前组别：常规护理组、综合干预组（合成验证）')

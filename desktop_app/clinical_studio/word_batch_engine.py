@@ -36,6 +36,8 @@ class ImportResult:
     table_count: int
     group_matches: dict = field(default_factory=dict)
     table_matches: list = field(default_factory=list)
+    general_groups: dict = field(default_factory=dict)
+    text_group_matches: dict = field(default_factory=dict)
 
 
 def _grid(table, with_origins=False):
@@ -109,6 +111,8 @@ def read_word(path, groups=None, *, parse_indicators=True):
     if body is None:
         raise ValueError('Word 中没有正文。')
     tables = list(body.iter(W+'tbl'))
+    from .word_prose import read_general_prose
+    general_groups,text_group_matches=read_general_prose(body,groups)
     indicators, sizes, rates, messages = [], {}, {}, []
     used_names = set(BASE_COLUMNS+END_COLUMNS)
     group_matches={g:0 for g in groups};table_matches=[]
@@ -179,11 +183,17 @@ def read_word(path, groups=None, *, parse_indicators=True):
                         else:
                             messages.append(f'表 {index} {group} {name}：比例未识别，请手动设置。')
         messages.append(f'表 {index}：识别 {found} 个数值指标。')
-    if parse_indicators and not indicators:
+    if parse_indicators and not indicators and not any(data['indicators'] for data in general_groups.values()):
         messages.append('未识别到均数±标准差指标，可在指标配置中手动添加。')
-    messages.append('基本资料的区间及比例为可编辑初始值，未从 Word 正文推断；请逐项核对。')
+    for group,data in general_groups.items():
+        if group in sizes and sizes[group]!=data['n']:
+            data['issues'].append('正文例数与表格例数不一致')
+        else:sizes[group]=data['n']
+        messages.append(f'正文 {group}：'+data['raw'])
+        for issue in data['issues']:messages.append(f'正文 {group}：{issue}，请修正后重新导入。')
+    messages.append('正文一般资料按固定句式识别；未识别的基本资料仍需人工配置，不能视为Word中的参数。')
     messages.append('各指标按列独立模拟，不还原病例配对、相关性或原文检验结果。')
-    return ImportResult(indicators, sizes, rates, messages, str(path.resolve()), len(tables), group_matches, table_matches)
+    return ImportResult(indicators, sizes, rates, messages, str(path.resolve()), len(tables), group_matches, table_matches,general_groups,text_group_matches)
 
 
 def default_batch_config(groups=GROUPS):
@@ -224,6 +234,8 @@ def validate_batch(config):
     if any(g['name']!=name for g,name in zip(groups,selected_groups)):
         raise ValueError('分组名称首尾不能含空格。')
     for g in groups:
+        if not isinstance(g.get('blank_fields',[]),list) or any(name not in BASE_COLUMNS[2:]+END_COLUMNS for name in g.get('blank_fields',[])):
+            raise ValueError('留空字段配置无效。')
         n=g.get('n')
         if not isinstance(n,int) or isinstance(n,bool) or not 2<=n<=5000:
             raise ValueError(f"{g['name']}例数须为 2～5000 的整数。")
@@ -248,6 +260,13 @@ def validate_batch(config):
             active=sorted(ranges,key=lambda r:r['lower'])
             if any(a['upper']>b['lower'] for a,b in zip(active,active[1:])):
                 raise ValueError('年龄／病程区间不能交叉；相邻区间允许共用边界，例如10～20、20～30，边界值归入后一段。')
+        if g.get('age_stats') is not None:
+            if len(g['age'])!=1:raise ValueError('按年龄均数/标准差生成时，只能设置一个年龄范围。')
+            mean=_finite(g['age_stats']['mean'],'年龄均数');sd=_finite(g['age_stats']['sd'],'年龄标准差')
+            lo,hi=g['age'][0]['lower'],g['age'][0]['upper']
+            if not lo<=mean<=hi or sd<0:raise ValueError(f"{g['name']}年龄均数须在范围内，标准差须非负。")
+            maximum=math.sqrt(max(0,(mean-lo)*(hi-mean)*n/(n-1)))
+            if sd>maximum+1e-9:raise ValueError(f"{g['name']}年龄范围 {lo:g}～{hi:g}、均数 {mean:g} 与标准差 {sd:g} 无法同时满足；该范围和均数下样本标准差最多为 {maximum:.2f}，请核对Word原文。")
         if g.get('recurrence_scope','all') not in ('all','effective'):
             raise ValueError('复发率分母须为全组或治疗有效者。')
         extent_mode=g.get('extent_mode','category')
@@ -267,15 +286,25 @@ def validate_batch(config):
             ordered=sorted(ranges,key=lambda r:r['lower'])
             if any(x['upper']>y['lower'] for x,y in zip(ordered,ordered[1:])):raise ValueError('病变范围区间不能重叠。')
         elif extent_mode!='blank':raise ValueError('病变范围模式无效。')
+    categorical_specs=config.get('categoricals',[]);category_names={}
+    for spec in categorical_specs:
+        name=spec['name'].strip();group=spec['group']
+        if not name or name in BASE_COLUMNS+END_COLUMNS or name.startswith('='):raise ValueError('正文分类字段名称无效或与固定列重名。')
+        if group not in selected_groups or group in category_names.setdefault(name,set()):raise ValueError('正文分类字段组别无效或重复。')
+        category_names[name].add(group)
+        labels=spec['labels']
+        if not labels or any(not str(v).strip() for v in labels) or len(set(labels))!=len(labels) or len(labels)!=len(spec['weights']):raise ValueError('正文分类字段类别为空、重复或比例不完整。')
+        allocation(groups[0]['n'],[_finite(v,'正文类别比例') for v in spec['weights']])
+    if any(gs!=set(selected_groups) for gs in category_names.values()):raise ValueError('每个正文分类字段须配置全部所选组别。')
     specs=config.get('indicators',[])
-    if not specs:
+    if not specs and not categorical_specs and not any(g.get('age_stats') for g in groups) and not config.get('prose_sources'):
         raise ValueError('请导入 Word 或添加至少一个数值指标。')
     if len(specs)>250*len(selected_groups):
         raise ValueError('最多支持250个指标，每个指标须配置所有所选组别。')
     names={}
     for spec in specs:
         name=spec['name'].strip()
-        if not name or name in BASE_COLUMNS+END_COLUMNS or name.startswith('='):
+        if not name or name in BASE_COLUMNS+END_COLUMNS or name in category_names or name.startswith('='):
             raise ValueError('指标名不能为空、与固定列重名或以等号开头。')
         group=spec['group']
         if group not in selected_groups or group in names.setdefault(name,set()):
@@ -349,12 +378,37 @@ def _indicator(spec,n,rng,cancelled=None):
     return [2*x+parity for x in numeric_numbers(**options,cancelled=cancelled)]
 
 
+def _age_values(spec,n,rng,cancelled):
+    """Refine rounded integer ages while retaining the source range."""
+    values=_indicator(spec,n,rng,cancelled);buckets={}
+    for i,value in enumerate(values):buckets.setdefault(value,[]).append(i)
+    total=sum(values);squares=sum(v*v for v in values)
+    def error(s,q):
+        mean=s/n;sd=math.sqrt(max(0,(q-s*s/n)/(n-1)))
+        return (mean-spec['mean'])**2+(sd-spec['sd'])**2
+    for iteration in range(min(5000,n*50)):
+        if cancelled():raise InterruptedError('已取消生成。')
+        score=error(total,squares);best=None
+        for value in sorted(buckets):
+            for delta in (-1,1):
+                candidate=value+delta
+                if not spec['lower']<=candidate<=spec['upper']:continue
+                q=squares+2*value*delta+1;new_score=error(total+delta,q)
+                if new_score<score-1e-12:score=new_score;best=(value,candidate,delta,q)
+        if best is None:break
+        value,candidate,delta,squares=best;index=buckets[value].pop()
+        if not buckets[value]:del buckets[value]
+        buckets.setdefault(candidate,[]).append(index);values[index]=candidate;total+=delta
+    return values
+
+
 def generate_batch(config, progress=lambda _:None, cancelled=lambda:False):
     config=deepcopy(config)
     validate_batch(config)
     rng=random.Random(config['seed'])
     names=list(dict.fromkeys(s['name'].strip() for s in config['indicators']))
-    columns=BASE_COLUMNS+names+END_COLUMNS
+    categorical_names=list(dict.fromkeys(s['name'].strip() for s in config.get('categoricals',[])))
+    columns=BASE_COLUMNS+categorical_names+names+END_COLUMNS
     rows,checks=[],[]
     for g in config['groups']:
         n=g['n'];group=g['name']
@@ -370,6 +424,13 @@ def generate_batch(config, progress=lambda _:None, cancelled=lambda:False):
               '病程':_ranges(n,g['course'],g['course_digits'],rng),
               '病情程度':categories('病情程度',['轻度','中度','重度'],g['severity']),
               '总有效率':categories('总有效率',['有效','无效'],[g['effective'],100-g['effective']])}
+        if g.get('age_stats'):
+            age_spec=dict(g['age_stats'],digits=0,parity='any',lower=g['age'][0]['lower'],upper=g['age'][0]['upper'])
+            data['年龄']=_age_values(age_spec,n,rng,cancelled)
+            actual_mean,actual_sd=statistics(data['年龄'])
+            checks.append(dict(group=group,field='年龄',n=n,target_mean=age_spec['mean'],actual_mean=actual_mean,mean_error=actual_mean-age_spec['mean'],target_sd=age_spec['sd'],actual_sd=actual_sd,sd_error=actual_sd-age_spec['sd'],minimum=min(data['年龄']),maximum=max(data['年龄'])))
+        for spec in (s for s in config.get('categoricals',[]) if s['group']==group):
+            data[spec['name'].strip()]=categories(spec['name'],spec['labels'],spec['weights'])
         mode=g.get('extent_mode','category')
         if mode=='blank':data['病变范围']=['']*n
         elif mode=='range':data['病变范围']=_ranges(n,g['extent_ranges'],g.get('extent_digits',0),rng)
@@ -400,6 +461,9 @@ def generate_batch(config, progress=lambda _:None, cancelled=lambda:False):
             data[spec['name'].strip()]=values
             mean,sd=statistics(values)
             checks.append(dict(group=group,field=spec['name'],n=n,target_mean=spec['mean'],actual_mean=mean,mean_error=mean-spec['mean'],target_sd=spec['sd'],actual_sd=sd,sd_error=sd-spec['sd'],minimum=min(values),maximum=max(values)))
+        blank_fields=g.get('blank_fields',[])
+        for field in blank_fields:data[field]=['']*n
+        checks[:]=[check for check in checks if check['group']!=group or check['field'] not in blank_fields]
         start=len(rows)+1
         rows.extend([[start+i]+[data[c][i] for c in columns[1:]] for i in range(n)])
     return dict(columns=columns,rows=rows,checks=checks,config=config)
@@ -435,7 +499,7 @@ def export_batch(result,path):
     settings.append(['病程单位',result['config'].get('course_unit','月')])
     for key,value in result['config'].items():
         # One indicator per row avoids Excel's 32,767 character cell limit.
-        if key in ('indicators','groups'):
+        if key in ('indicators','groups','categoricals','field_rules'):
             for i,item in enumerate(value,1):
                 settings.append([f'{key}[{i}]',json.dumps(item,ensure_ascii=False,allow_nan=False)])
         else:

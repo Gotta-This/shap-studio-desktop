@@ -34,6 +34,7 @@ def verify_word(window,directory,source):
         shot('01-basic-workflow')
         QFileDialog.getOpenFileName=lambda *a,**kw:(str(source),'Word');tool.import_button.click();pump();tool.group_inputs[0].setText('对照组');tool.add_group_input('中药组');tool.confirm_groups();pump()
         check('实际Word导入30个前后指标',tool.metrics.rowCount()==60)
+        tool.leave_unknown_blank.setChecked(False)  # Explicitly use the manually entered basic-data rules.
         check('导入保留用户70例和80%有效设置',tool.group_editors[0].fields['n'].text()=='70' and float(tool.group_editors[0].fields['effective'].text())==80)
         config=tool.get_config();check('两组共用性别年龄病程配置',config['groups'][0]['age']==config['groups'][1]['age'] and config['groups'][1]['male']==60)
         check('两组有效和复发比例独立',config['groups'][1]['effective']==90 and config['groups'][1]['recurrence']==20)
