@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 )
 from .design_surface import DesignBoard,DesignView,DesignRegion,ParameterScrollArea
 from .config import ROOT,PLOT_NAMES
+from .editor_dialogs import EditorDialog
 
 PLOT_ORDER=['bar','summary','force','waterfall','dependence_protective','dependence_risk']
 KEY_FOR_BOARD={0:None,1:'category',2:'numeric',3:'word',4:'shap',5:'shap',6:'shap',7:'shap',8:None}
@@ -255,10 +256,10 @@ class DesktopWindow(QMainWindow):
         self.sync_categories()
 
     def category_report(self):
-        dialog=QDialog(self);dialog.setWindowTitle('类别数列 · 原代码结果核对');dialog.resize(720,650)
-        layout=QVBoxLayout(dialog);text=QPlainTextEdit();text.setReadOnly(True)
+        dialog=EditorDialog(self,'类别数列 · 原代码结果核对','核对前10行、数据结构与类别计数',size=(760,680))
+        layout=dialog.body_layout;text=QPlainTextEdit();text.setReadOnly(True)
         text.setPlainText(self.modules['category'].original_report());layout.addWidget(text)
-        buttons=QDialogButtonBox(QDialogButtonBox.Close);buttons.rejected.connect(dialog.accept);layout.addWidget(buttons)
+        dialog.add_buttons()
         dialog.exec();dialog.deleteLater()
 
     def sync_categories(self):
@@ -269,8 +270,9 @@ class DesktopWindow(QMainWindow):
             button.clicked.connect(lambda checked=False,r=row:self.remove_category(r))
             table.setCellWidget(row,2,button)
         table.blockSignals(False)
-        delta=44*(table.rowCount()-2)
-        table.setFixedHeight(40+44*table.rowCount())
+        from .resizable_fields import keep_user_height
+        table.setFixedHeight(keep_user_height(table,40+44*table.rowCount()))
+        delta=table.height()-128
         self.category_region.expand_below(146,delta,420)
         self.category_region.controls['add-category'].move(0,146+delta)
         self.category_region.controls['category-seed'].move(12,273+delta)
@@ -603,16 +605,16 @@ class DesktopWindow(QMainWindow):
             tool.setFocus();return
         export_tab=page=='export'
         if export_tab:page=3
-        tool=self.controller(key);dialog=QDialog(self);dialog.setWindowTitle('全部参数 · '+{'category':'自定义类别数列','numeric':'均数 / 标准差模拟数据','word':'Word 一键生成 Excel','shap':'模拟数据生图'}[key]);dialog.resize(1180,800)
-        layout=QVBoxLayout(dialog)
+        tool=self.controller(key);dialog=EditorDialog(self,'全部参数 · '+{'category':'自定义类别数列','numeric':'均数 / 标准差模拟数据','word':'Word 一键生成 Excel','shap':'模拟数据生图'}[key],'修改会自动保留，完成后关闭窗口即可。',size=(1180,800))
+        layout=dialog.body_layout;layout.setAlignment(Qt.AlignmentFlag(0))
         if key=='shap':
             from .theme import SHAP_DIALOG_STYLE
-            dialog.setObjectName('shapParameters');dialog.setStyleSheet(SHAP_DIALOG_STYLE)
+            dialog.setStyleSheet(dialog.styleSheet()+SHAP_DIALOG_STYLE)
             dialog.setAttribute(Qt.WA_StyledBackground,True);dialog.setSizeGripEnabled(True)
             dialog.resize(1280,860);dialog.setMinimumSize(960,640)
             layout.setContentsMargins(18,18,18,12);layout.setSpacing(12)
         body=tool.takeCentralWidget() if key=='shap' else tool
-        body.setParent(dialog);body.show();layout.addWidget(body)
+        body.setParent(dialog);body.show();layout.addWidget(body,1)
         if key=='shap':tool.advanced_host=dialog
         if key=='shap':
             if page is not None:tool.nav.setCurrentRow(page)
@@ -629,8 +631,9 @@ class DesktopWindow(QMainWindow):
             hint=QLabel('修改会自动保留，完成设置后可关闭此窗口。');hint.setWordWrap(True)
             row.addWidget(hint,1);row.addWidget(buttons)
             buttons.button(QDialogButtonBox.Close).setText('完成');buttons.button(QDialogButtonBox.Close).setMinimumWidth(108)
-            layout.addWidget(footer)
-        else:layout.addWidget(buttons)
+            dialog.footer_layout.addWidget(footer)
+        else:
+            buttons.button(QDialogButtonBox.Close).setText('完成');dialog.footer_layout.addStretch();dialog.footer_layout.addWidget(buttons)
         # Enter commits numeric editors; it must never activate a dialog's first
         # import/generate button as an implicit default action.
         for button in dialog.findChildren(QPushButton):button.setAutoDefault(False);button.setDefault(False)

@@ -23,7 +23,7 @@ def verify_prose(window,directory):
                 run=ET.SubElement(p,W+'r');ET.SubElement(run,W+'t').text=value
         with ZipFile(path,'w') as z:z.writestr('word/document.xml',ET.tostring(doc))
     def confirm(path):
-        tool.import_word(path);tool.group_inputs[0].setText('观察组');tool.add_group_input('常规治疗组');tool.confirm_groups();app.processEvents()
+        tool.import_word(path);tool.show_group_selection(['观察组','常规治疗组']);tool.confirm_groups();app.processEvents()
     try:
         window.timer.stop();tool=window.open_module('word');tool.use_word_sizes.setChecked(True)
         first=root/'synthetic-prose.docx';document(first,12,24.2);confirm(first)
@@ -69,7 +69,7 @@ def verify_prose(window,directory):
         check('有效和复发标明来自默认参数',all(any(row['column']==field and row['source']=='程序默认参数' for row in result['config']['field_rules']) for field in ('总有效率','复发率')))
         table_excel=root/'table-only-with-sources.xlsx';export_batch(result,table_excel);book=load_workbook(table_excel,data_only=True);values=list(book.worksheets[0].values)
         check('Excel默认字段有值且保存逐列来源',all(row[values[0].index(field)] is not None for row in values[1:] for field in basic_fields) and any(str(row[0]).startswith('field_rules[') for row in book['生成配置'].values));book.close()
-        tool.pages.setCurrentIndex(2);app.processEvents();check('核对页覆盖生成快照的全部字段',tool.rule_table.rowCount()==len(result['config']['field_rules']))
+        tool.pages.setCurrentIndex(tool.SOURCES_PAGE);app.processEvents();check('核对页覆盖生成快照的全部字段',tool.rule_table.rowCount()==len(result['config']['field_rules']))
         window.grab().save(str(root/'all-fields-and-sources.png'))
         invalid=root/'inconsistent-age.docx';document(invalid,25,22.8,True);confirm(invalid)
         try:tool.get_config();blocked=False

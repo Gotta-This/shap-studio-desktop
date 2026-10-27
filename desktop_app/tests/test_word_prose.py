@@ -43,18 +43,18 @@ class WordProseTests(unittest.TestCase):
     def tearDown(self):self.w.close();self.w.deleteLater();APP.processEvents();self.tmp.cleanup()
     def import_prose(self,**kwargs):
         prose_document(self.path,**kwargs);t=self.t;t.use_word_sizes.setChecked(True)
-        t.import_word(self.path);t.group_inputs[0].setText('对照组');t.add_group_input('试验组');t.confirm_groups();APP.processEvents()
+        t.import_word(self.path);t.show_group_selection(['对照组','试验组']);t.confirm_groups();APP.processEvents()
         self.assertTrue(t.groups_confirmed,t.message.text());t.leave_unknown_blank.setChecked(True)
     def test_prose_only_counts_categories_and_excel(self):
         self.import_prose();t=self.t;c=t.get_config()
-        self.assertFalse(c['shared_basics']);self.assertEqual([g['n'] for g in c['groups']],[25,25])
-        self.assertEqual([g['male'] for g in c['groups']],[60.,56.])
-        self.assertTrue(all(row['source']=='Word正文' for row in c['field_rules'] if row['column'] in ('性别','年龄')))
-        self.assertEqual(t.metrics.rowCount(),8);self.assertEqual(t.categories.rowCount(),8)
-        self.assertEqual(len(c['categoricals']),4)
+        self.assertFalse(c['include_basics']);self.assertEqual([g['n'] for g in c['groups']],[25,25])
+        self.assertTrue(t.inline_prose_active)
+        self.assertEqual(len(c['typed_fields']),16)
+        self.assertEqual([f['counts'][0] for f in c['typed_fields'] if f['name']=='性别'],[15,14])
+        self.assertTrue(all(f['raw'] for f in c['typed_fields']))
         result=generate_batch(c)
         self.assertEqual(len(result['rows']),50)
-        self.assertTrue(all(all(row[index]=='' for index in (4,5,6,-2,-1)) for row in result['rows']))
+        self.assertTrue(all(name not in result['columns'] for name in ('病程','病情程度','病变范围','总有效率','复发率')))
         self.assertFalse(any(check['field'] in ('病程','病情程度','总有效率','复发率') for check in result['checks']))
         fields=result['columns']
         for group,male in [('对照组',15),('试验组',14)]:
@@ -79,15 +79,14 @@ class WordProseTests(unittest.TestCase):
     def test_changed_numbers_are_read_from_new_document(self):
         self.import_prose(n=30,bmi=27.4,table=True)
         c=self.t.get_config();self.assertEqual([g['n'] for g in c['groups']],[30,30])
-        self.assertEqual([s['mean'] for s in c['indicators'] if s['name']=='BMI'],[27.4,27.4])
-        self.assertEqual(len(c['indicators']),10)
+        self.assertEqual([s['mean'] for s in c['typed_fields'] if s['name']=='BMI'],[27.4,27.4])
+        self.assertEqual(len(c['indicators']),2)
         self.assertEqual(len(generate_batch(c)['rows']),60)
     def test_impossible_age_is_blocked_without_dropping_range(self):
         self.import_prose(bad_age=True)
         with self.assertRaisesRegex(ValueError,'无法同时满足'):self.t.get_config()
-        self.assertIn('无法同时满足',self.t.log.toPlainText())
-        self.assertEqual(self.t.group_editors[0].age.values()[0][:2],['61.0','78.0'])
-        self.assertEqual(self.t.group_editors[0].age_sd.text(),'10.8')
+        age=next(v for v in self.t.prose_table_editor.study()['variables'] if v['name']=='年龄')['cells']['对照组']
+        self.assertEqual([age['lower'],age['upper']],[61.,78.]);self.assertEqual(age['sd'],10.8)
     def test_inconsistent_sex_counts_are_blocked(self):
         self.import_prose(bad_counts=True)
         with self.assertRaisesRegex(ValueError,'男女例数之和'):self.t.get_config()

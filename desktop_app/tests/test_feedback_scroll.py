@@ -72,7 +72,7 @@ class FeedbackScrollTests(unittest.TestCase):
             self.assertEqual(observations,[True])
         tool=w.open_module('word');APP.processEvents()
         tool.result={'columns':['组别','数值'],'rows':[['A',1],['B',2]]}
-        tool.pages.setCurrentIndex(3);tool.copy_button.setEnabled(True);APP.processEvents();tool.copy_button.click();APP.processEvents()
+        tool.pages.setCurrentIndex(tool.OUTPUT_PAGE);tool.copy_button.setEnabled(True);APP.processEvents();tool.copy_button.click();APP.processEvents()
         self.assertTrue(tool.window().copy_feedback.isVisible());self.assertIn('复制成功',tool.window().copy_feedback.text())
         self.assertEqual(APP.clipboard().text().splitlines(),['组别\t数值','A\t1','B\t2'])
 

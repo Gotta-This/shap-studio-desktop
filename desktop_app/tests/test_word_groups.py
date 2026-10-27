@@ -33,22 +33,21 @@ class WordGroupTests(unittest.TestCase):
         self.w=DesktopWindow();self.w.timer.stop();self.w.show();self.t=self.w.open_module('word');APP.processEvents()
     def tearDown(self):self.w.close();self.w.deleteLater();APP.processEvents();self.tmp.cleanup()
     def select(self,names):
-        self.t.import_word(self.path);self.t.group_inputs[0].setText(names[0])
-        for name in names[1:]:self.t.add_group_input(name)
+        self.t.import_word(self.path);self.t.show_group_selection(names)
         self.t.confirm_groups();APP.processEvents()
     def test_import_waits_for_explicit_confirmation_and_counts_all_tables(self):
         t=self.t;t.import_word(self.path)
-        self.assertFalse(t.groups_confirmed);self.assertTrue(t.group_panel.isVisible());self.assertEqual(t.group_inputs[0].text(),'')
+        self.assertFalse(t.groups_confirmed);self.assertTrue(t.group_panel.isVisible());self.assertEqual([e.text() for e in t.group_inputs],['常规治疗组','观察组','观察组1'])
         self.assertFalse(t.generate_button.isEnabled());self.assertEqual(t.metrics.rowCount(),0)
-        t.group_inputs[0].setText('观察组');t.add_group_input('常规治疗组');r=t.match_groups()
+        t.show_group_selection(['观察组','常规治疗组']);r=t.match_groups()
         self.assertEqual(r.table_count,3);self.assertEqual(r.group_matches,{'观察组':2,'常规治疗组':2})
         self.assertEqual(r.indicators,[]);self.assertIn('2/2',t.match_summary.text());self.assertIn('表3：未匹配',t.match_report.toPlainText())
         t.confirm_groups();self.assertTrue(t.groups_confirmed);self.assertEqual(t.metrics.rowCount(),6)
         self.assertEqual([e.name for e in t.group_editors],['观察组','常规治疗组']);self.assertIn('合计140例',t.total_label.text());self.assertIn('观察组',t.group_selector.itemText(0))
     def test_full_name_matching_missing_and_duplicate_groups(self):
         r=read_word(self.path,['观察组']);self.assertEqual(r.group_matches,{'观察组':2});self.assertEqual(len(r.indicators),3)
-        t=self.t;t.import_word(self.path);t.group_inputs[0].setText('不存在组');t.confirm_groups();self.assertFalse(t.groups_confirmed);self.assertIn('未在Word',t.message.text())
-        t.group_inputs[0].setText('观察组');t.add_group_input('观 察组');self.assertIsNone(t.match_groups());self.assertIn('重复',t.match_summary.text())
+        t=self.t;t.import_word(self.path);t.show_group_selection(['不存在组']);t.confirm_groups();self.assertFalse(t.groups_confirmed);self.assertIn('未在Word',t.message.text())
+        t.show_group_selection(['观察组','观 察组']);self.assertIsNone(t.match_groups());self.assertIn('重复',t.match_summary.text())
     def test_single_and_three_groups_generate_and_export(self):
         for names in [['观察组'],['观察组','常规治疗组','观察组1']]:
             r=read_word(self.path,names);c=default_batch_config(names);c['indicators']=r.indicators
@@ -103,7 +102,7 @@ class WordGroupTests(unittest.TestCase):
         self.assertFalse(t.copy_button.isEnabled());self.assertFalse(t.export_button.isEnabled())
         with patch.object(QFileDialog,'getSaveFileName') as save:
             t.export_data();save.assert_not_called()
-        t.group_inputs[0].setText('观察组');t.add_group_input('常规治疗组');t.confirm_groups()
+        t.show_group_selection(['观察组','常规治疗组']);t.confirm_groups()
         config=t.get_config();names={s['name'] for s in config['indicators']}
         self.assertIn('新文档指标',names);self.assertNotIn('氧合指数',names)
         self.assertFalse(any(name.startswith('自定义指标') for name in names))

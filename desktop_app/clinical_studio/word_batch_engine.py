@@ -38,6 +38,23 @@ class ImportResult:
     table_matches: list = field(default_factory=list)
     general_groups: dict = field(default_factory=dict)
     text_group_matches: dict = field(default_factory=dict)
+    typed_fields: list = field(default_factory=list)
+    table_issues: list = field(default_factory=list)
+    baseline_columns: bool = False
+
+
+def table_titles(body,tables):
+    titles={};recent=''
+    for child in body:
+        if child.tag==W+'p':
+            text=''.join(t.text or '' for t in child.iter(W+'t')).strip()
+            if re.match(r'^表\s*[\d一二三四五六七八九十]+',text):recent=text
+            elif text:recent=''
+        elif child.tag==W+'tbl':
+            for table in child.iter(W+'tbl'):
+                if table in tables:titles[tables.index(table)+1]=recent or f'表{tables.index(table)+1}（未提供表名）'
+            recent=''
+    return titles
 
 
 def _grid(table, with_origins=False):
@@ -111,18 +128,28 @@ def read_word(path, groups=None, *, parse_indicators=True):
     if body is None:
         raise ValueError('Word 中没有正文。')
     tables = list(body.iter(W+'tbl'))
+    titles=table_titles(body,tables)
     from .word_prose import read_general_prose
     general_groups,text_group_matches=read_general_prose(body,groups)
     indicators, sizes, rates, messages = [], {}, {}, []
     used_names = set(BASE_COLUMNS+END_COLUMNS)
     group_matches={g:0 for g in groups};table_matches=[]
+    typed_fields=[];table_issues=[];baseline_columns=False
+    from .word_table_types import parse_table
     for index, table in enumerate(tables, 1):
         rows,origins = _grid(table,True)
+        typed=parse_table(rows,origins,groups,index,table_title=titles.get(index,''))
         group_rows = {g: [row for row in rows if any(_clean(cell)==_clean(g) for cell in row)] for g in groups}
         matched={g:len(rs) for g,rs in group_rows.items() if rs}
+        matched.update(typed['matches'])
         table_matches.append(dict(table=index,groups=matched))
         for g,count in matched.items():group_matches[g]+=count
         if not parse_indicators:continue
+        typed_fields.extend(typed['fields']);table_issues.extend(typed['issues']);sizes.update(typed['sizes']);baseline_columns=baseline_columns or typed['baseline']
+        for group,values in typed.get('rates',{}).items():rates.setdefault(group,{}).update(values)
+        if typed['handled']:
+            messages.append(f'表 {index}：识别 {len(typed["fields"])} 个组别字段（支持竖表及多层表头）；字段类型和分类可修改。')
+            continue
         if not any(group_rows.values()):
             messages.append(f'表 {index}：未找到所选组别数据行，未导入。')
             continue
@@ -183,7 +210,7 @@ def read_word(path, groups=None, *, parse_indicators=True):
                         else:
                             messages.append(f'表 {index} {group} {name}：比例未识别，请手动设置。')
         messages.append(f'表 {index}：识别 {found} 个数值指标。')
-    if parse_indicators and not indicators and not any(data['indicators'] for data in general_groups.values()):
+    if parse_indicators and not indicators and not typed_fields and not any(data['indicators'] for data in general_groups.values()):
         messages.append('未识别到均数±标准差指标，可在指标配置中手动添加。')
     for group,data in general_groups.items():
         if group in sizes and sizes[group]!=data['n']:
@@ -193,7 +220,8 @@ def read_word(path, groups=None, *, parse_indicators=True):
         for issue in data['issues']:messages.append(f'正文 {group}：{issue}，请修正后重新导入。')
     messages.append('正文一般资料按固定句式识别；未识别的基本资料仍需人工配置，不能视为Word中的参数。')
     messages.append('各指标按列独立模拟，不还原病例配对、相关性或原文检验结果。')
-    return ImportResult(indicators, sizes, rates, messages, str(path.resolve()), len(tables), group_matches, table_matches,general_groups,text_group_matches)
+    messages.extend(table_issues)
+    return ImportResult(indicators, sizes, rates, messages, str(path.resolve()), len(tables), group_matches, table_matches,general_groups,text_group_matches,typed_fields,table_issues,baseline_columns)
 
 
 def default_batch_config(groups=GROUPS):
@@ -231,6 +259,8 @@ def validate_batch(config):
         raise ValueError('随机种子须为 0～4294967295 的整数。')
     groups = config.get('groups',[])
     selected_groups=group_names([g.get('name','') for g in groups])
+    if config.get('ungrouped') and (len(groups)!=1 or config.get('include_basics',True)):
+        raise ValueError('无分组模式仅支持一个数据集，且只输出已识别字段。')
     if any(g['name']!=name for g,name in zip(groups,selected_groups)):
         raise ValueError('分组名称首尾不能含空格。')
     for g in groups:
@@ -297,7 +327,7 @@ def validate_batch(config):
         allocation(groups[0]['n'],[_finite(v,'正文类别比例') for v in spec['weights']])
     if any(gs!=set(selected_groups) for gs in category_names.values()):raise ValueError('每个正文分类字段须配置全部所选组别。')
     specs=config.get('indicators',[])
-    if not specs and not categorical_specs and not any(g.get('age_stats') for g in groups) and not config.get('prose_sources'):
+    if not specs and not categorical_specs and not config.get('typed_fields') and not any(g.get('age_stats') for g in groups) and not config.get('prose_sources'):
         raise ValueError('请导入 Word 或添加至少一个数值指标。')
     if len(specs)>250*len(selected_groups):
         raise ValueError('最多支持250个指标，每个指标须配置所有所选组别。')
@@ -326,6 +356,14 @@ def validate_batch(config):
     if any(gs!=set(selected_groups) for gs in names.values()):
         raise ValueError('每个指标都须配置全部所选组别；请补全缺失行。')
     if len(names)>250:raise ValueError('最多支持250个指标。')
+    from .typed_field_engine import validate_fields
+    validate_fields(config)
+
+
+def output_columns(config):
+    names=[s['name'].strip() for s in config.get('categoricals',[])+config.get('indicators',[])+config.get('typed_fields',[]) if s.get('kind')!='excluded']
+    base=['编号'] if config.get('ungrouped') else BASE_COLUMNS if config.get('include_basics',True) else ['编号','分组']
+    return list(dict.fromkeys(base+names+(END_COLUMNS if config.get('include_basics',True) else [])))
 
 
 def _categorical(n, labels, weights, rng):
@@ -408,7 +446,7 @@ def generate_batch(config, progress=lambda _:None, cancelled=lambda:False):
     rng=random.Random(config['seed'])
     names=list(dict.fromkeys(s['name'].strip() for s in config['indicators']))
     categorical_names=list(dict.fromkeys(s['name'].strip() for s in config.get('categoricals',[])))
-    columns=BASE_COLUMNS+categorical_names+names+END_COLUMNS
+    columns=output_columns(config)
     rows,checks=[],[]
     for g in config['groups']:
         n=g['n'];group=g['name']
@@ -461,9 +499,23 @@ def generate_batch(config, progress=lambda _:None, cancelled=lambda:False):
             data[spec['name'].strip()]=values
             mean,sd=statistics(values)
             checks.append(dict(group=group,field=spec['name'],n=n,target_mean=spec['mean'],actual_mean=mean,mean_error=mean-spec['mean'],target_sd=spec['sd'],actual_sd=sd,sd_error=sd-spec['sd'],minimum=min(values),maximum=max(values)))
-        blank_fields=g.get('blank_fields',[])
+        from .typed_field_engine import apply_fields
+        def typed_numeric(spec,count,random_state,cancel):
+            # Preserve the existing bounded integer-age refinement for prose-table fields.
+            fn=_age_values if spec.get('name')=='年龄' and spec.get('digits')==0 and spec.get('lower') is not None and spec.get('upper') is not None else _indicator
+            return fn(spec,count,random_state,cancel)
+        overridden=apply_fields(config,group,n,data,checks,rng,cancelled,typed_numeric,categories,statistics)
+        if '总有效率' in overridden and '复发率' not in overridden and g.get('recurrence_scope','all')=='effective':
+            checks[:]=[check for check in checks if not (check['group']==group and check['field']=='复发率')]
+            eligible=[i for i,value in enumerate(data['总有效率']) if value=='有效']
+            values=_categorical(len(eligible),['复发','未复发'],[g['recurrence'],100-g['recurrence']],rng)
+            data['复发率']=['未复发']*n
+            for i,value in zip(eligible,values):data['复发率'][i]=value
+            denominator=len(eligible)
+            checks.append(dict(group=group,field='复发率',category='复发（有效者为分母）',n=denominator,target_percent=g['recurrence'],actual_count=values.count('复发'),actual_percent=values.count('复发')/denominator*100 if denominator else None))
+        blank_fields=[field for field in g.get('blank_fields',[]) if field not in overridden]
         for field in blank_fields:data[field]=['']*n
-        checks[:]=[check for check in checks if check['group']!=group or check['field'] not in blank_fields]
+        checks[:]=[check for check in checks if check['group']!=group or (check['field'] not in blank_fields and check['field'] in columns)]
         start=len(rows)+1
         rows.extend([[start+i]+[data[c][i] for c in columns[1:]] for i in range(n)])
     return dict(columns=columns,rows=rows,checks=checks,config=config)
@@ -481,16 +533,17 @@ def export_batch(result,path):
         sheet.append(row)
     groups={g['name']:g for g in result['config']['groups']}
     specs={(v['group'],v['name'].strip()):v for v in result['config']['indicators']}
+    specs.update({(v['group'],v['name'].strip()):v for v in result['config'].get('typed_fields',[]) if v['kind'] in ('mean_sd','quantile')})
     for row in sheet.iter_rows(min_row=2):
-        group=groups[row[1].value]
+        group=next(iter(groups.values())) if result['config'].get('ungrouped') else groups[row[result['columns'].index('分组')].value]
         for col,cell in enumerate(row):
             if not isinstance(cell.value,(int,float)):continue
             name=result['columns'][col]
             digits=specs[(group['name'],name)]['digits'] if (group['name'],name) in specs else group['course_digits'] if name=='病程' else group.get('extent_digits',0) if name=='病变范围' else 0
             cell.number_format='0'+('.'+'0'*digits if digits else '')
     audit=book.create_sheet('统计核对')
-    fields=[('group','分组'),('field','字段'),('category','类别或区间'),('n','例数'),('target_mean','目标均数'),('actual_mean','实际均数'),('mean_error','均数偏差'),('target_sd','目标标准差'),('actual_sd','实际标准差'),('sd_error','标准差偏差'),('minimum','最小值'),('maximum','最大值'),('target_percent','目标比例%'),('actual_count','实际人数'),('actual_percent','实际比例%')]
-    audit.append([v for k,v in fields])
+    fields=[('group','分组'),('field','字段'),('category','类别或区间'),('n','例数'),('target_mean','目标均数'),('actual_mean','实际均数'),('mean_error','均数偏差'),('target_sd','目标标准差'),('actual_sd','实际标准差'),('sd_error','标准差偏差'),('minimum','最小值'),('maximum','最大值'),('target_percent','目标比例%'),('actual_count','实际人数'),('actual_percent','实际比例%'),('target_q1','目标Q1'),('actual_q1','实际Q1'),('target_median','目标中位数'),('actual_median','实际中位数'),('target_q3','目标Q3'),('actual_q3','实际Q3')]
+    audit.append(['数据集' if k=='group' and result['config'].get('ungrouped') else v for k,v in fields])
     for check in result['checks']:
         audit.append([check.get(k) for k,v in fields])
     settings=book.create_sheet('生成配置');settings.append(['设置','值'])
@@ -499,7 +552,7 @@ def export_batch(result,path):
     settings.append(['病程单位',result['config'].get('course_unit','月')])
     for key,value in result['config'].items():
         # One indicator per row avoids Excel's 32,767 character cell limit.
-        if key in ('indicators','groups','categoricals','field_rules'):
+        if key in ('indicators','groups','categoricals','field_rules','typed_fields'):
             for i,item in enumerate(value,1):
                 settings.append([f'{key}[{i}]',json.dumps(item,ensure_ascii=False,allow_nan=False)])
         else:

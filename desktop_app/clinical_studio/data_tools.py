@@ -133,6 +133,8 @@ class CategoryTool(QWidget):
         self.result=ResultPanel('RandomValue','random_numbers_28_93_57');self.result.csv_r_style=True;self.splitter=split_panels(layout,group,self.result)
         add.clicked.connect(lambda:self.add_row());remove.clicked.connect(self.remove_row);self.generate_button.clicked.connect(self.generate)
         self.add_row('1','28');self.add_row('0','93');self.generate()
+        from .editor_dialogs import enable_category_expansion
+        enable_category_expansion(self.table)
     def add_row(self,value='',count=''):
         row=self.table.rowCount();self.table.insertRow(row);self.table.setItem(row,0,QTableWidgetItem(value));self.table.setItem(row,1,QTableWidgetItem(count))
     def remove_row(self):

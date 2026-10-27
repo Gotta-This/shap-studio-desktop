@@ -32,7 +32,7 @@ def verify_word(window,directory,source):
         first.fields['effective'].setText('80');first.fields['recurrence'].setText('10')
         second=tool.group_editors[1];second.fields['effective'].setText('90');second.fields['recurrence'].setText('20');second.recurrence_scope.setCurrentIndex(second.recurrence_scope.findData('effective'))
         shot('01-basic-workflow')
-        QFileDialog.getOpenFileName=lambda *a,**kw:(str(source),'Word');tool.import_button.click();pump();tool.group_inputs[0].setText('对照组');tool.add_group_input('中药组');tool.confirm_groups();pump()
+        QFileDialog.getOpenFileName=lambda *a,**kw:(str(source),'Word');tool.import_button.click();pump();tool.show_group_selection(['对照组','中药组']);tool.confirm_groups();pump()
         check('实际Word导入30个前后指标',tool.metrics.rowCount()==60)
         tool.leave_unknown_blank.setChecked(False)  # Explicitly use the manually entered basic-data rules.
         check('导入保留用户70例和80%有效设置',tool.group_editors[0].fields['n'].text()=='70' and float(tool.group_editors[0].fields['effective'].text())==80)

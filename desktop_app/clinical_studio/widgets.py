@@ -51,13 +51,10 @@ OPTIONS = {
 
 
 def scroll(widget):
-    area = QScrollArea()
-    area.setWidgetResizable(True)
-    area.setFrameShape(QScrollArea.NoFrame)
+    from .resizable_fields import enable_content_scroll
+    area=enable_content_scroll(widget)
     if widget.objectName() != "homePage":
-        widget.setProperty("surface",True)
-        widget.setAttribute(Qt.WA_StyledBackground,True)
-    area.setWidget(widget)
+        widget.setProperty("surface",True);widget.setAttribute(Qt.WA_StyledBackground,True)
     return area
 
 
@@ -77,7 +74,8 @@ class ColorField(QWidget):
         self.button.setStyleSheet(f"background:{color.name() if color.isValid() else '#FFFFFF'};border:1px solid #CBD5E1;border-radius:6px")
 
     def pick(self):
-        color = QColorDialog.getColor(QColor(self.text.text()), self, "选择颜色")
+        from .editor_dialogs import native_owner
+        color = QColorDialog.getColor(QColor(self.text.text()), native_owner(self), "选择颜色")
         if color.isValid(): self.text.setText(color.name().upper())
 
     def value(self):

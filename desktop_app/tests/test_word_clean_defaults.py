@@ -19,7 +19,7 @@ class WordCleanDefaultsTests(unittest.TestCase):
         self.w=DesktopWindow();self.w.timer.stop();self.w.show();self.t=self.w.open_module('word');APP.processEvents()
     def tearDown(self):self.w.close();self.w.deleteLater();APP.processEvents();self.tmp.cleanup()
     def select(self,path=None):
-        t=self.t;t.import_word(path or self.path);t.group_inputs[0].setText('观察组');t.add_group_input('常规治疗组');t.confirm_groups();APP.processEvents();self.assertTrue(t.groups_confirmed,t.message.text())
+        t=self.t;t.import_word(path or self.path);t.show_group_selection(['观察组','常规治疗组']);t.confirm_groups();APP.processEvents();self.assertTrue(t.groups_confirmed,t.message.text())
     def check_defaults_generate(self,result):
         for field in ['性别','年龄','病程','病情程度','总有效率','复发率']:
             index=result['columns'].index(field);self.assertTrue(all(row[index]!='' for row in result['rows']),field)
@@ -42,7 +42,7 @@ class WordCleanDefaultsTests(unittest.TestCase):
     def test_table_only_import_generates_defaults_and_exposes_every_output_field(self):
         self.select();t=self.t;t.common_n.setValue(8);config=t.get_config()
         self.assertEqual(config['detected_basics'],{'观察组':[],'常规治疗组':[]})
-        t.pages.setCurrentIndex(2);APP.processEvents();self.assertEqual(t.rule_table.rowCount(),len(config['field_rules']))
+        t.pages.setCurrentIndex(t.SOURCES_PAGE);APP.processEvents();self.assertEqual(t.rule_table.rowCount(),len(config['field_rules']))
         t.generate_button.click();deadline=time.monotonic()+30
         while t.is_running() and time.monotonic()<deadline:APP.processEvents();time.sleep(.01)
         APP.processEvents();self.assertIsNotNone(t.result,t.message.text());self.check_defaults_generate(t.result)

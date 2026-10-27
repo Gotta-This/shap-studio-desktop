@@ -1,7 +1,6 @@
 """Render the actual Penpot layout, with live Qt controls at its measured anchors."""
 import html
 import json
-import math
 from copy import deepcopy
 from pathlib import Path
 
@@ -68,11 +67,57 @@ class DesignBoard(QWidget):
         for i,width in enumerate(widths):table.setColumnWidth(i,width)
         self.place(table,rect,key);return table
 
+    def resize_content_field(self,widget,before):
+        """Reflow absolute design controls below/right of a user-resized field."""
+        after=widget.geometry();dy=after.height()-before.height();dx=after.width()-before.width()
+        if isinstance(self,DesignRegion) and self.controls.get('categories') is widget:
+            delta=after.height()-128;self.expand_below(146,delta,420)
+            self.controls['add-category'].move(0,146+delta);self.controls['category-seed'].move(12,273+delta)
+            self.setFixedWidth(max(392,after.right()+1))
+            area=self.parentWidget()
+            while area is not None and not isinstance(area,QScrollArea):area=area.parentWidget()
+            if area is not None:area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+            return
+        for peer in set(self.controls.values()):
+            if peer is widget or peer.parentWidget() is not self:continue
+            rect=peer.geometry()
+            overlap_x=rect.left()<before.right() and rect.right()>before.left()
+            overlap_y=rect.top()<before.bottom() and rect.bottom()>before.top()
+            if dy and rect.top()>=before.bottom()-1 and overlap_x:peer.move(rect.x(),rect.y()+dy)
+            elif dx and rect.left()>=before.right()-1 and overlap_y:peer.move(rect.x()+dx,rect.y())
+        # Move painted captions and grow their surrounding cards along with the controls.
+        for shape in self.spec['shapes']:
+            rect=self.shape_rect(shape)
+            if shape['x']<224 or shape['y']<200:continue
+            if rect.contains(QRectF(before)) and shape['type']!='text':
+                shape['height']=max(1,shape['height']+dy);shape['width']=max(1,shape['width']+dx)
+            elif dy and rect.top()>=before.bottom()-1 and rect.left()<before.right() and rect.right()>before.left():shape['y']+=dy
+            elif dx and rect.left()>=before.right()-1 and rect.top()<before.bottom() and rect.bottom()>before.top():shape['x']+=dx
+        children=[w.geometry() for w in set(self.controls.values()) if w.parentWidget() is self]
+        self.user_min_height=max(928,max((r.bottom()+32 for r in children),default=928))
+        self.user_min_width=max(1440,max((r.right()+32 for r in children),default=1440))
+        proxy=self.graphicsProxyWidget()
+        if proxy is not None and proxy.scene() is not None:
+            for view in proxy.scene().views():
+                if hasattr(view,'update_layout'):view.update_layout()
+        self.update()
+
     def resizeEvent(self,event):
         super().resizeEvent(event)
         if not self.is_shell:return
         if 'sidebar-footer' in self.controls and self.controls['sidebar-footer'].parentWidget() is self:self.controls['sidebar-footer'].setGeometry(20,self.height()-110,184,90)
-        if 'word-workflow' in self.controls:self.controls['word-workflow'].setGeometry(260,130,1144,max(500,self.height()-154))
+        # Resize the content columns, never the scene's font/icon scale. Map
+        # current geometry so manually resized fields retain their chosen height.
+        previous_width=event.oldSize().width()
+        if previous_width>296 and previous_width!=self.width():
+            ratio=max(1,self.width()-296)/(previous_width-296)
+            for widget in set(self.controls.values()):
+                if widget.parentWidget() is not self or widget.x()<224:continue
+                rect=widget.geometry()
+                widget.setGeometry(round(260+(rect.x()-260)*ratio),rect.y(),
+                                   max(1,round(rect.width()*ratio)),rect.height())
+        if 'word-workflow' in self.controls:
+            self.controls['word-workflow'].setGeometry(260,130,max(1,self.width()-296),max(500,self.height()-154))
 
     def shape_rect(self,shape):
         rect=QRectF(shape['x'],shape['y'],shape['width'],shape['height'])
@@ -85,6 +130,12 @@ class DesignBoard(QWidget):
             elif shape['y']>=200:rect.translate(0,-76)
             elif shape['y']>=76:rect.translate(0,-56)
             elif shape['type']=='text':rect.translate(0,-16)
+        if shape['x']>=224:
+            ratio=max(1,self.width()-296)/1144
+            if shape['x']==224:
+                rect.setWidth(max(1,self.width()-224))
+            else:
+                rect=QRectF(260+(rect.x()-260)*ratio,rect.y(),rect.width()*ratio,rect.height())
         return rect
 
     def paintEvent(self,event):
@@ -120,7 +171,7 @@ class DesignBoard(QWidget):
 class DesignView(QGraphicsView):
     def __init__(self,board,parent=None):
         super().__init__(parent);self.board=board
-        self.setFrameShape(QFrame.NoFrame);self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff);self.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.setFrameShape(QFrame.NoFrame);self.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded);self.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.setAlignment(Qt.AlignLeft|Qt.AlignTop);self.setTransformationAnchor(QGraphicsView.NoAnchor);self.setResizeAnchor(QGraphicsView.NoAnchor)
         self.setStyleSheet('QGraphicsView{border:0;background:#F5F8F5;}')
         scene=QGraphicsScene(self);scene.setSceneRect(0,0,1440,960);scene.addWidget(board);self.setScene(scene)
@@ -136,14 +187,23 @@ class DesignView(QGraphicsView):
         super().showEvent(event);self.update_layout()
 
     def update_layout(self):
-        factor=max(0.1,self.viewport().width()/1440)
         minimum=800 if self.board.index==3 else 928
-        height=max(minimum,math.floor(self.viewport().height()/factor))
-        self.board.setFixedHeight(height);self.scene().setSceneRect(0,0,1440,height)
-        self.resetTransform();self.scale(factor,factor)
+        height=max(minimum,getattr(self.board,'user_min_height',0),self.viewport().height())
+        minimum_width=1008 if self.board.index==3 else 1200
+        width=max(minimum_width,self.viewport().width(),getattr(self.board,'user_min_width',0))
+        self.board.setFixedSize(width,height)
+        # The embedded widget's fixed-size changes do not update the proxy's
+        # cached constraints. Its old bounds otherwise clip painting and input
+        # after enlarging the window, even though the scene has grown.
+        proxy=self.board.graphicsProxyWidget()
+        if proxy is not None:
+            proxy.setMinimumSize(width,height);proxy.setMaximumSize(width,height)
+            proxy.setGeometry(QRectF(0,0,width,height))
+        self.scene().setSceneRect(0,0,width,height)
+        self.resetTransform()
         if self.footer:
-            self.footer.setGeometry(round(20*factor),self.viewport().height()-round(110*factor),round(184*factor),round(90*factor))
-            self.footer.setStyleSheet(f'QLabel{{background:#FFFFFF;color:#738477;font-size:{max(9,round(11*factor))}px;padding:0;}}')
+            self.footer.setGeometry(20,self.viewport().height()-110,184,90)
+            self.footer.setStyleSheet('QLabel{background:#FFFFFF;color:#738477;font-size:11px;padding:0;}')
             self.footer.raise_()
 
 

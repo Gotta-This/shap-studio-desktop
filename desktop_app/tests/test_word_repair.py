@@ -14,7 +14,7 @@ class WordRepairTests(unittest.TestCase):
     def setUp(self):self.w=DesktopWindow();self.w.timer.stop();self.w.show();self.tool=self.w.open_module('word');APP.processEvents()
     def tearDown(self):self.w.close();self.w.deleteLater();APP.processEvents()
     def confirm_default_groups(self):
-        self.tool.group_inputs[0].setText('对照组');self.tool.add_group_input('中药组');self.tool.confirm_groups()
+        self.tool.show_group_selection(['对照组','中药组']);self.tool.confirm_groups()
     def test_user_counts_preserved_and_word_counts_are_opt_in(self):
         with tempfile.TemporaryDirectory() as d:
             p=Path(d)/'source.docx';fixture_docx(p);self.tool.common_n.setValue(77);self.tool.group_editors[0].fields['effective'].setText('63')
@@ -65,6 +65,6 @@ class WordRepairTests(unittest.TestCase):
             r=read_word(p);self.assertEqual(len(r.indicators),4);self.assertEqual(r.group_sizes,{})
             self.assertEqual(r.indicators[0]['mean'],10)
     def test_workflow_is_main_page_and_return_from_parameter_menu_keeps_it(self):
-        t=self.tool;self.assertTrue(t.isVisible());self.assertIs(t.parentWidget(),self.w.boards[3]);self.w.advanced('word',3);self.assertEqual(t.pages.currentIndex(),3);self.assertTrue(t.isVisible())
+        t=self.tool;self.assertTrue(t.isVisible());self.assertIs(t.parentWidget(),self.w.boards[3]);self.w.advanced('word',t.OUTPUT_PAGE);self.assertEqual(t.pages.currentIndex(),t.OUTPUT_PAGE);self.assertTrue(t.isVisible())
         self.w.open_module('shap');self.w.open_module('word');self.assertIs(self.w.modules['word'],t);self.assertTrue(t.isVisible())
 if __name__=='__main__':unittest.main()

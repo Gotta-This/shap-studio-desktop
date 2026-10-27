@@ -62,7 +62,7 @@ class StrictVerifier(SuiteVerifier):
 
     def verify_copy_dialog(self,key,page=None):
         if key=='word':
-            tool=self.hub.modules[key];tool.pages.setCurrentIndex(3);self.click(tool.copy_button)
+            tool=self.hub.modules[key];tool.pages.setCurrentIndex(tool.OUTPUT_PAGE);self.click(tool.copy_button)
             host=tool.window();self.check('Word复制成功提示在主流程可见',hasattr(host,'copy_feedback') and host.copy_feedback.isVisible());return
         errors=[]
         def operate():
@@ -98,7 +98,7 @@ class StrictVerifier(SuiteVerifier):
     def word(self):
         tool=self.enter('word');b=self.hub.boards[3]
         source=self.root/'工具3_测试Word.docx';make_word_fixture(source);self.save_dialog(b.controls['import-word'],source)
-        tool.group_inputs[0].setText('对照组');tool.add_group_input('中药组');tool.confirm_groups()
+        tool.show_group_selection(['对照组','中药组']);tool.confirm_groups()
         self.hub.refresh(force=True)
         self.check('设计导入按钮识别两组指标',self.hub.word_table.rowCount()==2)
         tool.pages.setCurrentIndex(0);tool.same_size.setChecked(False)

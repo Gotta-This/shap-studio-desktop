@@ -173,16 +173,19 @@ class AnalysisWorker(QThread):
             self.failed.emit(traceback.format_exc())
 
 
-class ImagePreview(QDialog):
+from .editor_dialogs import EditorDialog
+
+
+class ImagePreview(EditorDialog):
     def __init__(self,path,parent=None):
-        super().__init__(parent); self.path=Path(path); self.setWindowTitle(self.path.name); self.resize(1180,800)
-        layout=QVBoxLayout(self)
+        super().__init__(parent,Path(path).name,'查看、缩放和另存图片',size=(1180,800)); self.path=Path(path)
+        layout=self.body_layout
         self.image=QLabel(); self.image.setAlignment(Qt.AlignCenter)
         pix=QPixmap(str(path)); self.original=pix
         self.image.setPixmap(pix.scaled(1120,700,Qt.KeepAspectRatio,Qt.SmoothTransformation))
         layout.addWidget(scroll(self.image))
         row=QHBoxLayout(); save=QPushButton("另存此图…"); original=QPushButton("原始尺寸"); fit=QPushButton("适应窗口")
-        row.addWidget(original); row.addWidget(fit); row.addStretch(); row.addWidget(save); layout.addLayout(row)
+        row.addWidget(original); row.addWidget(fit); row.addStretch(); row.addWidget(save); self.footer_layout.addLayout(row)
         original.clicked.connect(lambda:self.image.setPixmap(self.original))
         fit.clicked.connect(lambda:self.image.setPixmap(self.original.scaled(self.width()-60,self.height()-100,Qt.KeepAspectRatio,Qt.SmoothTransformation)))
         save.clicked.connect(self.save)
@@ -245,13 +248,14 @@ class MainWindow(QMainWindow):
         # 导入配置后重建参数页，已保存的结果仍保留。
         for i in range(self.stack.count()-1,-1,-1):
             widget=self.stack.widget(i); self.stack.removeWidget(widget)
-            if widget is not self.log: widget.deleteLater()
+            if isinstance(widget,QScrollArea) and widget.widget() is self.log:widget.takeWidget();self.log.setParent(self);widget.deleteLater()
+            elif widget is not self.log: widget.deleteLater()
         self.build_overview()
         self.data_editor=FeatureEditor(self.config["data"]); self.stack.addWidget(scroll(self.data_editor))
         self.model_page=self.make_model_page(); self.stack.addWidget(self.model_page)
         self.style_page=self.make_style_page(); self.stack.addWidget(self.style_page)
         self.results_page=self.make_results_page(); self.stack.addWidget(self.results_page)
-        self.stack.addWidget(self.log)
+        self.stack.addWidget(scroll(self.log))
         if self.result: self.show_result(self.result)
 
     def build_overview(self):
@@ -315,9 +319,9 @@ class MainWindow(QMainWindow):
             table.setAlternatingRowColors(True); table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.gallery=QWidget(); self.gallery_layout=QGridLayout(self.gallery); self.gallery_layout.setSpacing(18)
         self.metrics_label=QLabel("尚无模型结果"); self.metrics_label.setTextFormat(Qt.PlainText); self.metrics_label.setWordWrap(True); self.metrics_label.setAlignment(Qt.AlignTop); self.metrics_label.setMargin(24)
-        self.result_tabs.addTab(scroll(self.gallery),"图表预览"); self.result_tabs.addTab(self.data_table,"完整数据")
-        self.result_tabs.addTab(scroll(self.metrics_label),"模型评估"); self.result_tabs.addTab(self.coefficient_table,"模型系数")
-        self.result_tabs.addTab(self.prediction_table,"测试集预测")
+        self.result_tabs.addTab(scroll(self.gallery),"图表预览"); self.result_tabs.addTab(scroll(self.data_table),"完整数据")
+        self.result_tabs.addTab(scroll(self.metrics_label),"模型评估"); self.result_tabs.addTab(scroll(self.coefficient_table),"模型系数")
+        self.result_tabs.addTab(scroll(self.prediction_table),"测试集预测")
         return page
 
     def collect_config(self):
@@ -458,4 +462,6 @@ def create_application(argv):
     app.setStyle("Fusion"); apply_light_palette(app); app.setStyleSheet(STYLE)
     from .input_behavior import install_input_behavior
     install_input_behavior(app)
+    from .resizable_fields import install_resize_behavior
+    install_resize_behavior(app)
     return app
