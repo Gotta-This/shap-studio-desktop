@@ -1,4 +1,4 @@
-# Verification reports use explicit UTF-8 on both packaged platforms.
+# Verify editable prose fields through their current independent rule model.
 name: Build verify and publish v1.0.33
 on:
   workflow_dispatch:

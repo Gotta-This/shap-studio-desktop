@@ -23,7 +23,7 @@ def verify_prose(window,directory):
                 run=ET.SubElement(p,W+'r');ET.SubElement(run,W+'t').text=value
         with ZipFile(path,'w') as z:z.writestr('word/document.xml',ET.tostring(doc))
     def confirm(path):
-        tool.import_word(path);tool.show_group_selection(['观察组','常规治疗组']);tool.confirm_groups();app.processEvents()
+        tool.import_word(path);tool.show_group_selection(['观察组','常规治疗组']);tool.confirm_groups();app.processEvents();tool.include_basics.setChecked(True)  # Explicitly exercise optional basic/outcome columns.
     try:
         window.timer.stop();tool=window.open_module('word');tool.use_word_sizes.setChecked(True)
         first=root/'synthetic-prose.docx';document(first,12,24.2);confirm(first)
@@ -31,12 +31,12 @@ def verify_prose(window,directory):
         check('默认参数保持开启',not tool.leave_unknown_blank.isChecked() and tool.group_editors[0].fields['effective'].isEnabled())
         tool.leave_unknown_blank.setChecked(True)  # Exercise the optional blank policy explicitly.
         c=tool.get_config();check('各组例数来自正文',[g['n'] for g in c['groups']]==[12,12])
-        check('按正文应用年龄范围和均数标准差',all(g['age'][0]['lower']==60 and g['age_stats']==dict(mean=67.,sd=3.) for g in c['groups']))
-        check('正文建立8行数值参数和8行分类参数',tool.metrics.rowCount()==8 and tool.categories.rowCount()==8)
+        check('按正文应用年龄范围和均数标准差',len([f for f in c['typed_fields'] if f['name']=='年龄' and f['lower']==60 and f['upper']==79 and f['mean']==67. and f['sd']==3.])==2)
+        check('正文竖表保留10行数值规则和6行分类规则',sum(f['kind']=='mean_sd' for f in c['typed_fields'])==10 and sum(f['kind']=='category' for f in c['typed_fields'])==6 and tool.metrics.rowCount()==0 and tool.categories.rowCount()==0)
         tool.generate_button.click();end=time.monotonic()+120
         while tool.is_running() and time.monotonic()<end:app.processEvents();time.sleep(.01)
         app.processEvents();check('实际按钮生成24行',not tool.is_running() and tool.result is not None and len(tool.result['rows'])==24)
-        result=tool.result;fields=result['columns'];check('未识别基础字段留空',all(all(r[i]=='' for i in (4,5,6,-2,-1)) for r in result['rows']))
+        result=tool.result;fields=result['columns'];check('未识别基础字段留空',all(all(r[fields.index(name)]=='' for name in ('病程','病情程度','病变范围','总有效率','复发率')) for r in result['rows']))
         for group in ('观察组','常规治疗组'):
             rows=[r for r in result['rows'] if r[1]==group]
             check(group+'性别人数正确',Counter(r[2] for r in rows)=={'男':6,'女':6})
@@ -49,7 +49,7 @@ def verify_prose(window,directory):
         window.grab().save(str(root/'generated.png'))
         second=root/'changed-prose.docx';document(second,20,30.2);confirm(second)
         check('新Word清空旧结果',tool.result is None and not tool.export_button.isEnabled())
-        c=tool.get_config();check('相同句式的新数字替换旧参数',[g['n'] for g in c['groups']]==[20,20] and all(s['mean']==30.2 for s in c['indicators'] if s['name']=='BMI'))
+        c=tool.get_config();check('相同句式的新数字替换旧参数',[g['n'] for g in c['groups']]==[20,20] and len([s for s in c['typed_fields'] if s['name']=='BMI' and s['mean']==30.2])==2)
         tool.leave_unknown_blank.setChecked(False)
         table_doc=ET.Element(W+'document');body=ET.SubElement(table_doc,W+'body');table=ET.SubElement(body,W+'tbl')
         for values in [('组别','例数','本次评分'),('观察组','12','10±2'),('常规治疗组','12','11±2')]:
