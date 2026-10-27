@@ -87,5 +87,5 @@ def verify_resize(window,output):
         finally:probe.close();probe.deleteLater()
         report['passed']=True
     except Exception:report['traceback']=traceback.format_exc()
-    report['checks']=checks;(output/'resize-verification.json').write_text(json.dumps(report,ensure_ascii=False,indent=2))
+    report['checks']=checks;(output/'resize-verification.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8')
     return report['passed']

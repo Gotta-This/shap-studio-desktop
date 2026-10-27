@@ -70,4 +70,4 @@ def verify_unified_preview(window,directory):
         export_batch(result,root/'preview-cases.xlsx');check('Excel导出成功',(root/'preview-cases.xlsx').exists())
         window.grab().save(str(root/'word-confirmed.png'));report['passed']=True
     except Exception:report['traceback']=traceback.format_exc()
-    report['checks']=checks;(root/'verification.json').write_text(json.dumps(report,ensure_ascii=False,indent=2));return report['passed']
+    report['checks']=checks;(root/'verification.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8');return report['passed']

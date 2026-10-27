@@ -96,7 +96,7 @@ def verify_merged_tables(window,directory):
         output=root/'mixed-cases.xlsx';export_batch(result,output)
         from openpyxl import load_workbook
         book=load_workbook(output,data_only=True);check('Excel导出40例且无统计列',book.worksheets[0].max_row==41 and not {'P值','统计值','并发症','SAS'}&set(result['columns']));book.close()
-        saved=root/'mixed-config.json';saved.write_text(json.dumps(config,ensure_ascii=False,indent=2))
+        saved=root/'mixed-config.json';saved.write_text(json.dumps(config,ensure_ascii=False,indent=2),encoding='utf-8')
         old_open=QFileDialog.getOpenFileName
         try:
             QFileDialog.getOpenFileName=lambda *a,**kw:(str(saved),'JSON');tool.load_config();pump()
@@ -105,4 +105,4 @@ def verify_merged_tables(window,directory):
         tool.pages.setCurrentIndex(tool.SOURCES_PAGE);pump();window.grab().save(str(root/'field-sources.png'))
         report['passed']=True
     except Exception:report['traceback']=traceback.format_exc()
-    report['checks']=checks;(root/'verification.json').write_text(json.dumps(report,ensure_ascii=False,indent=2));return report['passed']
+    report['checks']=checks;(root/'verification.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8');return report['passed']

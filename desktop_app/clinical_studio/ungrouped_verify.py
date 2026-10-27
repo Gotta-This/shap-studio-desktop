@@ -61,4 +61,4 @@ def verify_ungrouped(window,directory):
         check('补充例数后无组别也能生成',tool.ungrouped and len(generate_batch(tool.get_config())['rows'])==12)
         report['passed']=True
     except Exception:report['traceback']=traceback.format_exc()
-    report['checks']=checks;(root/'verification.json').write_text(json.dumps(report,ensure_ascii=False,indent=2));return report['passed']
+    report['checks']=checks;(root/'verification.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8');return report['passed']

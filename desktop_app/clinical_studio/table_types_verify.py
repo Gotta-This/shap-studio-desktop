@@ -74,7 +74,7 @@ def verify_table_types(window,directory):
         output=root/'baseline-cases.xlsx';QFileDialog.getSaveFileName=lambda *a,**kw:(str(output),'Excel');tool.export_button.click();wait()
         from openpyxl import load_workbook
         book=load_workbook(output,data_only=True);data=list(book.worksheets[0].values);check('Excel保留文字类型及338条记录',len(data)==339 and data[1][cols.index('性别')] in ('男','女'));book.close()
-        config=root/'field-types.json';QFileDialog.getSaveFileName=lambda *a,**kw:(str(config),'JSON');tool.save_button.click();check('字段类型与参数保存',len(json.loads(config.read_text())['typed_fields'])==6)
+        config=root/'field-types.json';QFileDialog.getSaveFileName=lambda *a,**kw:(str(config),'JSON');tool.save_button.click();check('字段类型与参数保存',len(json.loads(config.read_text(encoding='utf-8'))['typed_fields'])==6)
         window.grab().save(str(root/'baseline-result.png'))
         load('vertical-subcategories.docx',[['项目','对照组（25例）','试验组（25例）','统计值','P值'],['年龄','44.84±9.75','46.40±10.18','0.554','0.582'],['性别','','','0.325','0.569'],['男','15（60.00）','13（52.00）','',''],['女','10（40.00）','12（48.00）','',''],['手术方式','','','',''],['腹腔镜','19（76.00）','17（68.00）','',''],['开腹','6（24.00）','8（32.00）','','']],['对照组','试验组'])
         check('25例组名与分类子行合并为三个指标',len(tool.typed_specs)==6 and {f['name'] for f in tool.typed_specs}=={'年龄','性别','手术方式'} and all(f['confirmed'] for f in tool.typed_specs))

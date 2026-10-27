@@ -1,4 +1,4 @@
-# Verify editable prose fields through their current independent rule model.
+# Read and write all packaged verification files with explicit UTF-8.
 name: Build verify and publish v1.0.33
 on:
   workflow_dispatch:
@@ -56,7 +56,10 @@ jobs:
             $p = Start-Process $exe -ArgumentList @("--$mode-verify", $destination) -PassThru
             if (-not $p.WaitForExit(300000)) { Stop-Process -Id $p.Id -Force; throw "$mode verification timed out" }
             $p.Refresh()
-            if ($p.ExitCode -ne 0) { throw "$mode verification failed" }
+            if ($p.ExitCode -ne 0) {
+              if (Test-Path "$destination/verification.json") { Get-Content "$destination/verification.json" -Raw -Encoding UTF8 | Write-Host }
+              throw "$mode verification failed"
+            }
             $report = Get-Content "$destination/verification.json" -Raw -Encoding UTF8 | ConvertFrom-Json
             if (-not $report.passed) { throw "$mode report failed" }
           }
