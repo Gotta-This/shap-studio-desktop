@@ -1,4 +1,4 @@
-# Read and write all packaged verification files with explicit UTF-8.
+# Use explicit UTF-8 and platform-independent content-sized scrollbar fixtures.
 name: Build verify and publish v1.0.37
 on:
   workflow_dispatch:

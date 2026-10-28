@@ -50,7 +50,10 @@ class LightThemeTests(unittest.TestCase):
             QTimer.singleShot(80,capture);self.w.parameter_menu()
             if errors:raise errors[0]
     def test_horizontal_and_vertical_scrollbars(self):
-        self.w.open_module('shap');table=self.w.data_table;APP.processEvents()
+        self.w.open_module('shap');table=self.w.data_table
+        # Content-sized columns can fit a wide viewport on Windows. Make the
+        # scrollbar fixture deliberately narrow, independent of platform fonts.
+        table.setFixedWidth(180);APP.processEvents();APP.processEvents()
         self.assertGreater(table.horizontalScrollBar().maximum(),0)
         for name,bar in [('horizontal',table.horizontalScrollBar()),('vertical',table.verticalScrollBar())]:
             pix=bar.grab();pix.save(str(self.out/(name+'-scrollbar.png')));self.light(pix)
