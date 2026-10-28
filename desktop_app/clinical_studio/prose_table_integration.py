@@ -31,6 +31,7 @@ def matching_document(path,names):
 class ProseTableWorkflow:
     def setup_prose_table(self):
         self.prose_table_editor=ProseTableEditor(embedded=True)
+        self.prose_table_editor.precision_mode=lambda:self.decimal_mode.currentData()
         self.prose_table_tab=self.pages.insertTab(self.PROSE_PAGE,scroll(self.prose_table_editor),'3 · 文字匹配')
         self.prose_table_editor.status.setPlainText('导入 Word 并确认组别后，匹配到的文字会在此转成可编辑竖表；也可直接粘贴文字识别。')
         self.inline_prose_active=False;self.matched_prose_document=None
@@ -42,6 +43,8 @@ class ProseTableWorkflow:
 
     def match_prose_table(self,names,imported):
         self.matched_prose_document=matching_document(self.pending_source,names) if names and self.use_word_prose.isChecked() else None
+        from .word_precision import prose_precision
+        prose_precision(self.matched_prose_document,self.decimal_mode.currentData())
         if self.matched_prose_document:
             s=self.matched_prose_document['studies'][0]
             for g in s['groups']:

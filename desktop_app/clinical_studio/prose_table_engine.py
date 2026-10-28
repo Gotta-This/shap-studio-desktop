@@ -32,6 +32,7 @@ def canonical(name):
     name = re.sub(r'^(?:其中|患者的?|其)', '', name)
     name = re.sub(r'(?:平均年龄|均龄)$', '年龄', name)
     name = re.sub(r'(?:为|平均|均值|均数)$', '', name)
+    if name in ('性别分布','性别构成'): name='性别'
     name = name.replace('APACHEII', 'APACHEⅡ').replace('APACHE2', 'APACHEⅡ')
     name = name.replace('PaO2/FiO2', '氧合指数').replace('PaO₂/FiO₂', '氧合指数')
     return name.strip('：:()（） ')
@@ -39,7 +40,8 @@ def canonical(name):
 
 def read_docx_text(path):
     """Read body prose only. A table is not mistaken for prose."""
-    with ZipFile(path) as archive:
+    from .word_formats import ensure_docx
+    with ZipFile(ensure_docx(path)) as archive:
         body = ET.fromstring(archive.read('word/document.xml')).find(W+'body')
     paragraphs = []
     def walk(node):
@@ -101,34 +103,40 @@ def parse_study(source, group_names=None):
             variables[name] = {'name': name, 'kind': kind, 'unit': unit, 'labels': [], 'cells': {}}
             study['variables'].append(variables[name])
         v = variables[name]
-        if v['kind'] != kind: study['issues'].append(name+'存在不同统计类型，请核对。')
+        if {v['kind'],kind}=={'range','mean_sd'}: v['kind']='mean_sd'
+        elif v['kind'] != kind: study['issues'].append(name+'存在不同统计类型，请核对。')
         if unit and v['unit'] and unit != v['unit']: study['issues'].append(name+'单位不一致，请核对。')
         if unit and not v['unit']: v['unit'] = unit
         return v
     def put(v, group, cell):
         old = v['cells'].get(group)
         if old is not None:
+            numeric_keys={'mean','sd','digits','lower','upper'}
+            old_values={k:w for k,w in old.items() if k not in ('evidence','issues')}
+            new_values={k:w for k,w in cell.items() if k not in ('evidence','issues')}
+            if set(old_values|new_values)<=numeric_keys and all(old_values[k]==new_values[k] for k in old_values.keys() & new_values.keys()):
+                old.update(new_values);old['evidence'].extend(cell['evidence']);old.setdefault('issues',[]).extend(cell.get('issues',[]));return
             if {k:w for k,w in old.items() if k not in ('evidence','issues')} != {k:w for k,w in cell.items() if k not in ('evidence','issues')}:
                 old.setdefault('issues', []).append('同一组指标出现多个不同值；请拆分研究或核对。')
                 old.setdefault('alternatives', []).append(cell)
             else: old['evidence'].extend(cell['evidence'])
         else: v['cells'][group] = cell
     # A concluding comparison may mention group names again; exclude it from data segments.
-    conclusion = re.search(r'两组(?:患者|在|上述|一般资料|比较|的)', text)
+    conclusion = re.compile(r'两组(?:患者|在|上述|一般资料|比较|的)').search(text,markers[0].end() if markers else 0)
     stop = conclusion.start() if conclusion else len(text)
     for i, marker in enumerate(markers):
         if marker.start() >= stop: continue
         end = min(markers[i+1].start() if i+1 < len(markers) else len(text), stop)
         a, b = marker.end(), end
         segment = text[a:b]; group = marker[0]; g = groups[group]
-        count = re.match(r'(?:共|纳入|为|各)?(\d+)例', segment)
+        count = re.match(r'\(?(?:共|纳入|为|各)?(\d+)例\)?', segment)
         if count:
             n = int(count[1]); g['evidence'].append(evidence(a, a+count.end()))
             if g['n'] is not None and g['n'] != n: g['issues'].append('原文组例数冲突')
             else: g.update(n=n, n_origin='reported')
             a += count.end(); segment = text[a:b]
         # Gender is a single categorical variable, even though the UI expands its levels.
-        sex = list(re.finditer(r'(男|女)(?:性)?(\d+)例', segment))
+        sex = list(re.finditer(r'(男|女)(?:性)?\(?(\d+)例\)?', segment))
         if sex:
             v = variable('性别', 'category', '例'); counts = {}
             for m in sex:
@@ -142,8 +150,8 @@ def parse_study(source, group_names=None):
         for local, clause in clauses(segment):
             start = a+local
             ev = evidence(start, start+len(clause))
-            if not clause: continue
-            if re.fullmatch(r'[,，、]*(?:(?:男|女)(?:性)?\d+例[,，、]*)+', clause): continue
+            if not clause.strip('，,、和及与()（）:：'): continue
+            if re.fullmatch(r'(?:性别(?:分布|构成)?[:：]?)?[,，、]*(?:(?:男|女)(?:性)?\(?\d+例\)?[,，、]*)+', clause): continue
             if re.fullmatch(r'[,，]*\d+例[,，]*', clause): continue
             # Named categorical section, e.g. 部位:双侧24例、单侧6例.
             cat = re.match(r'([^:：]+)[:：](.+)', clause) or re.match(r'(呼吸衰竭类型|机械通气方式)(.+)',clause)
@@ -152,7 +160,7 @@ def parse_study(source, group_names=None):
                 if entries:
                     v = variable(cat[1], 'category', '例'); counts = {}
                     for m in entries:
-                        label = m[1].strip()
+                        label = m[1].strip('()（） ')
                         if label in counts: study['issues'].append(v['name']+'类别重复，请核对。')
                         counts[label] = int(m[2])
                         if label not in v['labels']: v['labels'].append(label)
@@ -170,18 +178,24 @@ def parse_study(source, group_names=None):
                 if pair and range_match and range_match.start() < pair.start(): prefix=clause[:range_match.start()]
                 prefix = re.split('[,，]', prefix)[-1]
                 if prefix in ('平均','均龄','平均年龄'): prefix='年龄'
+                # A trailing ‘平均’ belongs to the named indicator in this
+                # clause, rather than defaulting every such summary to age.
+                named=re.match(r'(年龄|病程)',clause)
+                if named:prefix=named[1]
                 name = canonical(prefix)
                 if not name:
                     study['unparsed'].append(dict(ev,reason='数值缺少明确指标名称')); continue
                 suffix = clause[value.end():].lstrip(')）')
-                unit = re.match(r'(kg/m[²2]|mmHg|岁|月|分|h|天|小时|%|mg/L|mmol/L)', suffix, re.I)
+                unit = re.match(r'(kg/m[²2]|mmHg|岁|个月|月|年|分|h|天|小时|%|mg/L|mmol/L)', suffix, re.I)
                 unit = unit[1].replace('kg/m2','kg/m²') if unit else ''
                 kind = 'mean_sd' if pair else 'quantile' if quant else 'range'
                 v = variable(name,kind,unit)
                 cell = {'evidence':[ev], 'issues':[]}
                 if pair: cell.update(mean=float(pair[1]),sd=float(pair[2]),digits=max(decimal_digits(pair[1]),decimal_digits(pair[2])))
                 elif quant: cell.update(median=float(quant[1]),q1=float(quant[2]),q3=float(quant[3]),digits=max(decimal_digits(quant[j]) for j in (1,2,3)))
-                if range_match: cell.update(lower=float(range_match[1]),upper=float(range_match[2]))
+                bounds=reported_bounds(clause,unit)
+                if bounds:cell.update(lower=bounds[0],upper=bounds[1])
+                elif range_match: cell.update(lower=float(range_match[1]),upper=float(range_match[2]))
                 if name=='年龄' and unit=='岁' and pair and cell['mean'].is_integer() and cell['sd'].is_integer():cell['digits']=0
                 put(v,group,cell)
                 # Any additional numeric summary in one clause needs review, not silent omission.
@@ -217,6 +231,23 @@ def parse_study(source, group_names=None):
     if total:
         study['reported_total']=int(total[1])
     return study
+
+
+def reported_bounds(clause,target_unit):
+    units=r'(岁|年|个月|月|天|小时|h)'
+    match=re.search(r'('+NUM+r')'+units+r'?(?:[～~—–至-])('+NUM+r')'+units,clause)
+    if not match:
+        match=re.search(r'(?:最小和最大|最小、最大|最小与最大)(?:分别|分别为|为)?('+NUM+r')'+units+r'[、,，]('+NUM+r')'+units,clause)
+    if not match:return None
+    lower,low_unit,upper,high_unit=match.groups()
+    low_unit=low_unit or high_unit
+    factors={'年':12.,'个月':1.,'月':1.}
+    def convert(value,unit):
+        if unit==target_unit:return float(value)
+        if unit in factors and target_unit in factors:return float(value)*factors[unit]/factors[target_unit]
+        return None
+    lo,hi=convert(lower,low_unit),convert(upper,high_unit)
+    return (lo,hi) if lo is not None and hi is not None else None
 
 
 def decimal_digits(value): return len(value.split('.')[1]) if '.' in value else 0

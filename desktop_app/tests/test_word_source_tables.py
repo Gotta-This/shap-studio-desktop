@@ -70,6 +70,7 @@ class SourceTablesTests(unittest.TestCase):
   entries=list(self.tool.source_tables.numeric_inputs[(1,0)].values());self.assertEqual(len({entry.mapTo(panel,entry.rect().topLeft()).y() for entry in entries}),1)
   self.assertFalse(any('参数已填写' in label.text() or '仅应用于本行' in label.text() for label in panel.findChildren(QLabel)))
   self.assertLess(table.rowHeight(0),100)
+  self.assertGreaterEqual(table.columnWidth(3),panel.minimumSizeHint().width())
  def test_column_widths_follow_content_and_viewport(self):
   from PySide6.QtWidgets import QTableWidgetItem,QWidget,QComboBox,QHBoxLayout
   from clinical_studio.word_source_tables import SourceTable,HEADERS

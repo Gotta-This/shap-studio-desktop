@@ -34,7 +34,7 @@ def verify_table_types(window,directory):
         while tool.is_running() and time.monotonic()<end:app.processEvents();time.sleep(.01)
         app.processEvents();check('后台任务完成',not tool.is_running())
     try:
-        window.timer.stop();tool=window.open_module('word');tool.use_word_sizes.setChecked(True)
+        window.timer.stop();tool=window.open_module('word');tool.decimal_mode.setCurrentIndex(tool.decimal_mode.findData('source'));tool.use_word_sizes.setChecked(True)
         load('phased.docx',[[('项目',1),('试验组(n=59)',2),('对照组(n=59)',2)],['项目','治疗前','治疗后','治疗前','治疗后'],['头晕目眩','4.09±0.64','1.49±0.35*','4.15±0.60','2.39±0.25*']],['试验组','对照组'])
         check('前后表按项目展开两列',{f['name'] for f in tool.typed_specs}=={'前-头晕目眩','后-头晕目眩'})
         tool.generate_button.click();wait();check('前后表生成118例',tool.result is not None and len(tool.result['rows'])==118)
@@ -156,6 +156,17 @@ def verify_table_types(window,directory):
         for key,text in [('mean','16.76'),('sd','3.63')]:QTest.keyClicks(panel.numeric_inputs[(1,1)][key],text)
         app.processEvents();check('第二行补全后各行独立确认',all(f['confirmed'] for f in tool.typed_specs) and tool.typed_specs[0]['mean']==22.44 and tool.typed_specs[1]['mean']==16.76)
         tool.generate_button.click();wait();check('两行各自补全后生成50例',tool.result is not None and len(tool.result['rows'])==50)
+        row_phase_path=root/'row-phases.docx'
+        rows=[['组别','n','','腹痛发作频率（次/周）','VAS评分（分）'],
+            [dict(text='对照组',vmerge='restart'),dict(text='54',vmerge='restart'),'治疗前','8.93±2.51','5.87±1.42'],
+            [dict(text='',vmerge='continue'),dict(text='',vmerge='continue'),'治疗后','3.65±1.46*','2.94±1.13*'],
+            [dict(text='观察组',vmerge='restart'),dict(text='54',vmerge='restart'),'治疗前','9.07±2.43','5.91±1.28'],
+            [dict(text='',vmerge='continue'),dict(text='',vmerge='continue'),'治疗后','2.04±0.94*△','1.62±0.78*△']]
+        save_fixture(row_phase_path,[rows]);tool.import_word(row_phase_path);tool.show_group_selection(['对照组','观察组']);tool.confirm_groups();app.processEvents()
+        config=tool.get_config();check('纵向合并组别和例数的前后分行表识别8个字段',len(config['typed_fields'])==8 and [g['n'] for g in config['groups']]==[54,54])
+        check('观察组治疗后VAS均数标准差正确',any(f['name']=='治疗后-VAS评分（分）' and f['group']=='观察组' and f['mean']==1.62 and f['sd']==.78 for f in config['typed_fields']))
+        tool.pages.setCurrentIndex(tool.TABLE_PAGE);app.processEvents();window.grab().save(str(root/'row-phases-preview.png'))
+        tool.generate_button.click();wait();check('治疗前后分行表生成108例',tool.result is not None and len(tool.result['rows'])==108)
         report=dict(passed=True,checks=checks)
     except Exception:report=dict(passed=False,checks=checks,traceback=traceback.format_exc())
     finally:QFileDialog.getSaveFileName=old_save

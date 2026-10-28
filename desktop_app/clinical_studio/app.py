@@ -66,7 +66,7 @@ class FeatureEditor(QWidget):
         left=QWidget(); ll=QVBoxLayout(left); ll.setContentsMargins(0,0,10,0)
         ll.addWidget(QLabel("输入特征")); self.list=QListWidget(); ll.addWidget(self.list)
         buttons=QHBoxLayout(); self.add_button=QPushButton("添加特征"); remove=QPushButton("删除")
-        buttons.addWidget(self.add_button); buttons.addWidget(remove); ll.addLayout(buttons)
+        buttons.addWidget(remove); buttons.addWidget(self.add_button); ll.addLayout(buttons)
         order_buttons=QHBoxLayout(); up=QPushButton("上移"); down=QPushButton("下移")
         order_buttons.addWidget(up); order_buttons.addWidget(down); ll.addLayout(order_buttons)
         up.clicked.connect(lambda:self.move_feature(-1)); down.clicked.connect(lambda:self.move_feature(1))

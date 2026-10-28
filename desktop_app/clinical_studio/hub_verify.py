@@ -76,7 +76,7 @@ class SuiteVerifier:
         (self.root/'four_module_verification.json').write_text(json.dumps(dict(passed=passed,time=datetime.now().isoformat(),checks=self.checks,events=self.events),ensure_ascii=False,indent=2),encoding='utf-8')
 
     def enter(self,key):
-        if self.hub.current_module is not None:self.click(self.hub.home_button)
+        if self.hub.board_index!=0:self.click(self.hub.home_button)
         self.click(self.hub.launch_buttons[key])
         self.check('独立入口：'+key,self.hub.current_module==key)
         return self.hub.modules[key]

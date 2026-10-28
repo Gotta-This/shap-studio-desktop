@@ -32,6 +32,8 @@ def fields_for_groups(path,names,titles):
 
 
 def scan_word(path):
+    from .word_formats import ensure_docx
+    path=ensure_docx(path)
     # Use the same validity and size checks as a normal import.
     read_word(path,[],parse_indicators=False)
     with ZipFile(path) as archive:body=ET.fromstring(archive.read('word/document.xml')).find(W+'body')

@@ -14,7 +14,7 @@ APP=QApplication.instance() or QApplication([])
 
 class MixedSourceTests(unittest.TestCase):
     def setUp(self):
-        self.tmp=tempfile.TemporaryDirectory();self.root=Path(self.tmp.name);self.t=WordBatchTool();self.t.show()
+        self.tmp=tempfile.TemporaryDirectory();self.root=Path(self.tmp.name);self.t=WordBatchTool();self.t.use_word_prose.setChecked(True);self.t.show()
         self.path=self.root/'mixed.docx';make_docx(self.path,SECOND,table=True);self.load()
     def tearDown(self):self.t.close();self.t.deleteLater();APP.processEvents();self.tmp.cleanup()
     def load(self):

@@ -36,7 +36,7 @@ def verify_groups(window,directory):
                     cell=ET.SubElement(row,W+'tc');p=ET.SubElement(cell,W+'p');r=ET.SubElement(p,W+'r');ET.SubElement(r,W+'t').text=value
         source=root/'synthetic-groups.docx'
         with ZipFile(source,'w') as z:z.writestr('word/document.xml',ET.tostring(doc))
-        window.timer.stop();tool=window.open_module('word');pump()
+        window.timer.stop();tool=window.open_module('word');tool.decimal_mode.setCurrentIndex(tool.decimal_mode.findData('source'));pump()
         QFileDialog.getOpenFileName=lambda *a,**kw:(str(source),'Word');tool.import_button.click();pump()
         check('导入后先填写组别且不自动解析指标',tool.group_panel.isVisible() and not tool.groups_confirmed and tool.metrics.rowCount()==0)
         check('导入自动填入全部候选组别',[e.text() for e in tool.group_inputs]==names)

@@ -39,7 +39,7 @@ def prose_document(path,n=25,bmi=22.8,bad_age=False,bad_counts=False,table=False
 class WordProseTests(unittest.TestCase):
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory();self.path=Path(self.tmp.name)/'prose.docx'
-        self.w=DesktopWindow();self.w.timer.stop();self.w.show();self.t=self.w.open_module('word');APP.processEvents()
+        self.w=DesktopWindow();self.w.timer.stop();self.w.show();self.t=self.w.open_module('word');self.t.decimal_mode.setCurrentIndex(self.t.decimal_mode.findData('source'));self.t.use_word_prose.setChecked(True);APP.processEvents()
     def tearDown(self):self.w.close();self.w.deleteLater();APP.processEvents();self.tmp.cleanup()
     def import_prose(self,**kwargs):
         prose_document(self.path,**kwargs);t=self.t;t.use_word_sizes.setChecked(True)

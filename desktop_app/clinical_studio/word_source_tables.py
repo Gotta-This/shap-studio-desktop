@@ -30,7 +30,7 @@ class SourceTable(QTableWidget):
                 if combo:types=max(types,combo.fontMetrics().horizontalAdvance(combo.currentText())+62)
                 cell=self.cellWidget(row,3)
                 if cell:
-                    minimum=int(cell.property('ruleMinimumWidth') or 300)
+                    minimum=max(int(cell.property('ruleMinimumWidth') or 300),cell.minimumSizeHint().width())
                     rule=max(rule,minimum)
                     summary=cell.findChild(QLabel,'rule-summary')
                     desired=min(680,summary.fontMetrics().horizontalAdvance(summary.text())+155) if summary else minimum+72

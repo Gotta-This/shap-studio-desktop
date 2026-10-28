@@ -18,7 +18,7 @@ from .config import ROOT,PLOT_NAMES
 from .editor_dialogs import EditorDialog
 
 PLOT_ORDER=['bar','summary','force','waterfall','dependence_protective','dependence_risk']
-KEY_FOR_BOARD={0:None,1:'category',2:'numeric',3:'word',4:'shap',5:'shap',6:'shap',7:'shap',8:None}
+KEY_FOR_BOARD={0:None,1:'category',2:'numeric',3:'word',4:'shap',5:'shap',6:'shap',7:'shap',8:None,9:None}
 
 
 def set_field(field,value):
@@ -127,7 +127,7 @@ class DesktopWindow(QMainWindow):
         self.initial_config=deepcopy(config);self.initial_output=output
         self.modules={};self.module_pages={};self.boards={};self.views={};self.bindings={};self.current_module=None;self.board_index=0
         self.launch_buttons={};self.nav_buttons={};self.style_key='bar';self.image_index=0;self._last_state=None
-        self.stack=QStackedWidget();self.setCentralWidget(self.stack);self.show_board(0,commit=False)
+        self.stack=QStackedWidget();self.setCentralWidget(self.stack);self.show_board(0,commit=False);self.show_board(9,commit=False)
         self.timer=QTimer(self);self.timer.timeout.connect(self.refresh);self.timer.start(200)
 
     def controller(self,key):
@@ -181,16 +181,16 @@ class DesktopWindow(QMainWindow):
         if key:self.controller(key)
         if index not in self.boards:
             board=DesignBoard(index);self.boards[index]=board;self.build_shell(board)
-            getattr(self,'build_'+['home','category','numeric','word','data','model','style','results','system'][index])(board)
+            getattr(self,'build_'+['home','category','numeric','word','data','model','style','results','system','todos'][index])(board)
             view=DesignView(board);self.views[index]=view;self.stack.addWidget(view)
             if key and key not in self.module_pages:self.module_pages[key]=board
         self.board_index=index;self.current_module=key;self.stack.setCurrentWidget(self.views[index])
         if index==6:
             editor=self.style_editor();editor.selector.setCurrentIndex(editor.selector.findData(self.style_key))
         self.home_button=self.boards[index].controls['nav-home']
-        self.nav_buttons={None:self.home_button,**{k:self.boards[index].controls['nav-'+k] for k in ('category','numeric','word','shap')}}
+        self.nav_buttons={None:self.home_button,'todo':self.boards[index].controls['nav-todo'],**{k:self.boards[index].controls['nav-'+k] for k in ('category','numeric','word','shap')}}
         for name,button in self.nav_buttons.items():
-            button.setChecked(name==key);button.clearFocus()
+            button.setChecked(index==9 if name=='todo' else index==0 if name is None else name==key);button.clearFocus()
         self.setWindowTitle(self.boards[index].spec['name'].split(' · ',1)[-1]+' · 科研数据工具集')
         self._last_state=None;self.refresh(force=True)
 
@@ -208,11 +208,19 @@ class DesktopWindow(QMainWindow):
         footer.setWordWrap(True);footer.setAlignment(Qt.AlignLeft|Qt.AlignBottom)
         footer.setStyleSheet('QLabel{background:transparent;color:#738477;font-size:11px;line-height:140%;padding:0;}')
         b.place(footer,(20,b.height()-110,184,90),'sidebar-footer')
-        for i,(name,target) in enumerate([('home',0),('category',1),('numeric',2),('word',3),('shap',4)]):
-            button=b.hotspot((16,141+i*56,192,44),lambda checked=False,t=target:self.show_board(t),'nav-'+name)
-            button.setCheckable(True)
-            button.setStyleSheet('QPushButton{border:none;background:transparent;padding:0;} QPushButton:focus{border:none;outline:none;background:transparent;}')
-        if b.index:
+        # Replace the old painted sidebar with one consistent native hierarchy.
+        for shape in b.spec['shapes']:
+            if shape['x']<224 and 90<=shape['y']<767:b.hidden_shapes.add(shape['id'])
+        for name,text,y in [('space','我的空间',103),('tools','科研工具',266)]:
+            label=QLabel(text);label.setStyleSheet('color:#789187;background:transparent;font-size:11px;font-weight:600;')
+            b.place(label,(28,y,168,26),'sidebar-'+name)
+        divider=QFrame();divider.setStyleSheet('background:#DFEAE3;border:0;');b.place(divider,(28,250,168,1),'sidebar-divider')
+        from .sidebar import SidebarButton
+        entries=[('todo',9,'待办事项','todo',143),('home',0,'工作台','home',193),('category',1,'自定义类别数列','01',303),('numeric',2,'均数 / 标准差模拟','02',359),('word',3,'Word 转 Excel','03',415),('shap',4,'模拟数据生图','04',471)]
+        for name,target,label,mark,y in entries:
+            button=SidebarButton(label,mark);button.clicked.connect(lambda checked=False,t=target:self.show_board(t))
+            b.place(button,(16,y,192,44),'nav-'+name)
+        if b.index and b.index!=9:
             b.hotspot((1240,120,140,28),lambda:self.parameter_menu(),'all-parameters')
             b.controls['all-parameters'].setToolTip('全部参数、配置文件与更多操作')
         if b.index in (4,5,6,7):
@@ -222,6 +230,17 @@ class DesktopWindow(QMainWindow):
         for i,key in enumerate(('category','numeric','word','shap')):
             x=284+(i%2)*584;y=528+(i//2)*227
             self.launch_buttons[key]=b.hotspot((x,y,142,42),lambda checked=False,k=key:self.open_module(k),'launch-'+key)
+    def build_todos(self,b):
+        from .todo_ui import TodoPage
+        for shape in b.spec['shapes']:
+            if shape['x']>=224 and shape['y']>=76:b.hidden_shapes.add(shape['id'])
+        b.text(256,28,'dbq   /   待办事项')
+        self.todo_page=TodoPage();self.todo_page.setMinimumWidth(680)
+        from .resizable_fields import enable_content_scroll
+        self.todo_area=enable_content_scroll(self.todo_page)
+        b.place(self.todo_area,(260,108,1144,max(600,b.height()-76)),'todo-workflow')
+        self.todo_area.setGeometry(260,52,max(1,b.width()-296),max(600,b.height()-76))
+
     def build_system(self,b):pass
 
     def build_category(self,b):
@@ -660,9 +679,19 @@ class DesktopWindow(QMainWindow):
             for j,v in enumerate(row):table.setItem(i,j,QTableWidgetItem(str(v)))
         table.setProperty('snapshot',snapshot);table.blockSignals(False)
 
+    def refresh_todo_badges(self):
+        from .todos import TodoStore
+        try:count=len(TodoStore().visible())
+        except (ValueError,OSError):count=None
+        for board in self.boards.values():
+            button=board.controls.get('nav-todo')
+            if button is not None:button.set_count(count)
+
     def refresh(self,force=False):
         b=self.boards.get(self.board_index)
         if b is None:return
+        if self.board_index==9:self.todo_page.refresh_from_disk()
+        self.refresh_todo_badges()
         if self.board_index==6 and 'shap' in self.modules:
             editor=self.style_editor()
             index=editor.selector.findData(self.style_key)

@@ -17,7 +17,7 @@ def verify_ungrouped(window,directory):
         for _ in range(4):app.processEvents()
     report=dict(passed=False)
     try:
-        window.timer.stop();tool=window.open_module('word')
+        window.timer.stop();tool=window.open_module('word');tool.decimal_mode.setCurrentIndex(tool.decimal_mode.findData('source'))
         rows=[['项目','总体(n=20)'],['性别（男/女）','18(90)/2(10)'],['年龄（岁）','58.35±10.41'],['BMI（kg/m²）','23.85±2.74'],['合并高血压','7(35)']]
         path=save_fixture(root/'ungrouped.docx',[rows]);tool.import_word(path);pump()
         check('无组别文档直接识别四个字段',tool.word_scan['candidates']==[] and len(tool.preview_draft['fields'])==4)

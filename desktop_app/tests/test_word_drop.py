@@ -1,4 +1,4 @@
-"""Finder drag/drop rejects non-DOCX files and never replaces data without consent."""
+"""Finder drag/drop rejects non-Word files and never replaces data without consent."""
 import os,tempfile,unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -28,7 +28,7 @@ class WordDropTests(unittest.TestCase):
         event=QDropEvent(QPointF(8,8),Qt.CopyAction,mime,Qt.LeftButton,Qt.NoModifier)
         APP.sendEvent(target,event);APP.processEvents();return event
     def current(self):
-        t=self.t;t.import_word(self.first);t.show_group_selection(['对照组','试验组']);t.confirm_groups()
+        t=self.t;t.use_word_prose.setChecked(True);t.import_word(self.first);t.show_group_selection(['对照组','试验组']);t.confirm_groups()
         row=next(i for i,(vi,p,_) in enumerate(t.prose_table_editor.rows) if vi is not None and t.prose_table_editor.study()['variables'][vi]['name']=='BMI' and p=='summary')
         t.prose_table_editor.table.item(row,4).setText('24.5±3.1');t.result={'test':'generated data'}
     def test_first_drop_on_import_button_without_confirmation(self):
@@ -37,11 +37,25 @@ class WordDropTests(unittest.TestCase):
         self.assertTrue(event.isAccepted());confirm.assert_not_called()
         self.assertEqual(self.t.pending_source,str(self.first.resolve()))
     def test_rejects_other_types_multi_files_directories_remote_and_text(self):
-        for name in ('test.pdf','test.doc','test.xlsx','test.png'):(self.root/name).write_text('test')
-        for mime in [self.mime(self.root/'test.pdf'),self.mime(self.root/'test.doc'),self.mime(self.root/'test.xlsx'),self.mime(self.root/'test.png'),self.mime(self.first,self.second),self.mime(self.root),self.mime(QUrl('https://example.com/test.docx')),self.mime(self.root/'missing.docx')]:
+        for name in ('test.pdf','test.xlsx','test.png'):(self.root/name).write_text('test')
+        for mime in [self.mime(self.root/'test.pdf'),self.mime(self.root/'test.xlsx'),self.mime(self.root/'test.png'),self.mime(self.first,self.second),self.mime(self.root),self.mime(QUrl('https://example.com/test.docx')),self.mime(self.root/'missing.docx')]:
             self.assertFalse(self.enter(mime).isAccepted())
         text=QMimeData();text.setText('text');self.assertFalse(self.enter(text).isAccepted())
         self.assertFalse(self.t.prose_table_editor.source.acceptDrops())
+    def test_doc_extension_uses_same_import_and_confirmation(self):
+        self.t.use_word_prose.setChecked(True)
+        doc=self.root/'legacy.doc';doc.write_bytes(self.first.read_bytes())
+        self.assertTrue(self.enter(self.mime(doc)).isAccepted())
+        self.assertTrue(self.t.import_word(doc));self.assertEqual(self.t.pending_source,str(doc.resolve()))
+        self.t.show_group_selection(['对照组','试验组']);self.t.confirm_groups();APP.processEvents()
+        self.assertTrue(self.t.inline_prose_active)
+        self.assertEqual([g['n'] for g in self.t.get_config()['groups']],[25,25])
+        before=self.t.get_config()
+        corrupt=self.root/'corrupt.doc';corrupt.write_bytes(b'bad doc')
+        with patch('clinical_studio.word_formats.ensure_docx',side_effect=ValueError('转换失败')),patch.object(self.t,'confirm_word_replacement') as confirm:
+            self.assertFalse(self.t.import_word(corrupt,confirm_replace=True))
+        confirm.assert_not_called();self.assertEqual(self.t.get_config(),before)
+
     def test_cancel_preserves_current_word_edits_and_results(self):
         self.current();before=self.t.get_config();document=self.t.prose_table_editor.document;result=self.t.result
         with patch.object(self.t,'confirm_word_replacement',return_value=False) as confirm:

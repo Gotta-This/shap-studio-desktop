@@ -96,7 +96,7 @@ class StrictVerifier(SuiteVerifier):
         self.screenshot('设计还原_02_均数标准差');QTimer.singleShot(100,lambda:self.step(self.word))
 
     def word(self):
-        tool=self.enter('word');b=self.hub.boards[3]
+        tool=self.enter('word');tool.decimal_mode.setCurrentIndex(tool.decimal_mode.findData('source'));b=self.hub.boards[3]
         source=self.root/'工具3_测试Word.docx';make_word_fixture(source);self.save_dialog(b.controls['import-word'],source)
         tool.show_group_selection(['对照组','中药组']);tool.confirm_groups()
         self.hub.refresh(force=True)

@@ -32,7 +32,7 @@ class WordScanDialog(EditorDialog):
         self.raw=QTableWidget();self.raw.setEditTriggers(QTableWidget.NoEditTriggers);self.raw.setMinimumHeight(260);layout.addWidget(self.raw)
         self.inventory.currentCellChanged.connect(lambda row,*_:self.show_raw(row));self.tabs.addTab(scroll(overview),'表名与原表')
         self.fields=PreviewFields(draft['fields']);self.tabs.addTab(scroll(self.fields),'表格识别草稿')
-        self.prose=ProseTableEditor(embedded=True);self.prose.source.setPlainText(draft['prose_document']['source_text']);self.prose.document=deepcopy(draft['prose_document']);self.prose.stale=draft.get('prose_stale',False);self.prose.refresh_selector();self.tabs.addTab(scroll(self.prose),'文字识别草稿')
+        self.prose=ProseTableEditor(embedded=True);self.prose.precision_mode=lambda:parent.decimal_mode.currentData();self.prose.source.setPlainText(draft['prose_document']['source_text']);self.prose.document=deepcopy(draft['prose_document']);self.prose.stale=draft.get('prose_stale',False);self.prose.refresh_selector();self.tabs.addTab(scroll(self.prose),'文字识别草稿')
         text=QPlainTextEdit();text.setReadOnly(True);text.setPlainText(scan['prose_text']);self.tabs.addTab(text,'完整正文')
         self.add_buttons('保存预览草稿','取消')
         if scan['tables']:self.inventory.setCurrentCell(0,0);self.show_raw(0)

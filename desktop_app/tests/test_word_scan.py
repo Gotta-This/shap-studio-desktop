@@ -74,12 +74,12 @@ class WordScanTests(unittest.TestCase):
     def test_text_only_word_is_recognized_before_confirmation_and_edits_carry(self):
         root=ET.Element(W+'document');body=ET.SubElement(root,W+'body');ET.SubElement(ET.SubElement(ET.SubElement(body,W+'p'),W+'r'),W+'t').text=PROSE
         with ZipFile(self.path,'w') as z:z.writestr('word/document.xml',ET.tostring(root))
-        t=self.tool;t.import_word(self.path);draft=t.preview_draft['prose_document'];self.assertTrue(draft['studies'][0]['variables'])
+        t=self.tool;t.use_word_prose.setChecked(True);t.import_word(self.path);draft=t.preview_draft['prose_document'];self.assertTrue(draft['studies'][0]['variables'])
         v=next(v for v in draft['studies'][0]['variables'] if v['name']=='BMI');v['cells']['对照组']['mean']=24.5
         t.use_candidate_groups();t.confirm_groups();self.assertTrue(t.groups_confirmed,t.message.text())
         v=next(v for v in t.prose_table_editor.study()['variables'] if v['name']=='BMI');self.assertEqual(v['cells']['对照组']['mean'],24.5)
     def test_stale_preview_prose_blocks_confirmation_without_discarding_draft(self):
-        t=self.tool;t.import_word(self.path);t.preview_draft['prose_document']['source_text']='尚未重新识别的文字';t.preview_draft['prose_stale']=True
+        t=self.tool;t.use_word_prose.setChecked(True);t.import_word(self.path);t.preview_draft['prose_document']['source_text']='尚未重新识别的文字';t.preview_draft['prose_stale']=True
         t.use_candidate_groups();t.confirm_groups();self.assertFalse(t.groups_confirmed);self.assertIn('重新识别',t.message.text())
     def test_new_document_clears_old_draft_and_unknown_groups_still_show_raw_table(self):
         t=self.tool;t.import_word(self.path);t.preview_draft['fields'][0]['name']='旧草稿'

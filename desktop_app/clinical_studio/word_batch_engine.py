@@ -113,9 +113,9 @@ def read_word(path, groups=None, *, parse_indicators=True):
     groups=list(GROUPS) if groups is None else list(groups)
     if groups:groups=group_names(groups)
     elif parse_indicators:raise ValueError('请先填写并确认组别。')
-    path = Path(path)
-    if path.suffix.lower() != '.docx':
-        raise ValueError('请选择 .docx 文件；旧版 .doc 请先另存为 .docx。')
+    original_path=Path(path).resolve()
+    from .word_formats import ensure_docx
+    path=ensure_docx(original_path)
     try:
         with ZipFile(path) as archive:
             info = archive.getinfo('word/document.xml')
@@ -221,7 +221,7 @@ def read_word(path, groups=None, *, parse_indicators=True):
     messages.append('正文一般资料按固定句式识别；未识别的基本资料仍需人工配置，不能视为Word中的参数。')
     messages.append('各指标按列独立模拟，不还原病例配对、相关性或原文检验结果。')
     messages.extend(table_issues)
-    return ImportResult(indicators, sizes, rates, messages, str(path.resolve()), len(tables), group_matches, table_matches,general_groups,text_group_matches,typed_fields,table_issues,baseline_columns)
+    return ImportResult(indicators, sizes, rates, messages, str(original_path), len(tables), group_matches, table_matches,general_groups,text_group_matches,typed_fields,table_issues,baseline_columns)
 
 
 def default_batch_config(groups=GROUPS):

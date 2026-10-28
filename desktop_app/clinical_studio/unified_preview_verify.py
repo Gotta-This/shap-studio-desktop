@@ -42,7 +42,7 @@ def verify_unified_preview(window,directory):
             p=ET.Element(W+'p');ET.SubElement(ET.SubElement(p,W+'r'),W+'t').text=f'表{i} 导入预览示例';body.insert(list(body).index(table),p)
         p=ET.SubElement(body,W+'p');ET.SubElement(ET.SubElement(p,W+'r'),W+'t').text='对照组20例，BMI（22.8±3.1）kg/m²；试验组20例，BMI（22.5±2.9）kg/m²。'
         with ZipFile(path,'w') as archive:archive.writestr('word/document.xml',ET.tostring(document))
-        tool=window.open_module('word');tool.use_word_sizes.setChecked(True);tool.import_word(path);pump()
+        tool=window.open_module('word');tool.use_word_prose.setChecked(True);tool.decimal_mode.setCurrentIndex(tool.decimal_mode.findData('source'));tool.use_word_sizes.setChecked(True);tool.import_word(path);pump()
         check('未确认组别已扫描四表与正文',not tool.groups_confirmed and len(tool.word_scan['tables'])==4 and bool(tool.preview_draft['fields']) and bool(tool.preview_draft['prose_document']['studies'][0]['variables']))
         check('候选组别不自动确认',[e.text() for e in tool.group_inputs]==['对照组','试验组'] and not tool.generate_button.isEnabled() and not tool.typed_specs)
         window.grab().save(str(root/'word-unconfirmed.png'))

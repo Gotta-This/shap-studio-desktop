@@ -78,7 +78,7 @@ class EditableRows(QWidget):
     def __init__(self,title,headers,rows):
         super().__init__();layout=QVBoxLayout(self);layout.setContentsMargins(0,0,0,0);layout.setSpacing(8)
         actions=QHBoxLayout();label=QLabel(title);label.setStyleSheet('font-weight:600;');actions.addWidget(label);actions.addStretch()
-        button('＋ 添加',lambda:self.add(['']*len(headers)),actions);button('删除选中行',self.remove,actions);layout.addLayout(actions)
+        button('删除选中行',self.remove,actions);button('＋ 添加',lambda:self.add(['']*len(headers)),actions);layout.addLayout(actions)
         self.table=QTableWidget(0,len(headers));self.table.setItemDelegate(CellEditorDelegate(self.table))
         self.table.setHorizontalHeaderLabels(headers);self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.table.horizontalHeader().setFixedHeight(34);self.table.verticalHeader().setDefaultSectionSize(36);self.table.verticalHeader().setMinimumSectionSize(36)
@@ -179,12 +179,12 @@ class WordBatchTool(ProseTableWorkflow,TypedFieldControls,QWidget):
         self.setObjectName('word-workflow');self.setAttribute(Qt.WA_StyledBackground,True);self.setStyleSheet(WORD_STYLE)
         layout=QVBoxLayout(self);layout.setContentsMargins(0,0,0,0);layout.setSpacing(10)
         toolbar=QWidget();toolbar.setObjectName('wordToolbar');top=QVBoxLayout(toolbar);top.setContentsMargins(12,10,12,10);top.setSpacing(8);layout.addWidget(toolbar)
-        row=QHBoxLayout();self.import_button=button('导入 Word（.docx）',self.pick_word,row)
+        row=QHBoxLayout();self.import_button=button('导入 Word（.doc / .docx）',self.pick_word,row)
         self.prose_table_button=button('正文转竖表',self.open_prose_table,row)
         self.load_button=button('载入配置',self.load_config,row);self.save_button=button('保存配置',self.save_config,row);self.change_groups_button=button('修改组别',self.edit_groups,row);self.change_groups_button.hide();row.addStretch();top.addLayout(row)
         options=QHBoxLayout();self.use_word_sizes=QCheckBox('采用 Word 表中的例数');self.use_word_rates=QCheckBox('采用 Word 表中的有效／复发比例');options.addWidget(self.use_word_sizes);options.addWidget(self.use_word_rates);options.addStretch();top.addLayout(options)
         self.use_word_sizes.setText('采用 Word 中的例数')
-        self.use_word_prose=QCheckBox('采用正文一般资料');self.use_word_prose.setChecked(True);options.insertWidget(2,self.use_word_prose)
+        self.use_word_prose=QCheckBox('采用正文一般资料');self.use_word_prose.setChecked(False);options.insertWidget(2,self.use_word_prose)
         self.leave_unknown_blank=QCheckBox('未识别的基础字段留空');self.leave_unknown_blank.setChecked(False);self.leave_unknown_blank.setToolTip('可选：勾选后将未从Word识别的基础字段留空；默认使用可编辑的基础资料规则生成。');options.insertWidget(3,self.leave_unknown_blank)
         self.prose_sources={};self.prose_issues=[];self.detected_basics={};self.imported_basics={}
         self.include_basics=QCheckBox('包含基础资料与结局列');self.include_basics.setChecked(True);options.insertWidget(4,self.include_basics)
@@ -214,6 +214,7 @@ class WordBatchTool(ProseTableWorkflow,TypedFieldControls,QWidget):
         self.seed=QLineEdit('12');self.unit=QLineEdit('月');self.seed.setFixedWidth(100);self.unit.setFixedWidth(80)
         self.seed.setToolTip('相同参数和随机种子会生成相同序列；修改种子可生成另一份模拟数据。固定种子用于重复核对。')
         seedrow=QHBoxLayout();seedrow.addWidget(QLabel('随机种子'));seedrow.addWidget(self.seed);seedrow.addSpacing(16);seedrow.addWidget(QLabel('病程单位'));seedrow.addWidget(self.unit);seedrow.addStretch();seedrow.addWidget(self.shared_basics);base_layout.addLayout(seedrow)
+        precisionrow=QHBoxLayout();precisionrow.addWidget(QLabel('小数位配置'));self.decimal_mode=QComboBox();self.decimal_mode.addItem('跟随数据配置','source');self.decimal_mode.addItem('默认为0','zero');self.decimal_mode.setCurrentIndex(1);self.decimal_mode.setMinimumWidth(180);self.decimal_mode.setToolTip('用于新识别的表格、文字中的均数生成字段；各行小数位仍可单独修改，已有规则不会被刷新覆盖。');precisionrow.addWidget(self.decimal_mode);precisionrow.addStretch();base_layout.addLayout(precisionrow);self.decimal_mode.currentIndexChanged.connect(self.recognition_precision_changed)
         selectrow=QHBoxLayout();selectrow.addWidget(QLabel('配置组别'));self.group_selector=QComboBox();self.group_selector.setMinimumWidth(220);self.group_selector.setMaximumWidth(380);selectrow.addWidget(self.group_selector);selectrow.addSpacing(16);self.group_count_stack=QStackedWidget();self.group_count_stack.setMaximumHeight(40);self.group_count_stack.setMaximumWidth(220);selectrow.addWidget(self.group_count_stack);selectrow.addStretch();base_layout.addLayout(selectrow)
         self.common_n.valueChanged.connect(self.sync_group_controls);self.same_size.toggled.connect(self.sync_group_controls);self.shared_basics.toggled.connect(self.sync_group_controls)
         self.leave_unknown_blank.toggled.connect(self.sync_group_controls)
@@ -241,7 +242,7 @@ class WordBatchTool(ProseTableWorkflow,TypedFieldControls,QWidget):
             ml.removeWidget(control);control.setParent(self.table_storage)
         from .word_source_tables import WordSourceTables
         self.source_tables=WordSourceTables(self);ml.addWidget(self.source_tables)
-        row=QHBoxLayout();button('＋ 添加指标（全部组别）',self.add_indicator,row);button('删除选中的指标（全部组别）',self.remove_indicator,row);row.addStretch();ml.addLayout(row)
+        row=QHBoxLayout();button('删除选中的指标（全部组别）',self.remove_indicator,row);button('＋ 添加指标（全部组别）',self.add_indicator,row);row.addStretch();ml.addLayout(row)
         review_link=QPushButton('查看全部输出字段及来源');review_link.clicked.connect(lambda:self.pages.setCurrentIndex(self.SOURCES_PAGE));ml.insertWidget(1,review_link)
         self.pages.addTab(scroll(metrics),'2 · 表格匹配')
         self.log=QPlainTextEdit();self.log.setReadOnly(True);self.log.setPlainText('导入后显示识别报告。基本资料的初始比例为示例，请核对后生成。')
@@ -404,6 +405,7 @@ class WordBatchTool(ProseTableWorkflow,TypedFieldControls,QWidget):
             config['typed_fields']=deepcopy(self.typed_specs);config['include_basics']=self.include_basics.isChecked()
             if self.ungrouped:config['ungrouped']=True
             if self.table_titles:config['table_titles']=deepcopy(self.table_titles)
+            config['import_options']['decimal_mode']=self.decimal_mode.currentData()
             config['import_options']['prose']=self.use_word_prose.isChecked()
             config['import_options']['leave_unknown_blank']=self.leave_unknown_blank.isChecked()
             if self.leave_unknown_blank.isChecked():
@@ -429,7 +431,7 @@ class WordBatchTool(ProseTableWorkflow,TypedFieldControls,QWidget):
         except (ValueError,TypeError,KeyError) as exc:
             self.rule_table.setRowCount(0);self.rule_note.setText('请补全当前配置后核对：'+str(exc))
     def pick_word(self):
-        path,_=QFileDialog.getOpenFileName(self,'选择 Word 汇总表','','Word (*.docx)')
+        path,_=QFileDialog.getOpenFileName(self,'选择 Word 汇总表','','Word (*.docx *.doc)')
         if path:self.import_word(path,confirm_replace=True)
     def add_group_input(self,name=''):
         if len(self.group_inputs)>=20:
@@ -437,7 +439,7 @@ class WordBatchTool(ProseTableWorkflow,TypedFieldControls,QWidget):
         if not isinstance(name,str):name=''
         row=QWidget();row.setFixedHeight(44);line=QHBoxLayout(row);line.setContentsMargins(0,0,0,0)
         entry=QLineEdit(name);entry.setFixedHeight(40);entry.setPlaceholderText('填写Word中的组别原名，如观察组、常规治疗组');line.addWidget(entry,1)
-        remove=QPushButton('删除');remove.setFixedHeight(40);line.addWidget(remove)
+        remove=QPushButton('删除');remove.setFixedHeight(40);line.insertWidget(0,remove)
         self.group_rows_layout.addWidget(row);self.group_inputs.append(entry);self.resize_group_inputs()
         def drop():
             self.group_inputs.remove(entry);self.group_rows_layout.removeWidget(row);row.deleteLater();self.resize_group_inputs();self.match_groups()
@@ -473,15 +475,15 @@ class WordBatchTool(ProseTableWorkflow,TypedFieldControls,QWidget):
         for child in self.findChildren(QWidget):child.setAcceptDrops(False)
         self.setAcceptDrops(True)
         self.import_button.setAcceptDrops(True);self.import_button.installEventFilter(self)
-        self.import_button.setText('导入 / 拖入 Word（.docx）')
-        self.import_button.setToolTip('可拖入一个本地 .docx 文件；替换已有 Word 前会确认清除旧数据。')
+        self.import_button.setText('导入 / 拖入 Word（.doc / .docx）')
+        self.import_button.setToolTip('可拖入一个本地 .doc 或 .docx 文件；替换已有 Word 前会确认清除旧数据。')
 
     def dropped_word_path(self,mime):
         if self.is_running() or self._queued_word_path is not None or self._drop_in_progress or not mime.hasUrls():return None
         urls=mime.urls()
         if len(urls)!=1 or not urls[0].isLocalFile():return None
         path=Path(urls[0].toLocalFile())
-        return path if path.suffix.lower()=='.docx' and path.is_file() else None
+        return path if path.suffix.lower() in ('.doc','.docx') and path.is_file() else None
 
     def handle_word_drag(self,event):
         path=self.dropped_word_path(event.mimeData())
@@ -523,7 +525,8 @@ class WordBatchTool(ProseTableWorkflow,TypedFieldControls,QWidget):
         try:
             imported=read_word(path,[],parse_indicators=False)
             from .word_scan import scan_word
-            scanned=scan_word(path)
+            from .word_precision import scan_precision
+            scanned=scan_precision(scan_word(path),self.decimal_mode.currentData())
             if confirm_replace and (self.source or self.pending_source or self.result is not None or self.prose_table_editor.document):
                 if not self.confirm_word_replacement(path):return False
             self.reuse_group_settings=not bool(self.source or self.pending_source)
@@ -570,6 +573,8 @@ class WordBatchTool(ProseTableWorkflow,TypedFieldControls,QWidget):
         fields,_,issues=scan_ungrouped(deepcopy(self.word_scan['tables']),n)
         if not fields:raise ValueError('当前未识别到可用的无分组竖表，请先核对原表。')
         imported=ImportResult([],{}, {},[],self.pending_source,len(self.word_scan['tables']),typed_fields=fields)
+        from .word_precision import fields_precision
+        fields_precision(imported.typed_fields,self.decimal_mode.currentData())
         apply_preview_fields(imported,self.word_scan,self.preview_draft,[DATASET])
         self.ungrouped=True;self.rule_table.horizontalHeaderItem(1).setText('数据集');groups=default_batch_config([DATASET])['groups'];groups[0]['n']=n
         self.reset_prose_table();self.prose_sources={};self.prose_issues=[];self.detected_basics={};self.imported_basics={}
@@ -618,7 +623,8 @@ class WordBatchTool(ProseTableWorkflow,TypedFieldControls,QWidget):
             self.match_prose_table(filled,imported)
             if filled and self.word_scan:
                 from .word_scan import fields_for_groups
-                fresh=fields_for_groups(self.pending_source,filled,self.table_titles)
+                from .word_precision import fields_precision
+                fresh=fields_precision(fields_for_groups(self.pending_source,filled,self.table_titles),self.decimal_mode.currentData())
                 known={f['_preview_key'] for f in self.word_scan['fields']}
                 added=[field for field in fresh if field['_preview_key'] not in known]
                 self.word_scan['fields']+=deepcopy(added);self.preview_draft['fields']+=deepcopy(added)
@@ -647,6 +653,8 @@ class WordBatchTool(ProseTableWorkflow,TypedFieldControls,QWidget):
             self.ungrouped=False;self.include_basics.setEnabled(True)
             imported=read_word(self.pending_source,names)
             from .word_scan import apply_preview_fields,preview_prose
+            from .word_precision import fields_precision
+            fields_precision(imported.indicators,self.decimal_mode.currentData());fields_precision(imported.typed_fields,self.decimal_mode.currentData())
             apply_preview_fields(imported,self.word_scan,self.preview_draft,names)
             prose_document=(preview_prose(self.word_scan,self.preview_draft,names) if self.use_word_prose.isChecked() else None) or deepcopy(self.matched_prose_document)
             if prose_document:imported.general_groups={}  # Inline table replaces the legacy fixed prose parser.
@@ -714,6 +722,13 @@ class WordBatchTool(ProseTableWorkflow,TypedFieldControls,QWidget):
                 self.message.setText('正文已自动转成竖表。请核对并编辑；生成数据时会自动加入竖表字段。')
         except Exception as exc:self.message.setText('组别确认失败：'+str(exc))
 
+    def recognition_precision_changed(self):
+        # An import preview is not an applied generation rule yet. Update its
+        # untouched defaults so changing the setting before confirmation works.
+        from .word_precision import scan_precision
+        for scan in (self.word_scan,self.preview_draft):
+            if scan:scan_precision(scan,self.decimal_mode.currentData())
+
     def load_config(self):
         path,_=QFileDialog.getOpenFileName(self,'载入批量工具配置','','JSON (*.json)')
         if not path:return
@@ -724,7 +739,8 @@ class WordBatchTool(ProseTableWorkflow,TypedFieldControls,QWidget):
             self.include_basics.setEnabled(not self.ungrouped);self.same_size.setVisible(not self.ungrouped);self.shared_basics.setVisible(not self.ungrouped);self.common_count_label.setText('例数' if self.ungrouped else '每组');self.change_groups_button.setText('例数设置' if self.ungrouped else '修改组别')
             table_config=config.get('table_match',config)
             self.set_categoricals(table_config.get('categoricals',[]));self.prose_sources=deepcopy(config.get('prose_sources',{}));self.prose_issues=[]
-            self.use_word_prose.setChecked(config.get('import_options',{}).get('prose',True))
+            self.decimal_mode.setCurrentIndex(max(0,self.decimal_mode.findData(config.get('import_options',{}).get('decimal_mode','zero'))))
+            self.use_word_prose.setChecked(config.get('import_options',{}).get('prose',False))
             self.detected_basics=deepcopy(config.get('detected_basics',{group:list(data.get('detected_fields',[])) for group,data in self.prose_sources.items()}))
             self.imported_basics=deepcopy(config.get('imported_basics',{}))
             self.leave_unknown_blank.setChecked(config.get('import_options',{}).get('leave_unknown_blank',False))

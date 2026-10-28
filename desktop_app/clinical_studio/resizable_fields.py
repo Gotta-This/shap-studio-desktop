@@ -121,11 +121,16 @@ class FieldResizeController(QObject):
         if hasattr(widget,'resize_grip'):return
         if widget.window().windowType()==Qt.Popup:return
         widget.resize_grip=FieldResizeGrip(widget);widget.resize_grip.show()
-        if isinstance(widget,QTableView):widget.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
+        if isinstance(widget,QTableView):
+            from .table_layout import fit_table_columns
+            fit_table_columns(widget)
     def eventFilter(self,watched,event):
         if isinstance(watched,(QPlainTextEdit,QTextEdit,QTableView)):
             if event.type()==QEvent.Show:self.attach(watched)
             elif event.type()==QEvent.Resize and hasattr(watched,'resize_grip'):watched.resize_grip.position()
+            if isinstance(watched,QTableView) and event.type() in (QEvent.Show,QEvent.Resize,QEvent.LayoutRequest):
+                from .table_layout import fit_table_columns
+                fit_table_columns(watched)
         return False
 
 

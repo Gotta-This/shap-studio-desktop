@@ -16,7 +16,8 @@ LAYOUT=json.loads((Path(__file__).parent/'assets/penpot-layout.json').read_text(
 
 class DesignBoard(QWidget):
     def __init__(self,index,shell=True):
-        super().__init__();self.index=index;self.is_shell=shell;self.spec=deepcopy(LAYOUT['boards'][index])
+        super().__init__();self.index=index;self.is_shell=shell;self.spec=deepcopy(LAYOUT['boards'][0 if index==9 else index])
+        if index==9:self.spec['name']='09 · 待办事项'
         self.setFixedSize(int(self.spec['width']),int(self.spec['height']))
         self.hidden_shapes=set();self.overrides={};self.documents={};self.controls={};self.anchors=[]
 
@@ -116,6 +117,8 @@ class DesignBoard(QWidget):
                 rect=widget.geometry()
                 widget.setGeometry(round(260+(rect.x()-260)*ratio),rect.y(),
                                    max(1,round(rect.width()*ratio)),rect.height())
+        if 'todo-workflow' in self.controls:
+            self.controls['todo-workflow'].setGeometry(260,52,max(1,self.width()-296),max(600,self.height()-76))
         if 'word-workflow' in self.controls:
             self.controls['word-workflow'].setGeometry(260,130,max(1,self.width()-296),max(500,self.height()-154))
 
@@ -187,9 +190,9 @@ class DesignView(QGraphicsView):
         super().showEvent(event);self.update_layout()
 
     def update_layout(self):
-        minimum=800 if self.board.index==3 else 928
+        minimum=800 if self.board.index in (3,9) else 928
         height=max(minimum,getattr(self.board,'user_min_height',0),self.viewport().height())
-        minimum_width=1008 if self.board.index==3 else 1200
+        minimum_width=1008 if self.board.index in (3,9) else 1200
         width=max(minimum_width,self.viewport().width(),getattr(self.board,'user_min_width',0))
         self.board.setFixedSize(width,height)
         # The embedded widget's fixed-size changes do not update the proxy's

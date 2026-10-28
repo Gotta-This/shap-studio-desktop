@@ -28,7 +28,7 @@ def format_value(v,cell,part):
 
 class ProseTableEditor(QWidget):
     def __init__(self,parent=None,embedded=False):
-        super().__init__(parent);self.document=None;self.rows=[];self.editing=False;self.stale=False
+        super().__init__(parent);self.document=None;self.rows=[];self.editing=False;self.stale=False;self.precision_mode=lambda:'source'
         self.setWindowTitle('正文转可编辑汇总表');self.resize(1280,900)
         self.setStyleSheet('QWidget{background:#F5F8F5;color:#193C2C;} QPlainTextEdit,QTableWidget{background:white;} QPushButton{padding:7px 12px;}')
         layout=QVBoxLayout(self)
@@ -43,10 +43,10 @@ class ProseTableEditor(QWidget):
         self.add_button(top,'导出模拟模块配置',self.export_config).setVisible(not embedded)
         self.selector=QComboBox();self.selector.currentIndexChanged.connect(self.render);top.addWidget(self.selector)
         actions=QHBoxLayout();layout.addLayout(actions)
-        self.add_button(actions,'添加指标',self.add_variable)
         self.add_button(actions,'删除选中指标',self.remove_variable)
+        self.add_button(actions,'添加指标',self.add_variable)
         self.add_button(actions,'确认选中单元格的当前值',self.resolve_cell)
-        self.reviewed=QCheckBox('已核对未识别内容');self.reviewed.toggled.connect(self.review_unparsed);actions.addWidget(self.reviewed)
+        self.reviewed=QCheckBox('已核对未识别内容');self.reviewed.setChecked(False);self.reviewed.toggled.connect(self.review_unparsed);actions.addWidget(self.reviewed)
         hint=QLabel('双击数值、指标名、类别或单位即可修改；类型可切换。年龄范围属于年龄参数，分类展开行仍是同一个变量。点击单元格可查看原文。');hint.setWordWrap(True);layout.addWidget(hint)
         split=QWidget();panels=QVBoxLayout(split);panels.setContentsMargins(0,0,0,0);layout.addWidget(split,1)
         self.table=QTableWidget();self.table.setWordWrap(False);self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive);self.table.verticalHeader().hide();self.table.setFixedHeight(300);panels.addWidget(self.table)
@@ -74,14 +74,15 @@ class ProseTableEditor(QWidget):
         if ok:self.groups_override=[s.strip() for s in re.split('[,，]',value) if s.strip()] or None
 
     def import_word(self):
-        path,_=QFileDialog.getOpenFileName(self,'选择 Word 正文','','Word (*.docx)')
+        path,_=QFileDialog.getOpenFileName(self,'选择 Word 正文','','Word (*.docx *.doc)')
         if path:
             try:self.source.setPlainText(read_docx_text(path));self.convert()
             except Exception as exc:self.status.setPlainText('导入失败：'+str(exc))
 
     def convert(self):
         if not self.source.toPlainText().strip():self.status.setPlainText('请先粘贴或导入正文。');return
-        self.document=parse_document(self.source.toPlainText(),self.groups_override);self.stale=False;self.invalid_edit=None;self.refresh_selector()
+        from .word_precision import prose_precision
+        self.document=prose_precision(parse_document(self.source.toPlainText(),self.groups_override),self.precision_mode());self.stale=False;self.invalid_edit=None;self.refresh_selector()
 
     def refresh_selector(self):
         self.selector.blockSignals(True);self.selector.clear()
@@ -91,6 +92,7 @@ class ProseTableEditor(QWidget):
     def render(self):
         s=self.study();self.editing=True;self.table.blockSignals(True);self.table.clear();self.rows=[]
         if not s:
+            self.reviewed.blockSignals(True);self.reviewed.setChecked(False);self.reviewed.blockSignals(False)
             self.table.setRowCount(0);self.table.blockSignals(False);self.editing=False;self.report();return
         groups=s['groups'];self.table.setColumnCount(5+len(groups));self.table.setHorizontalHeaderLabels(['指标','类别 / 参数','类型','单位']+[g['name'] for g in groups]+['提示'])
         self.rows=[(None,'n',None)]

@@ -25,7 +25,7 @@ def verify_prose(window,directory):
     def confirm(path):
         tool.import_word(path);tool.show_group_selection(['观察组','常规治疗组']);tool.confirm_groups();app.processEvents();tool.include_basics.setChecked(True)  # Explicitly exercise optional basic/outcome columns.
     try:
-        window.timer.stop();tool=window.open_module('word');tool.use_word_sizes.setChecked(True)
+        window.timer.stop();tool=window.open_module('word');tool.decimal_mode.setCurrentIndex(tool.decimal_mode.findData('source'));tool.use_word_prose.setChecked(True);tool.use_word_sizes.setChecked(True)
         first=root/'synthetic-prose.docx';document(first,12,24.2);confirm(first)
         check('无表格也能按正文匹配两个组别',tool.groups_confirmed and '正文一般资料：2' in tool.match_summary.text())
         check('默认参数保持开启',not tool.leave_unknown_blank.isChecked() and tool.group_editors[0].fields['effective'].isEnabled())
@@ -76,6 +76,43 @@ def verify_prose(window,directory):
         except ValueError as exc:blocked='无法同时满足' in str(exc)
         check('原图年龄范围与标准差冲突会拦截',blocked)
         window.grab().save(str(root/'inconsistent-age.png'))
+        pediatric_text='选取108例患儿，随机均等分为对照组（54例）和观察组（54例）。对照组性别分布：男（25例）、女（29例）；年龄最小和最大分别4岁、13岁，平均（7.82±2.34）岁；病程范围介于4个月至3.5年，平均（1.47±0.73）年。观察组性别分布：男（27例）、女（27例）；年龄最小和最大分别5岁、12岁，平均（7.96±2.18）岁；病程范围介于3个月至4年，平均（1.52±0.81）年。两组上述差异均无统计学意义（P>0.05）。'
+        doc=ET.Element(W+'document');body=ET.SubElement(doc,W+'body');ET.SubElement(ET.SubElement(ET.SubElement(body,W+'p'),W+'r'),W+'t').text=pediatric_text
+        pediatric_path=root/'pediatric-ranges.docx'
+        with ZipFile(pediatric_path,'w') as z:z.writestr('word/document.xml',ET.tostring(doc))
+        tool.import_word(pediatric_path);tool.show_group_selection(['对照组','观察组']);tool.confirm_groups();app.processEvents()
+        editor=tool.prose_table_editor;study=editor.study();vs={v['name']:v for v in study['variables']}
+        check('括号例数明确报告且无推算提示',all(g['n']==54 and g['n_origin']=='reported' for g in study['groups']))
+        check('性别类别清理括号且无重复指标',set(vs)=={'性别','年龄','病程'} and vs['性别']['labels']==['男','女'])
+        check('年龄最小最大值识别',[(vs['年龄']['cells'][g]['lower'],vs['年龄']['cells'][g]['upper']) for g in ('对照组','观察组')]==[(4.,13.),(5.,12.)])
+        check('病程月份换算成年',vs['病程']['unit']=='年' and vs['病程']['cells']['对照组']['lower']==4/12 and vs['病程']['cells']['观察组']['lower']==.25)
+        config=tool.get_config();check('正文范围均数不误报冲突',len(config['typed_fields'])==6)
+        tool.pages.setCurrentIndex(tool.PROSE_PAGE);app.processEvents();window.grab().save(str(root/'pediatric-preview.png'))
+        editor.table.scrollToBottom();app.processEvents();window.grab().save(str(root/'pediatric-duration.png'))
+        tool.generate_button.click();end=time.monotonic()+120
+        while tool.is_running() and time.monotonic()<end:app.processEvents();time.sleep(.01)
+        app.processEvents();result=tool.result
+        check('实际按钮生成108例',result is not None and len(result['rows'])==108)
+        for group,male in [('对照组',25),('观察组',27)]:
+            rows=[r for r in result['rows'] if r[1]==group];column=result['columns'].index('性别')
+            check(group+'括号人数正确生成',Counter(r[column] for r in rows)=={'男':male,'女':54-male})
+            for name in ('年龄','病程'):
+                cell=vs[name]['cells'][group];column=result['columns'].index(name)
+                check(group+name+'值均在原文范围内',all(cell['lower']<=r[column]<=cell['upper'] for r in rows))
+        respiratory_text='两组患者一般资料比较：对照组25例，男15例、女10例；年龄平均（62.44±10.36）岁；BMI（22.80±3.10）kg/m²；呼吸衰竭类型Ⅰ型13例、Ⅱ型12例；机械通气方式经口气管插管18例、气管切开7例；APACHEⅡ评分（18.60±4.20）分，SOFA评分（7.20±2.10）分。试验组25例，男14例、女11例；年龄平均（63.10±11.20）岁；BMI（23.10±3.40）kg/m²；呼吸衰竭类型Ⅰ型12例、Ⅱ型13例；机械通气方式经口气管插管17例、气管切开8例；APACHEⅡ评分（18.90±4.50）分，SOFA评分（7.40±2.30）分。两组上述一般资料比较，差异均无统计学意义（P>0.05），具有可比性。'
+        doc=ET.Element(W+'document');body=ET.SubElement(doc,W+'body');ET.SubElement(ET.SubElement(ET.SubElement(body,W+'p'),W+'r'),W+'t').text=respiratory_text
+        respiratory_path=root/'respiratory-intro.docx'
+        with ZipFile(respiratory_path,'w') as z:z.writestr('word/document.xml',ET.tostring(doc))
+        tool.import_word(respiratory_path);tool.show_group_selection(['对照组','试验组']);tool.confirm_groups();app.processEvents()
+        config=tool.get_config();check('一般资料比较开头不截断正文且识别14个组别字段',len(config['typed_fields'])==14)
+        tool.pages.setCurrentIndex(tool.PROSE_PAGE);app.processEvents();window.grab().save(str(root/'respiratory-preview.png'))
+        tool.generate_button.click();end=time.monotonic()+120
+        while tool.is_running() and time.monotonic()<end:app.processEvents();time.sleep(.01)
+        app.processEvents();result=tool.result
+        check('新案例实际生成50例',result is not None and len(result['rows'])==50)
+        for group,counts in [('对照组',{'经口气管插管':18,'气管切开':7}),('试验组',{'经口气管插管':17,'气管切开':8})]:
+            rows=[r for r in result['rows'] if r[1]==group];col=result['columns'].index('机械通气方式')
+            check(group+'机械通气人数正确',Counter(r[col] for r in rows)==counts)
         report=dict(passed=True,checks=checks)
     except Exception:report=dict(passed=False,checks=checks,traceback=traceback.format_exc())
     (root/'verification.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8')

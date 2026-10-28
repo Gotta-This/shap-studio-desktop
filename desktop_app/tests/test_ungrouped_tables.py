@@ -29,7 +29,7 @@ class UngroupedTests(unittest.TestCase):
         out=Path(self.tmp.name)/'cases.xlsx';export_batch(result,out)
         from openpyxl import load_workbook
         book=load_workbook(out);self.assertEqual(book.worksheets[0].max_row,21);self.assertNotIn('分组',[c.value for c in book.worksheets[0][1]])
-        self.assertEqual(book.worksheets[0].cell(2,3).number_format,'0.00');self.assertEqual(book['统计核对'].cell(1,1).value,'数据集');book.close()
+        self.assertEqual(book.worksheets[0].cell(2,3).number_format,'0');self.assertEqual(book['统计核对'].cell(1,1).value,'数据集');book.close()
     def test_missing_sample_size_allows_recognition_but_requires_input_for_apply(self):
         save_fixture(self.path,[[['指标','数值'],['年龄','60±5'],['BMI','23±2']]])
         t=self.tool;t.import_word(self.path);self.assertTrue(t.ungrouped_option.isChecked());self.assertEqual(len(t.preview_draft['fields']),2);self.assertEqual(t.ungrouped_n.value(),0)

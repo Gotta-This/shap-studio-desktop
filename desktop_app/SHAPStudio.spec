@@ -28,7 +28,7 @@ exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name=exe_name, debug=False,
 coll = COLLECT(exe, a.binaries, a.datas, strip=False, upx=False, name=exe_name)
 if is_macos:
     app = BUNDLE(coll, name="科研数据工具集.app", icon=str(root / "clinical_studio" / "assets" / "icon.icns"),
-        bundle_identifier="local.clinicalstudio.shap", version="1.0.33",
-        info_plist={"NSHighResolutionCapable": True, "NSRequiresAquaSystemAppearance": True,
-                    "NSHumanReadableCopyright": "SHAP 分析工作台 1.0.33",
+        bundle_identifier="local.clinicalstudio.shap", version="1.0.37",
+        info_plist={"NSAppleEventsUsageDescription": "用于将旧版 Word 文档的临时副本转换为可识别的表格格式。", "NSHighResolutionCapable": True, "NSRequiresAquaSystemAppearance": True,
+                    "NSHumanReadableCopyright": "SHAP 分析工作台 1.0.37",
                     "CFBundleDisplayName": "科研数据工具集"})

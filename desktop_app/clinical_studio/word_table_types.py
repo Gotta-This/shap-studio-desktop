@@ -91,7 +91,54 @@ def leaf_headers(headers,col):
     return labels
 
 
+PHASES={'治疗前','治疗后','干预前','干预后','护理前','护理后','前','后'}
+
+def parse_row_phases(rows,origins,groups,table,result,table_title):
+    """A group/N may span several rows; an explicit phase owns each data row."""
+    data=[];current=None
+    group_columns={col for row in rows[:1] for col,value in enumerate(row) if clean(value) in ('组别','分组','组')}
+    for index,row in enumerate(rows):
+        group=next((header_group(value,groups) for value in row if header_group(value,groups)),None)
+        if group:current=group
+        elif any(col<len(row) and clean(row[col]) and clean(row[col]) not in ('组别','分组','组') for col in group_columns):current=None
+        phase=next(((col,clean(value)) for col,value in enumerate(row) if clean(value) in PHASES),None)
+        if phase and current and any(MEAN.search(clean(v)) or QUARTILES.search(clean(v)) for v in row):
+            data.append((index,row,current,phase[0],phase[1]))
+    if not data:return False
+    headers=rows[:data[0][0]]
+    if not headers:return False
+    result['handled']=True
+    seen={};phases=list(dict.fromkeys(item[4] for item in data));phase_cols={item[3] for item in data}
+    for index,row,group,_,phase in data:
+        if (group,phase) in seen:
+            result['issues'].append(f'表{table} {group} {phase}有多行，无法确定对应关系，请核对。');return True
+        seen[group,phase]=(index,row);result['matches'][group]=result['matches'].get(group,0)+1
+        for col,value in enumerate(row):
+            path=leaf_headers(headers,col);label=clean(path[-1]).lower() if path else ''
+            if (label in ('n','样本量') or '例数' in label) and clean(value).isdigit():
+                n=int(clean(value))
+                if group in result['sizes'] and n!=result['sizes'][group]:result['issues'].append(f'表{table} {group}各时间点例数不一致，请核对。')
+                else:result['sizes'][group]=n
+    width=max(map(len,rows))
+    for col in range(width):
+        if col in phase_cols:continue
+        path=leaf_headers(headers,col)
+        if not path:continue
+        name=path[-1];label=clean(name).lower()
+        if label in ('组别','分组','组','n','样本量','t','p','p值','统计值') or '例数' in label:continue
+        if not any(col<len(row) and (MEAN.search(clean(row[col])) or QUARTILES.search(clean(row[col]))) for _,row,_,_,_ in data):continue
+        if col and all(col<len(origins[i]) and origins[i][col]==origins[i][col-1] for i,_,_,_,_ in data):continue
+        for phase in phases:
+            for group in groups:
+                index,row=seen.get((group,phase),(None,[]))
+                field=summary(name,group,row[col] if col<len(row) else '',result['sizes'].get(group),table,header_path=[phase,*path],row=index+1 if index is not None else None,column=col+1,table_title=table_title)
+                field['name']=phase+'-'+name;field['timepoint']=phase
+                result['fields'].append(field)
+    return True
+
+
 def parse_horizontal(rows,origins,groups,table,result,table_title=''):
+    if parse_row_phases(rows,origins,groups,table,result,table_title):return result
     data=[(index,row,next((header_group(value,groups) for value in row if header_group(value,groups)),None)) for index,row in enumerate(rows)]
     data=[item for item in data if item[2]]
     if not data:return result

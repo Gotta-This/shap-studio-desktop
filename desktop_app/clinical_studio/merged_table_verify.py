@@ -55,7 +55,7 @@ def verify_merged_tables(window,directory):
         for _ in range(3):app.processEvents()
     report=dict(passed=False)
     try:
-        window.timer.stop();tool=window.open_module('word');tool.use_word_sizes.setChecked(True)
+        window.timer.stop();tool=window.open_module('word');tool.decimal_mode.setCurrentIndex(tool.decimal_mode.findData('source'));tool.use_word_sizes.setChecked(True)
         path=save_fixture(root/'mixed-four-tables.docx');tool.import_word(path)
         tool.show_group_selection(['对照组','试验组']);tool.confirm_groups();pump()
         matched=read_word(path,['对照组','试验组'])

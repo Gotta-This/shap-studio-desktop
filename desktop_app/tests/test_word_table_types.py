@@ -38,6 +38,24 @@ class WordTableTypesTests(unittest.TestCase):
     def load(self,tables,names):
         save(self.path,tables);t=self.t;t.use_word_sizes.setChecked(True);t.import_word(self.path);t.show_group_selection(names)
         self.assertTrue(t.match_groups() is not None);t.confirm_groups();APP.processEvents();self.assertTrue(t.groups_confirmed,t.message.text())
+    def test_group_rows_split_by_explicit_timepoint(self):
+        from clinical_studio.merged_table_verify import save_fixture
+        rows=[['组别','n','','腹痛发作频率（次/周）','VAS评分（分）'],
+            [dict(text='对照组',vmerge='restart'),dict(text='54',vmerge='restart'),'治疗前','8.93±2.51','5.87±1.42'],
+            [dict(text='',vmerge='continue'),dict(text='',vmerge='continue'),'治疗后','3.65±1.46*','2.94±1.13*'],
+            [dict(text='观察组',vmerge='restart'),dict(text='54',vmerge='restart'),'治疗前','9.07±2.43','5.91±1.28'],
+            [dict(text='',vmerge='continue'),dict(text='',vmerge='continue'),'治疗后','2.04±0.94*△','1.62±0.78*△']]
+        save_fixture(self.path,[rows]);t=self.t;t.use_word_sizes.setChecked(True)
+        self.assertTrue(t.import_word(self.path));t.show_group_selection(['对照组','观察组']);t.confirm_groups();APP.processEvents()
+        config=t.get_config();fields=config['typed_fields']
+        self.assertEqual(len(fields),8)
+        self.assertEqual([g['n'] for g in config['groups']],[54,54])
+        self.assertEqual({f['name'] for f in fields},{p+'-'+n for p in ('治疗前','治疗后') for n in ('腹痛发作频率（次/周）','VAS评分（分）')})
+        after=next(f for f in fields if f['group']=='观察组' and f['name']=='治疗后-VAS评分（分）')
+        self.assertEqual((after['mean'],after['sd']),(1.62,.78));self.assertEqual(after['source_cell'],dict(row=5,column=5))
+        result=generate_batch(config);self.assertEqual(len(result['rows']),108)
+        self.assertTrue(all(name in result['columns'] for name in {f['name'] for f in fields}))
+
     def test_phased_columns_do_not_become_group_named_headers(self):
         self.load([PHASED],['试验组','对照组']);t=self.t
         fields=t.get_config()['typed_fields'];self.assertEqual(len(fields),8)

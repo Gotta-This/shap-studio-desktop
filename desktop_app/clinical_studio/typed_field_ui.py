@@ -119,7 +119,7 @@ class FieldDialog(QDialog):
             form.addRow(self.categories)
             actions=QWidget();row=QHBoxLayout(actions);row.setContentsMargins(0,0,0,0);row.setSpacing(10)
             add=QPushButton('＋ 添加类别');add.clicked.connect(lambda:self.add_category('',None));row.addWidget(add)
-            drop=QPushButton('删除选中类别');drop.clicked.connect(self.remove_category);row.addWidget(drop);row.addStretch();form.addRow(actions)
+            drop=QPushButton('删除选中类别');drop.clicked.connect(self.remove_category);row.insertWidget(0,drop);row.addStretch();form.addRow(actions)
             QTimer.singleShot(0,self.sync_category_height)
         QTimer.singleShot(0,self.fit_content)
 

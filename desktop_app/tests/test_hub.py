@@ -19,7 +19,7 @@ class HubTests(unittest.TestCase):
         self.window.close();self.window.deleteLater();QCoreApplication.sendPostedEvents(None,QEvent.DeferredDelete)
 
     def enter(self,key):
-        if self.window.current_module:QTest.mouseClick(self.window.home_button,Qt.LeftButton)
+        if self.window.board_index!=0:QTest.mouseClick(self.window.home_button,Qt.LeftButton)
         QTest.mouseClick(self.window.launch_buttons[key],Qt.LeftButton);APP.processEvents()
         self.assertEqual(self.window.current_module,key)
         return self.window.modules[key]

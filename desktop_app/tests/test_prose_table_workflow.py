@@ -9,7 +9,7 @@ from PySide6.QtWidgets import QApplication
 from PySide6.QtTest import QTest
 from clinical_studio.word_batch import WordBatchTool
 from clinical_studio.word_batch_engine import generate_batch
-from test_prose_table import FIRST,SECOND
+from test_prose_table import FIRST,SECOND,PEDIATRIC,RESPIRATORY
 APP=QApplication.instance() or QApplication([])
 W='{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
 
@@ -24,7 +24,7 @@ def make_docx(path,text,table=False):
     with ZipFile(path,'w') as archive:archive.writestr('word/document.xml',ET.tostring(root))
 
 class WorkflowTests(unittest.TestCase):
-    def setUp(self):self.tmp=tempfile.TemporaryDirectory();self.t=WordBatchTool();self.t.resize(1400,1000);self.t.show()
+    def setUp(self):self.tmp=tempfile.TemporaryDirectory();self.t=WordBatchTool();self.t.use_word_prose.setChecked(True);self.t.resize(1400,1000);self.t.show()
     def tearDown(self):
         if self.t.worker and self.t.worker.isRunning():self.t.worker.requestInterruption();self.t.worker.wait(10000)
         self.t.close();self.t.deleteLater();APP.processEvents();self.tmp.cleanup()
@@ -36,6 +36,27 @@ class WorkflowTests(unittest.TestCase):
     def row(self,name):
         e=self.t.prose_table_editor
         return next(i for i,(vi,part,label) in enumerate(e.rows) if vi is not None and e.study()['variables'][vi]['name']==name and part=='summary')
+    def test_pediatric_word_import_preview_and_generation(self):
+        path=Path(self.tmp.name)/'pediatric.docx';make_docx(path,PEDIATRIC)
+        self.t.import_word(path);self.t.show_group_selection(['对照组','观察组']);self.t.confirm_groups();APP.processEvents()
+        self.assertTrue(self.t.inline_prose_active)
+        editor=self.t.prose_table_editor;study=editor.study()
+        self.assertEqual([g['n_origin'] for g in study['groups']],['reported','reported'])
+        self.assertEqual({v['name'] for v in study['variables']},{'性别','年龄','病程'})
+        row=self.row('病程');vi=editor.rows[row][0]
+        self.assertEqual(editor.study()['variables'][vi]['unit'],'年')
+        config=self.t.get_config()
+        self.assertEqual(len(config['typed_fields']),6)
+        result=generate_batch(config)
+        self.assertEqual(len(result['rows']),108)
+        self.assertIn('病程',result['columns'])
+
+    def test_general_comparison_intro_imports_all_fields(self):
+        self.load(RESPIRATORY)
+        config=self.t.get_config();self.assertEqual(len(config['typed_fields']),14)
+        result=generate_batch(config);self.assertEqual(len(result['rows']),50)
+        self.assertIn('呼吸衰竭类型',result['columns']);self.assertIn('机械通气方式',result['columns'])
+
     def test_text_without_group_n_auto_displays_and_blocks_missing(self):
         self.load(FIRST)
         self.assertEqual([g['n'] for g in self.t.prose_table_editor.study()['groups']],[30,30])

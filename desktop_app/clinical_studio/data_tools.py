@@ -124,7 +124,7 @@ class CategoryTool(QWidget):
         group=QGroupBox('自定义类别与数量');left=QVBoxLayout(group)
         label=QLabel('按每个数字的指定数量创建数列，再随机打乱顺序。');label.setWordWrap(True);left.addWidget(label)
         self.table=QTableWidget(0,2);self.table.setHorizontalHeaderLabels(['数字','数量']);self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch);left.addWidget(self.table,1)
-        row=QHBoxLayout();add=QPushButton('＋ 添加数字');remove=QPushButton('删除选中行');row.addWidget(add);row.addWidget(remove);left.addLayout(row)
+        row=QHBoxLayout();add=QPushButton('＋ 添加数字');remove=QPushButton('删除选中行');row.addWidget(remove);row.addWidget(add);left.addLayout(row)
         self.seed=QLineEdit('12');self.seed.setPlaceholderText('留空，每次生成新排列');form=QFormLayout();form.addRow('随机种子（可选）',self.seed);left.addLayout(form)
         hint=QLabel('同样参数和种子可复现；与 R 3.6 及以上默认 set.seed / sample 一致。\n每行一个数值，可直接复制至 Excel。总数量上限 100,000。');hint.setWordWrap(True);left.addWidget(hint)
         self.generate_button=QPushButton('生成随机数列');self.generate_button.setObjectName('primary');left.addWidget(self.generate_button)

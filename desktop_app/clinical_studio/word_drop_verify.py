@@ -38,7 +38,7 @@ def verify_word_drop(window,output):
     report={'passed':False,'platform':app.platformName()}
     try:
         old=output/'原始Word.docx';new=output/'替换Word.docx';fixture(old,58.6);fixture(new,59.6)
-        tool.import_word(old);tool.show_group_selection(['对照组','试验组']);tool.confirm_groups()
+        tool.use_word_prose.setChecked(True);tool.import_word(old);tool.show_group_selection(['对照组','试验组']);tool.confirm_groups()
         check('正文竖表自动显示',tool.inline_prose_active)
         check('五个页签顺序正确',[tool.pages.tabText(i) for i in range(tool.pages.count())]==['1 · 基础资料','2 · 表格匹配','3 · 文字匹配','4 · 全部字段以及来源','5 · 生成与导出'])
         table_before=deepcopy(tool.typed_specs);editor=tool.prose_table_editor
