@@ -1,4 +1,4 @@
-# Use explicit UTF-8 and platform-independent content-sized scrollbar fixtures.
+# Verify the current application version and shared update footer in packaged apps.
 name: Build verify and publish v1.0.38
 on:
   workflow_dispatch:

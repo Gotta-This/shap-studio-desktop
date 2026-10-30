@@ -5,6 +5,7 @@ from PySide6.QtWidgets import QApplication,QComboBox
 from PySide6.QtCore import Qt
 from PySide6.QtTest import QTest
 from .layout_verify import verify_layout
+from .version import APP_VERSION
 
 
 def verify_shell(window,directory):
@@ -29,7 +30,9 @@ def verify_shell(window,directory):
         window.resize(1440,1100);pump()
         for key,index in [('category',1),('numeric',2),('word',3),('shap',4)]:
             window.open_module(key);pump();board=window.boards[index]
-            check(key+'菜单页脚含版本信息','UI 2.0' in board.controls['sidebar-footer'].text())
+            footer=board.controls['sidebar-footer']
+            check(key+'菜单页脚含当前版本',footer.version.text()=='当前版本 V'+APP_VERSION)
+            check(key+'菜单页脚共享更新状态',footer.status.text()==window.updates.message and footer.button.text()==window.updates.action)
             removed=[s for s in board.spec['shapes'] if (s['x']>=1230 and 12<=s['y']<60) or (s['x']<224 and s['y']>=767)]
             check(key+'本地模式和本机运行卡片已移除',bool(removed) and all(s['id'] in board.hidden_shapes for s in removed))
             header=next(s for s in board.spec['shapes'] if s['x']==224 and s['y']==0 and s['height']==76)
