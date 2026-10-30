@@ -1,7 +1,7 @@
 ﻿[Setup]
 AppId={{54785D43-52BB-41EC-BD0F-6EAEB7595061}
 AppName=科研数据工具集
-AppVersion=1.0.38
+AppVersion=1.0.39
 DefaultDirName={localappdata}\Programs\SHAPStudio
 DefaultGroupName=科研数据工具集
 PrivilegesRequired=lowest

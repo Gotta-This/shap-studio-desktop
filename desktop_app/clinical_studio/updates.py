@@ -257,6 +257,7 @@ class UpdateFooter(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(2)
         self.version = QLabel(f"当前版本 V{APP_VERSION}")
+        self.version.setToolTip("软件启动后自动检查更新，也可点击下方按钮手动检查。")
         self.status = QLabel()
         self.status.setWordWrap(True)
         self.button = QPushButton()
@@ -274,5 +275,13 @@ class UpdateFooter(QWidget):
         self.status.setText(self.controller.message)
         self.status.setToolTip(self.controller.detail)
         self.button.setText(self.controller.action)
+        self.button.setToolTip({
+            "检查更新": "后台检查新版本，不影响当前工作。",
+            "重新检查": "重新检查是否有适合当前系统的更新包。",
+            "立即更新": "下载并校验新版安装包。",
+            "安装更新": "当前任务完成后，点击继续安装。",
+            "打开更新包": "打开已下载的更新包，按提示替换应用。",
+            "重试": "重新尝试上一次更新操作。",
+        }.get(self.controller.action, ""))
         self.button.setVisible(bool(self.controller.action))
         self.button.setAccessibleName(self.controller.action)
