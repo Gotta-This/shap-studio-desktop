@@ -206,7 +206,6 @@ class DesignView(QGraphicsView):
         self.resetTransform()
         if self.footer:
             self.footer.setGeometry(20,self.viewport().height()-110,184,90)
-            self.footer.setStyleSheet('QLabel{background:#FFFFFF;color:#738477;font-size:11px;padding:0;}')
             self.footer.raise_()
 
 

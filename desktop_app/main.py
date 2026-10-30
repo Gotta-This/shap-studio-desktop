@@ -58,7 +58,8 @@ def main():
         QApplication.setAttribute(Qt.AA_DontUseNativeDialogs,True)
     from clinical_studio.app import create_application
     from clinical_studio.hub import DesktopWindow
-    app=create_application(sys.argv); window=DesktopWindow(config,args.output); window.show()
+    verification_mode=bool(args.screenshot or any(value for key,value in vars(args).items() if key.endswith('_verify')))
+    app=create_application(sys.argv); window=DesktopWindow(config,args.output,auto_check_updates=False if verification_mode else None); window.show()
     if args.open_tool:window.open_module(args.open_tool)
     if args.todo_verify:
         from clinical_studio.todo_verify import verify_todos

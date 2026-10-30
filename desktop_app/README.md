@@ -47,6 +47,14 @@
 
 ## 开发与构建
 
+### 应用更新
+
+打包后的应用在启动 1.5 秒后及每 6 小时后台检查 GitHub 最新稳定版。所有页面左下角共享当前版本、检查结果和更新操作，不弹更新提示窗。未检查或网络失败时不会显示“已是最新”；失败可点击重试。开发启动不自动联网，可点击“检查更新”手动检查。
+
+发现新版后显示“有新版 Vx.x.x / 立即更新”，点击后在后台下载对应系统和架构的更新包，核对文件大小和 SHA256。Windows 安装版启动安装向导，使用现有安装路径并退出应用；Mac 和 Windows 便携版打开下载好的 ZIP，需要手动替换应用。运行中的数据任务会阻止启动安装，任务完成后点击“安装更新”继续。
+
+版本号位于 `clinical_studio/version.py`，Mac 打包直接读取，Windows `windows_installer.iss` 的 `AppVersion` 需同步。GitHub Release 保留现有 `ResearchDataTools-*` 文件名，并提供 GitHub asset 的 SHA256 digest 或 `SHA256SUMS.txt`。旧版需要手动安装一次带更新功能的版本。
+
 ```sh
 python3 -m venv .venv
 source .venv/bin/activate

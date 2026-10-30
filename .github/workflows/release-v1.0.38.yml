@@ -1,0 +1,163 @@
+# Use explicit UTF-8 and platform-independent content-sized scrollbar fixtures.
+name: Build verify and publish v1.0.38
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [.github/workflows/release-v1.0.38.yml]
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 40
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: desktop_app
+    env:
+      PYTHONUTF8: '1'
+      QT_QPA_PLATFORM: offscreen
+      QT_OPENGL: software
+      MPLBACKEND: Agg
+      CLINICAL_STUDIO_TODO_PATH: verification/ci-todos.json
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+          architecture: x64
+      - run: choco install innosetup --yes --no-progress
+      - run: ./build_windows.ps1 -RequireInstaller
+      - name: Verify complete SHAP parameters in packaged EXE
+        run: |
+          $exe = Join-Path $PWD 'dist/SHAPStudio/SHAPStudio.exe'
+          $p = Start-Process $exe -ArgumentList @('--shap-verify', 'verification/release-shap') -PassThru
+          if (-not $p.WaitForExit(300000)) { Stop-Process -Id $p.Id -Force; throw 'Verification timed out' }
+          $p.Refresh()
+          if ($p.ExitCode -ne 0) { throw 'Packaged SHAP verification failed' }
+          $report = Get-Content verification/release-shap/verification.json -Raw -Encoding UTF8 | ConvertFrom-Json
+          if (-not $report.passed) { throw 'SHAP report failed' }
+      - name: Verify selected groups and editable metric names in packaged EXE
+        run: |
+          $exe = Join-Path $PWD 'dist/SHAPStudio/SHAPStudio.exe'
+          $p = Start-Process $exe -ArgumentList @('--word-groups-verify', 'verification/release-word-groups') -PassThru
+          if (-not $p.WaitForExit(300000)) { Stop-Process -Id $p.Id -Force; throw 'Word groups verification timed out' }
+          $p.Refresh()
+          if ($p.ExitCode -ne 0) { throw 'Packaged Word groups verification failed' }
+          $report = Get-Content verification/release-word-groups/verification.json -Raw -Encoding UTF8 | ConvertFrom-Json
+          if (-not $report.passed) { throw 'Word groups report failed' }
+      - name: Verify dropdowns, adaptive shell, prose and rule sources in packaged EXE
+        run: |
+          $exe = Join-Path $PWD 'dist/SHAPStudio/SHAPStudio.exe'
+          foreach ($mode in @('input', 'shell', 'prose', 'table-types', 'merged-tables', 'ungrouped', 'unified-preview', 'todo')) {
+            $destination = "verification/release-$mode"
+            $p = Start-Process $exe -ArgumentList @("--$mode-verify", $destination) -PassThru
+            if (-not $p.WaitForExit(300000)) { Stop-Process -Id $p.Id -Force; throw "$mode verification timed out" }
+            $p.Refresh()
+            if ($p.ExitCode -ne 0) {
+              if (Test-Path "$destination/verification.json") { Get-Content "$destination/verification.json" -Raw -Encoding UTF8 | Write-Host }
+              throw "$mode verification failed"
+            }
+            $report = Get-Content "$destination/verification.json" -Raw -Encoding UTF8 | ConvertFrom-Json
+            if (-not $report.passed) { throw "$mode report failed" }
+          }
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-windows
+          path: |
+            desktop_app/dist/SHAPStudio-Windows-x64.zip
+            desktop_app/dist/SHAPStudio-Setup-Windows-x64.exe
+          if-no-files-found: error
+          compression-level: 0
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: checks-windows
+          path: desktop_app/verification/**
+  macos:
+    runs-on: macos-15
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: desktop_app
+    env:
+      QT_QPA_PLATFORM: offscreen
+      MPLBACKEND: Agg
+      CLINICAL_STUDIO_TODO_PATH: verification/ci-todos.json
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Install and verify source
+        run: |
+          python -m pip install -r requirements-windows.txt
+          python prepare_assets.py
+          python run_tests.py
+      - name: Build and verify packaged app
+        run: |
+          python -m PyInstaller --noconfirm --clean SHAPStudio.spec
+          app='dist/科研数据工具集.app'
+          "$app/Contents/MacOS/科研数据工具集" --ui-verify verification/macos-ui
+          "$app/Contents/MacOS/科研数据工具集" --shap-verify verification/macos-shap
+          "$app/Contents/MacOS/科研数据工具集" --word-groups-verify verification/macos-word-groups
+          "$app/Contents/MacOS/科研数据工具集" --input-verify verification/macos-input
+          "$app/Contents/MacOS/科研数据工具集" --shell-verify verification/macos-shell
+          "$app/Contents/MacOS/科研数据工具集" --prose-verify verification/macos-prose
+          "$app/Contents/MacOS/科研数据工具集" --table-types-verify verification/macos-table-types
+          "$app/Contents/MacOS/科研数据工具集" --merged-tables-verify verification/macos-merged-tables
+          "$app/Contents/MacOS/科研数据工具集" --ungrouped-verify verification/macos-ungrouped
+          "$app/Contents/MacOS/科研数据工具集" --unified-preview-verify verification/macos-unified-preview
+          "$app/Contents/MacOS/科研数据工具集" --todo-verify verification/macos-todo
+          codesign --verify --deep --strict "$app"
+          ditto -c -k --sequesterRsrc --keepParent "$app" "dist/ResearchDataTools-macOS-$(uname -m).zip"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-macos
+          path: desktop_app/dist/ResearchDataTools-macOS-*.zip
+          if-no-files-found: error
+          compression-level: 0
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: checks-macos
+          path: desktop_app/verification/**
+  publish:
+    needs: [windows, macos]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: release-*
+          path: downloads
+          merge-multiple: true
+      - name: Prepare checksummed release files
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir release
+          cp downloads/SHAPStudio-Setup-Windows-x64.exe release/ResearchDataTools-Setup-Windows-x64.exe
+          cp downloads/SHAPStudio-Windows-x64.zip release/ResearchDataTools-Portable-Windows-x64.zip
+          cp downloads/ResearchDataTools-macOS-*.zip release/
+          cd release
+          sha256sum *.exe *.zip > SHA256SUMS.txt
+      - name: Publish after successful builds and packaged checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release create v1.0.38 --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft --title '科研数据工具集 v1.0.38' --notes-file RELEASE_NOTES.md
+          gh release upload v1.0.38 release/* --repo "$GITHUB_REPOSITORY"
+          gh release edit v1.0.38 --repo "$GITHUB_REPOSITORY" --draft=false --latest
+          gh release view v1.0.38 --repo "$GITHUB_REPOSITORY" --json url,tagName,isDraft,assets

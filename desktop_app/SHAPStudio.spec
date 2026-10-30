@@ -1,9 +1,11 @@
 # -*- mode: python ; coding: utf-8 -*-
 from pathlib import Path
 import sys
+import runpy
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules, copy_metadata
 
 root = Path(SPECPATH)
+app_version = runpy.run_path(str(root / "clinical_studio" / "version.py"))["APP_VERSION"]
 is_macos = sys.platform == "darwin"
 exe_name = "科研数据工具集" if is_macos else "SHAPStudio"
 datas = [(str(root / "clinical_studio" / "defaults.json"), "clinical_studio"),
@@ -28,7 +30,7 @@ exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name=exe_name, debug=False,
 coll = COLLECT(exe, a.binaries, a.datas, strip=False, upx=False, name=exe_name)
 if is_macos:
     app = BUNDLE(coll, name="科研数据工具集.app", icon=str(root / "clinical_studio" / "assets" / "icon.icns"),
-        bundle_identifier="local.clinicalstudio.shap", version="1.0.37",
+        bundle_identifier="local.clinicalstudio.shap", version=app_version,
         info_plist={"NSAppleEventsUsageDescription": "用于将旧版 Word 文档的临时副本转换为可识别的表格格式。", "NSHighResolutionCapable": True, "NSRequiresAquaSystemAppearance": True,
-                    "NSHumanReadableCopyright": "SHAP 分析工作台 1.0.37",
+                    "NSHumanReadableCopyright": "科研数据工具集 " + app_version,
                     "CFBundleDisplayName": "科研数据工具集"})

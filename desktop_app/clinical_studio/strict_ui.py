@@ -122,11 +122,14 @@ class PlotImage(QWidget):
 
 
 class DesktopWindow(QMainWindow):
-    def __init__(self,config=None,output=None):
+    def __init__(self,config=None,output=None,auto_check_updates=None):
         super().__init__();self.setWindowTitle('科研数据工具集');self.resize(1440,960);self.setMinimumSize(1008,672)
         self.initial_config=deepcopy(config);self.initial_output=output
         self.modules={};self.module_pages={};self.boards={};self.views={};self.bindings={};self.current_module=None;self.board_index=0
         self.launch_buttons={};self.nav_buttons={};self.style_key='bar';self.image_index=0;self._last_state=None
+        from .updates import UpdateController
+        self.updates=UpdateController(self,auto_check=auto_check_updates)
+        self.updates.idle.connect(self.close)
         self.stack=QStackedWidget();self.setCentralWidget(self.stack);self.show_board(0,commit=False);self.show_board(9,commit=False)
         self.timer=QTimer(self);self.timer.timeout.connect(self.refresh);self.timer.start(200)
 
@@ -204,9 +207,8 @@ class DesktopWindow(QMainWindow):
         b.suppress(1230,12,160,48)
         for shape in b.spec['shapes']:
             if (shape['x']<224 and shape['y']>=767) or (shape['x']>=224 and shape['y']>=890):b.hidden_shapes.add(shape['id'])
-        footer=QLabel('独立参数 · 独立结果 · 自主导出\n科研数据工具集 / UI 2.0\ndbq / 科研工作空间')
-        footer.setWordWrap(True);footer.setAlignment(Qt.AlignLeft|Qt.AlignBottom)
-        footer.setStyleSheet('QLabel{background:transparent;color:#738477;font-size:11px;line-height:140%;padding:0;}')
+        from .updates import UpdateFooter
+        footer=UpdateFooter(self.updates)
         b.place(footer,(20,b.height()-110,184,90),'sidebar-footer')
         # Replace the old painted sidebar with one consistent native hierarchy.
         for shape in b.spec['shapes']:
@@ -772,7 +774,10 @@ class DesktopWindow(QMainWindow):
                 b.text(1240+12,125,'生成中…' if busy else ('生成已完成' if result else '尚未生成'))
         b.update()
 
+    def has_running_tasks(self):
+        return any(t.is_running() if hasattr(t,'is_running') else bool(getattr(t,'worker',None) and t.worker.isRunning()) for t in self.modules.values())
+
     def closeEvent(self,event):
-        busy=[key for key,t in self.modules.items() if (t.is_running() if hasattr(t,'is_running') else bool(getattr(t,'worker',None) and t.worker.isRunning()))]
-        if busy:QMessageBox.information(self,'任务仍在运行','请等待当前任务完成后关闭。');event.ignore()
+        if self.has_running_tasks():QMessageBox.information(self,'任务仍在运行','请等待当前任务完成后关闭。');event.ignore()
+        elif not self.updates.prepare_close():event.ignore()
         else:event.accept()
