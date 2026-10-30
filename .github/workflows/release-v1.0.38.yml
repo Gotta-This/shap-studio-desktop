@@ -7,8 +7,29 @@ on:
     paths: [.github/workflows/release-v1.0.38.yml]
 permissions:
   contents: read
+concurrency:
+  group: release-v1.0.38
+  cancel-in-progress: true
 jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: write
+      contents: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Stop earlier builds of this release
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/actions/workflows/release-v1.0.38.yml/runs?per_page=20" \
+            --jq ".workflow_runs[] | select(.id != $GITHUB_RUN_ID and (.status == \"in_progress\" or .status == \"queued\")) | .id" \
+            | while read -r run_id; do
+                gh api --method POST "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/cancel"
+              done
   windows:
+    needs: prepare
     runs-on: windows-2022
     timeout-minutes: 40
     defaults:
@@ -78,6 +99,7 @@ jobs:
           name: checks-windows
           path: desktop_app/verification/**
   macos:
+    needs: prepare
     runs-on: macos-15
     timeout-minutes: 40
     defaults:
@@ -157,6 +179,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          current_head=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)
+          test "$current_head" = "$GITHUB_SHA"
           gh release create v1.0.38 --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft --title '科研数据工具集 v1.0.38' --notes-file RELEASE_NOTES.md
           gh release upload v1.0.38 release/* --repo "$GITHUB_REPOSITORY"
           gh release edit v1.0.38 --repo "$GITHUB_REPOSITORY" --draft=false --latest

@@ -1,4 +1,5 @@
 numpy==2.5.4
+certifi==2026.10.23
 pandas==3.1.0
 matplotlib==3.11.2
 scikit-learn==1.9.1

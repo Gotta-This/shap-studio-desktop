@@ -11,6 +11,7 @@ exe_name = "科研数据工具集" if is_macos else "SHAPStudio"
 datas = [(str(root / "clinical_studio" / "defaults.json"), "clinical_studio"),
          (str(root / "clinical_studio" / "assets"), "clinical_studio/assets")]
 datas += collect_data_files("shap", include_py_files=True)
+datas += collect_data_files("certifi")
 for package in ["numpy", "pandas", "matplotlib", "scikit-learn", "shap", "Pillow", "openpyxl"]:
     datas += copy_metadata(package)
 

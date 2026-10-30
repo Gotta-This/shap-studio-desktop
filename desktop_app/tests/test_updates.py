@@ -86,6 +86,15 @@ class ReleaseTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 open_download(url)
 
+    def test_https_uses_bundled_roots_and_verifies_hosts(self):
+        import ssl
+        from clinical_studio.updates import https_context
+        with patch("clinical_studio.updates.ssl.create_default_context", return_value=ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)):
+            context = https_context()
+        self.assertGreater(context.cert_store_stats()["x509_ca"], 0)
+        self.assertTrue(context.check_hostname)
+        self.assertEqual(context.verify_mode, ssl.CERT_REQUIRED)
+
 
 class FakeWindow(QObject):
     busy = False

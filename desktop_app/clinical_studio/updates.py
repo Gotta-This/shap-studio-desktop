@@ -4,10 +4,13 @@ import json
 from pathlib import Path
 import platform
 import re
+import ssl
 import subprocess
 import sys
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
+
+import certifi
 
 from PySide6.QtCore import QObject, QThread, QTimer, QStandardPaths, QUrl, Signal
 from PySide6.QtGui import QDesktopServices
@@ -18,6 +21,13 @@ from .version import APP_VERSION
 REPOSITORY = "Gotta-This/shap-studio-desktop"
 API_URL = f"https://api.github.com/repos/{REPOSITORY}/releases/latest"
 DOWNLOAD_PREFIX = f"https://github.com/{REPOSITORY}/releases/download/"
+
+
+def https_context():
+    # Frozen Python cannot rely on the build machine's OpenSSL CA paths.
+    context = ssl.create_default_context()
+    context.load_verify_locations(cafile=certifi.where())
+    return context
 
 
 def version_tuple(value):
@@ -56,7 +66,8 @@ def open_download(url):
     parsed = urlparse(url)
     if parsed.scheme != "https" or not url.startswith(DOWNLOAD_PREFIX):
         raise ValueError("更新下载地址无效")
-    return urlopen(Request(url, headers={"User-Agent": f"ResearchDataTools/{APP_VERSION}"}), timeout=20)
+    return urlopen(Request(url, headers={"User-Agent": f"ResearchDataTools/{APP_VERSION}"}), timeout=20,
+                   context=https_context())
 
 
 def download_release(release, directory, progress, cancelled):
@@ -121,7 +132,7 @@ class UpdateWorker(QThread):
             if self.release is None:
                 request = Request(API_URL, headers={"Accept": "application/vnd.github+json",
                                   "User-Agent": f"ResearchDataTools/{APP_VERSION}"})
-                with urlopen(request, timeout=15) as response:
+                with urlopen(request, timeout=15, context=https_context()) as response:
                     payload = json.loads(response.read(2 * 1024 * 1024))
                 self.result = select_release(payload, asset_name())
             else:
