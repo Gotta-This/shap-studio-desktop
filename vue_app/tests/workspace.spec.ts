@@ -45,13 +45,11 @@ test("connect workspace, create, search, edit date, upload, preview and complete
     .getByRole("button", { name: "导入材料", exact: true })
     .first()
     .click();
-  await page
-    .getByLabel("选择导入材料")
-    .setInputFiles({
-      name: "审稿意见.txt",
-      mimeType: "text/plain",
-      buffer: Buffer.from("请核对图表与统计值。"),
-    });
+  await page.getByLabel("选择导入材料").setInputFiles({
+    name: "审稿意见.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("请核对图表与统计值。"),
+  });
   await page.getByRole("button", { name: /确认导入/ }).click();
   await expect(
     page.getByText("审稿意见.txt", { exact: true }).first(),
@@ -130,13 +128,11 @@ test("inbox import, archive and undo from task operation history", async ({
     .getByRole("button", { name: "接收材料", exact: true })
     .first()
     .click();
-  await page
-    .getByLabel("选择导入材料")
-    .setInputFiles({
-      name: "待归档数据.csv",
-      mimeType: "text/csv",
-      buffer: Buffer.from("组别,数值\n对照,1\n试验,2"),
-    });
+  await page.getByLabel("选择导入材料").setInputFiles({
+    name: "待归档数据.csv",
+    mimeType: "text/csv",
+    buffer: Buffer.from("组别,数值\n对照,1\n试验,2"),
+  });
   await page.getByRole("button", { name: /确认导入/ }).click();
   await expect(page.getByText("待归档数据.csv", { exact: true })).toBeVisible();
   await page.getByRole("checkbox", { name: "选择 待归档数据.csv" }).check();
@@ -179,11 +175,11 @@ test("all tool pages, global search, mobile layout and screenshots", async ({
   await expect(
     page.getByRole("heading", { name: "数据参数", exact: true }),
   ).toBeVisible();
-  await page.getByRole("button", { name: /模型与 SHAP/ }).click();
+  await page.getByRole("tab", { name: /模型与分类变量/ }).click();
   await expect(
-    page.getByRole("heading", { name: "逻辑回归", exact: true }),
+    page.getByRole("heading", { name: "模型与分类变量", exact: true }),
   ).toBeVisible();
-  await page.getByRole("button", { name: /图表样式/ }).click();
+  await page.getByRole("tab", { name: /图表样式/ }).click();
   await expect(
     page.getByRole("heading", { name: "图表样式", exact: true }),
   ).toBeVisible();

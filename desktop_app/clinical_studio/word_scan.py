@@ -6,7 +6,7 @@ from xml.etree import ElementTree as ET
 from .word_batch_engine import W,_grid,read_word,table_titles
 from .word_table_types import clean,MEAN,QUARTILES,COUNT,header_n,group_label
 from .prose_table_engine import read_docx_text,parse_document,normalized,KNOWN_GROUPS
-from .typed_field_ui import convert
+from .typed_field_rules import convert
 
 
 
@@ -72,7 +72,7 @@ def scan_word(path):
     prose_names=[name for name in chosen if name in text_normal]
     # The overview retains the whole prose, while parsing only paragraphs with
     # group summaries avoids treating every heading as an unresolved statistic.
-    from .prose_table_integration import matching_document
+    from .prose_matching import matching_document
     prose=matching_document(path,prose_names) if prose_names else None
     prose=prose or parse_document(text,prose_names or None)
     return dict(source=str(path),tables=inventory,candidates=names,fields=fields,prose_document=prose,prose_text=text,issues=notes,ungrouped_n=ungrouped_n,has_ungrouped=bool(ungrouped_fields))

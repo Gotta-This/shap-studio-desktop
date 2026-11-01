@@ -3,9 +3,9 @@ on:
   workflow_dispatch:
   push:
     branches: [codex/vue3-v3-ui]
-    paths: ['vue_app/**', '.github/workflows/vue-v3.yml']
+    paths: ['vue_app/**', 'desktop_app/clinical_studio/**', '.github/workflows/vue-v3.yml']
   pull_request:
-    paths: ['vue_app/**', '.github/workflows/vue-v3.yml']
+    paths: ['vue_app/**', 'desktop_app/clinical_studio/**', '.github/workflows/vue-v3.yml']
 permissions:
   contents: read
 concurrency:

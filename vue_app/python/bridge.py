@@ -146,6 +146,48 @@ def dispatch(method, p):
     if method=='tool.numeric':
         from clinical_studio.data_tools_engine import numeric_numbers
         return csv_result(numeric_numbers(**p),p.get('digits',0))
+    if method=='tool.job.start':
+        from jobs import start
+        return start(profile(),p)
+    if method=='tool.job.status':
+        from jobs import status
+        return status(profile(),p['id'])
+    if method=='tool.job.cancel':
+        from jobs import cancel
+        return cancel(profile(),p['id'])
+    if method=='tool.word.scan':
+        from word_workflow import scan
+        with sources(p) as paths:
+            if len(paths)!=1:raise ValueError('请选择一个 Word 文档。')
+            return scan(profile(),paths[0],p.get('decimal_mode','zero'))
+    if method=='tool.word.apply':
+        from word_workflow import apply
+        return apply(profile(),p)
+    if method=='tool.word.review':
+        from word_workflow import review
+        return review(p)
+    if method=='tool.word.convert':
+        from clinical_studio.typed_field_rules import convert
+        return convert(p['field'],p['kind'])
+    if method=='tool.word.prose.parse':
+        from clinical_studio.prose_table_engine import parse_document
+        from clinical_studio.word_precision import prose_precision
+        return prose_precision(parse_document(p['text'],p.get('groups')),p.get('decimal_mode','zero'))
+    if method=='tool.word.prose.confirm':
+        from clinical_studio.prose_matching import metric_key
+        cell=dict(p['cell'],reviewed=True,issues=[])
+        old=next((f for f in p['fields'] if f['group']==p['group'] and metric_key(f['name'])==metric_key(p['variable'])),None)
+        if old is not None:cell['table_conflict']=old
+        return cell
+    if method=='tool.word.prose.validate':
+        from clinical_studio.prose_table_engine import validate_study
+        return validate_study(p['study'])
+    if method=='tool.shap.table':
+        from analysis_workflow import table
+        return table(profile(),p)
+    if method=='tool.shap.export':
+        from analysis_workflow import export
+        return export(profile(),p)
     if method=='tool.word.defaults':
         from clinical_studio.word_batch_engine import default_batch_config
         return default_batch_config()
@@ -185,4 +227,8 @@ def main():
         encoded=json.dumps(dict(ok=False,error=str(exc)),ensure_ascii=False)
     sys.stdout.write(encoded);sys.stdout.flush()
 
-if __name__=='__main__': main()
+if __name__=='__main__':
+    if len(sys.argv)==3 and sys.argv[1]=='--job-worker':
+        from jobs import worker
+        worker(profile(),sys.argv[2])
+    else: main()

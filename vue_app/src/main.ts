@@ -5,6 +5,8 @@ import Workspace from "./views/Workspace.vue";
 import Dashboard from "./views/Dashboard.vue";
 import Todos from "./views/Todos.vue";
 import Inbox from "./views/Inbox.vue";
+import WordTool from "./views/WordTool.vue";
+import ShapTool from "./views/ShapTool.vue";
 import Tools from "./views/Tools.vue";
 import Settings from "./views/Settings.vue";
 import "./style.css";
@@ -15,6 +17,8 @@ const router = createRouter({
     { path: "/workspace/:id?", component: Workspace },
     { path: "/todos", component: Todos },
     { path: "/inbox", component: Inbox },
+    { path: "/tools/word", component: WordTool },
+    { path: "/tools/shap", component: ShapTool },
     { path: "/tools/:tool", component: Tools },
     { path: "/settings", component: Settings },
   ],

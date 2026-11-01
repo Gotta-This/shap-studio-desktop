@@ -1932,3 +1932,405 @@ code {
     margin-left: 3px;
   }
 }
+
+/* Scientific tools follow the current Qt workflow, using the V3 mint tokens. */
+.scientific-page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 0;
+}
+.scientific-section {
+  padding: 24px;
+  min-width: 0;
+}
+.scientific-section h2 {
+  font-size: 17px;
+  font-weight: 650;
+}
+.scientific-section h3 {
+  font-size: 14px;
+  font-weight: 600;
+}
+.scientific-section .section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+.scientific-section .section-heading p,
+.import-summary p {
+  font-size: 12px;
+  color: var(--muted-foreground);
+  margin-top: 5px;
+}
+.scientific-page .toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 12px 0;
+}
+.scientific-page .toolbar > input {
+  max-width: 430px;
+}
+.scientific-page .toolbar > [data-slot="select-trigger"] {
+  width: auto;
+  min-width: 180px;
+}
+.scientific-page .file-check {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.scientific-page .form-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(130px, 1fr));
+  gap: 16px;
+}
+.scientific-page .form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.scientific-page .form-field > label {
+  font-size: 12px;
+  font-weight: 500;
+}
+.scientific-page .subsection {
+  border-top: 1px solid var(--border);
+  padding-top: 20px;
+  margin-top: 22px;
+}
+.scientific-page .subsection > h3 {
+  margin-bottom: 14px;
+}
+.scientific-page .rows-editor {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+}
+.scientific-page .rows-editor > .table-scroll {
+  width: 100%;
+}
+.workflow-tabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 10px;
+}
+.workflow-tabs > button {
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 8px;
+  color: var(--muted-foreground);
+}
+.workflow-tabs > button.active {
+  color: var(--primary);
+  background: var(--accent);
+  font-weight: 600;
+}
+.workflow-tabs > button > span {
+  width: 21px;
+  height: 21px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+}
+.workflow-footer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  justify-content: flex-end;
+}
+.workflow-footer > span {
+  margin-right: auto;
+  font-size: 12px;
+  color: var(--muted-foreground);
+}
+.import-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 0;
+  border-top: 1px solid var(--border);
+  margin-top: 16px;
+}
+.inline-field {
+  display: flex;
+  align-items: center;
+  width: 210px;
+}
+.tool-note {
+  padding: 12px 14px;
+  background: var(--muted);
+  font-size: 12px;
+  line-height: 1.8;
+  border-radius: 8px;
+  margin: 12px 0;
+}
+.scientific-page .field-error {
+  color: var(--destructive);
+  padding: 12px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--destructive) 6%, transparent);
+}
+.editable-table td {
+  vertical-align: top;
+}
+.editable-table input {
+  min-width: 85px;
+}
+.editable-table td:first-child input {
+  min-width: 150px;
+}
+.editable-table small {
+  display: block;
+  font-size: 11px;
+  color: var(--muted-foreground);
+  margin-top: 6px;
+}
+.source-cell {
+  max-width: 260px;
+  white-space: normal !important;
+  font-size: 12px;
+}
+.rule-button {
+  font-size: 12px;
+  text-align: left;
+  color: var(--primary);
+  min-width: 150px;
+  padding: 8px;
+}
+.source-prose {
+  white-space: pre-wrap;
+  font-size: 13px;
+  line-height: 1.9;
+  max-height: 60vh;
+  overflow: auto;
+}
+.cell-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 180px;
+}
+.cell-stack label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+}
+.cell-stack input {
+  width: 100px;
+  margin-left: auto;
+}
+.needs-review {
+  background: #fff8e8;
+}
+.feature-table {
+  min-width: 1400px;
+}
+.feature-table input {
+  min-width: 80px;
+}
+.row-actions {
+  white-space: nowrap;
+}
+.row-actions button {
+  padding: 6px;
+}
+.style-layout {
+  display: grid;
+  grid-template-columns: 180px minmax(260px, 340px) minmax(240px, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+.style-navigation {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.style-navigation > button {
+  padding: 10px 12px;
+  text-align: left;
+  font-size: 12px;
+  border-radius: 6px;
+}
+.style-navigation > button.active {
+  background: var(--accent);
+  color: var(--primary);
+  font-weight: 600;
+}
+.style-navigation .form-field {
+  margin-top: 14px;
+}
+.style-properties {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 0 22px;
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+}
+.style-property {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.style-property > small {
+  font-size: 11px;
+  color: var(--muted-foreground);
+}
+.color-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.color-input > input[type="color"] {
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--border);
+  background: white;
+  border-radius: 5px;
+  padding: 2px;
+}
+.style-preview {
+  position: sticky;
+  top: 20px;
+}
+.style-preview img,
+.result-figure {
+  width: 100%;
+  object-fit: contain;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.style-preview > p {
+  font-size: 12px;
+  color: var(--muted-foreground);
+}
+.generation-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
+  box-shadow: 0 -4px 16px #182a2010;
+}
+.generation-bar > p {
+  font-size: 12px;
+  color: var(--muted-foreground);
+}
+.metrics-result h3 {
+  margin: 24px 0 12px;
+  font-weight: 600;
+}
+.metrics-result pre {
+  white-space: pre-wrap;
+  font-size: 12px;
+}
+.metric-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin: 20px 0;
+}
+.metric-cards > div {
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.metric-cards span {
+  font-size: 12px;
+  color: var(--muted-foreground);
+}
+.metric-cards strong {
+  font-size: 24px;
+}
+.prose-table th {
+  min-width: 110px;
+}
+.scientific-page .two-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+@media (max-width: 1250px) {
+  .style-layout {
+    grid-template-columns: 160px 1fr;
+  }
+  .style-preview {
+    grid-column: 1/-1;
+    position: static;
+  }
+  .style-properties {
+    border-right: 0;
+  }
+  .scientific-page .form-grid {
+    grid-template-columns: repeat(2, minmax(130px, 1fr));
+  }
+}
+@media (max-width: 800px) {
+  .scientific-section {
+    padding: 16px;
+  }
+  .scientific-section .section-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .style-layout {
+    grid-template-columns: 1fr;
+  }
+  .style-properties {
+    border: 0;
+    padding: 0;
+  }
+  .scientific-page .form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.scientific-section.surface {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+}
+.style-properties {
+  max-height: 580px;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  padding-bottom: 12px;
+}
+.style-preview {
+  position: static;
+}
+.style-preview .section-heading {
+  flex-wrap: wrap;
+}
+.style-navigation {
+  font-size: 12px;
+}
+.generation-bar {
+  background: var(--card) !important;
+  position: static;
+  box-shadow: none;
+}
+@media (max-width: 800px) {
+  .style-properties {
+    max-height: none;
+  }
+}
