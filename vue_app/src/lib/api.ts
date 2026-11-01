@@ -74,10 +74,16 @@ export async function api<T = any>(
   let response;
   if (desktop) {
     const { invoke } = await import("@tauri-apps/api/core");
-    response = await invoke<{ ok: boolean; result: T; error?: string }>(
-      "python_request",
-      { request: { method, params } },
-    );
+    try {
+      response = await invoke<{ ok: boolean; result: T; error?: string }>(
+        "python_request",
+        { request: { method, params } },
+      );
+    } catch (e) {
+      throw e instanceof Error
+        ? e
+        : new Error(typeof e === "string" ? e : JSON.stringify(e));
+    }
   } else {
     const res = await fetch("/api/bridge", {
       method: "POST",

@@ -1,6 +1,19 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @custom-variant dark (&:is(.dark *));
+/* Dialogs lock body scrolling. Keep page scrolling inside the app so WebKit
+   cannot change viewport media queries when opening a modal. */
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+}
+#app {
+  height: 100vh;
+  height: 100dvh;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
 :root {
   --background: #fff;
   --foreground: #234734;
@@ -1388,7 +1401,7 @@ code {
   align-items: center;
   font-size: 11px;
 }
-.sidebar-collapsed {
+.app-shell.sidebar-collapsed {
   --nav-width: 70px;
 }
 .sidebar-collapsed .brand {
@@ -1496,7 +1509,11 @@ code {
   }
 }
 @media (max-width: 700px) {
-  .app-shell {
+  .sidebar-toggle {
+    display: none;
+  }
+  .app-shell,
+  .app-shell.sidebar-collapsed {
     --nav-width: 64px;
   }
   .brand {

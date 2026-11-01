@@ -3,12 +3,12 @@ on:
   workflow_dispatch:
   push:
     branches: [codex/vue3-v3-ui]
-    paths: [.github/workflows/release-v3.yml]
+    paths: [.github/workflows/release-v3.yml, vue_app/package.json]
 permissions:
   contents: read
 concurrency:
   group: release-v3
-  cancel-in-progress: false
+  cancel-in-progress: true
 jobs:
   verify:
     runs-on: ubuntu-24.04
@@ -34,8 +34,12 @@ jobs:
           python -m venv .venv
           .venv/bin/python -m pip install -r requirements.txt
           MPLBACKEND=Agg .venv/bin/python -m unittest discover -s python -p 'test_*.py' -v
-      - run: npx playwright install --with-deps chromium
+      - run: npx playwright install --with-deps chromium webkit
       - run: npm test
+      - name: WebKit layout and native error regressions
+        run: npm test -- tests/v301-repairs.spec.ts
+        env:
+          V3_TEST_BROWSER: webkit
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -95,7 +99,7 @@ jobs:
           suffix=''
           if [ "$RUNNER_OS" = Windows ]; then suffix='.exe'; fi
           python scripts/test-packaged-engine.py "src-tauri/binaries/research-python-${{ matrix.target }}$suffix"
-      - run: npm run tauri -- build --target ${{ matrix.target }} --bundles ${{ matrix.bundle }}
+      - run: npm run tauri -- build --features custom-protocol --target ${{ matrix.target }} --bundles ${{ matrix.bundle }}
       - name: Verify actual Windows installation and bundled engine
         if: runner.os == 'Windows'
         shell: pwsh
@@ -105,7 +109,7 @@ jobs:
           $process = Start-Process $setup.FullName -ArgumentList @('/S', "/D=$destination") -PassThru -Wait
           if ($process.ExitCode -ne 0) { throw 'Installer failed' }
           if (-not (Test-Path "$destination/research-studio-v3.exe")) { throw 'Application executable missing' }
-          python scripts/test-packaged-engine.py "$destination/research-python.exe"
+          python scripts/test-desktop-bridge.py "$destination/research-studio-v3.exe"
           if ($LASTEXITCODE -ne 0) { throw 'Installed engine failed' }
       - name: Verify Mac bundle and create archive
         if: runner.os == 'macOS'
@@ -114,7 +118,7 @@ jobs:
           /usr/libexec/PlistBuddy -c "Print :NSAppleEventsUsageDescription" "$app/Contents/Info.plist"
           codesign --force --deep --sign - "$app"
           codesign --verify --deep --strict "$app"
-          python scripts/test-packaged-engine.py "$app/Contents/MacOS/research-python"
+          python scripts/test-desktop-bridge.py "$app/Contents/MacOS/research-studio-v3"
           mkdir -p release
           ditto -c -k --sequesterRsrc --keepParent "$app" 'release/ResearchDataTools-${{ matrix.asset }}.zip'
       - name: Collect Windows installer

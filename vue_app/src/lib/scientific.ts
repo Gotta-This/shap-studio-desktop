@@ -53,7 +53,7 @@ export async function startJob(
       }
     }
   } catch (e) {
-    job.error = (e as Error).message;
+    job.error = e instanceof Error ? e.message : String(e);
     job.busy = false;
   }
 }
@@ -65,7 +65,7 @@ export async function cancelJob(kind: string) {
     try {
       if (job.id) await api("tool.job.cancel", { id: job.id });
     } catch (e) {
-      job.error = (e as Error).message;
+      job.error = e instanceof Error ? e.message : String(e);
     }
   }
 }

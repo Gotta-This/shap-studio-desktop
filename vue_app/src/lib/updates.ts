@@ -1,8 +1,9 @@
 import { reactive } from "vue";
+import { version } from "../../package.json";
 import { api, notify, openPath } from "./api";
 import { scientificJobs } from "./scientific";
 export const updates = reactive({
-  current: "3.0.0",
+  current: version,
   status: "idle",
   release: null as any,
   path: "",

@@ -77,8 +77,18 @@ shadcn-vue 官方源码及 MIT 许可证保存在 `src/components/ui`，来源�
 
 ## V3 发布
 
-`.github/workflows/release-v3.yml` 在 V3 分支变更该文件时或手动触发。先构建前端、运行后端与无头浏览器测试，再在 Windows x64、Apple Silicon Mac 和 Intel Mac 分别打包 Python 引擎与 Tauri。Windows 静默安装到 CI 临时目录，再运行实际安装后的科学计算引擎；Mac 添加本机临时签名、验证完整性和 app 内引擎。全部通过才创建 Release、上传 Windows 安装版/便携版、两种 Mac 安装包及 SHA256SUMS.txt，再标记 latest。Qt 历史 Release 保留。
+`.github/workflows/release-v3.yml` 在 V3 分支变更该文件时或手动触发。先构建前端、运行后端与无头浏览器测试，再在 Windows x64、Apple Silicon Mac 和 Intel Mac 分别打包 Python 引擎与 Tauri。Windows 静默安装到 CI 临时目录，再通过安装后的桌面主程序调用科学计算引擎；Mac 添加本机临时签名、验证完整性和 app 内引擎。全部通过才创建 Release、上传 Windows 安装版/便携版、两种 Mac 安装包及 SHA256SUMS.txt，再标记 latest。Qt 历史 Release 保留。
 
 后续发布先同步修改 `package.json`、`package-lock.json`、`src-tauri/tauri.conf.json`、`src-tauri/Cargo.toml`、`src-tauri/Cargo.lock` 和 `python/releases.py` 的版本，更新发布说明后触发流程。已存在的版本拒绝覆盖，以免已下载的安装包校验变化。
 
 GitHub 托管系统标签依据 [GitHub runner 文档](https://docs.github.com/en/actions/how-tos/write-workflows/choose-where-workflows-run/choose-the-runner-for-a-job)；Windows 安装包内嵌 WebView2 离线安装程序，见 [Tauri Windows 安装文档](https://v2.tauri.app/distribute/windows-installer/)。
+
+## V3.0.1 修订
+
+V3.0.0 的桌面主程序错误地使用自身 Cargo feature 判断 Tauri 运行环境，发布时 CLI 开启的是依赖的 production feature，导致主程序尝试调用构建机器上的开发脚本。V3.0.1 改用 `tauri::is_dev()`，并在发布命令显式开启 production feature。原生返回的字符串错误统一转成 Error，界面可以显示真实原因并重试。
+
+发布后测试现在运行的是 app 的 `research-studio-v3`（Windows 为 `.exe`），通过 `--bridge-request` 在不创建窗口的情况下调用与界面完全相同的 Rust → Python 函数。测试故意将开发 Python 指向不存在的路径，验证实际启用随包 Python、版本一致、中文待办以及数列、数值、Word、SHAP 四项后台任务。此检查可以发现“Python 引擎单独能用、桌面却未接通”的问题。
+
+侧栏收起宽度不再被窄屏媒体规则覆盖；小于 700px 时自动紧凑导航。页面滚动由固定的应用容器管理，防止 WebKit 打开弹窗后切换视口宽度和媒体规则。搜索框回归使用传统滚动条并逐帧比较位置、宽度和内边距，覆盖 Chromium 与 WebKit。
+
+V3.0.0 的桥接错误也影响应用内检查更新，升级至此修订版时请直接下载 Release 安装包替换。原有用户目录和工作空间保持兼容。

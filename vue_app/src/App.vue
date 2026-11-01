@@ -112,7 +112,7 @@ onUnmounted(() => {
 </script>
 <template>
   <div class="app-shell" :class="{ 'sidebar-collapsed': collapsed }">
-    <aside class="sidebar">
+    <aside id="main-navigation-sidebar" class="sidebar">
       <div class="brand">
         <span class="brand-icon"><Grid2X2 :size="18" /></span>
         <div><strong>科研数据工具集</strong><small>个人工作空间</small></div>
@@ -182,6 +182,9 @@ onUnmounted(() => {
         <Button
           variant="ghost"
           size="icon"
+          class="sidebar-toggle"
+          aria-controls="main-navigation-sidebar"
+          :aria-expanded="!collapsed"
           :aria-label="collapsed ? '展开侧栏' : '收起侧栏'"
           @click="collapsed = !collapsed"
           ><PanelLeftOpen v-if="collapsed" :size="17" /><PanelLeftClose

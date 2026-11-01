@@ -42,7 +42,7 @@ test("update check retries, downloads and opens verified package through host ad
               ok: true,
               result: {
                 newer: true,
-                version: "3.0.1",
+                version: "3.0.2",
                 asset: { name: "installer" },
               },
             },
@@ -51,7 +51,7 @@ test("update check retries, downloads and opens verified package through host ad
       await route.fulfill({
         json: {
           ok: true,
-          result: { path: "/tmp/verified-update.zip", version: "3.0.1" },
+          result: { path: "/tmp/verified-update.zip", version: "3.0.2" },
         },
       });
     } else await route.continue();
@@ -60,7 +60,7 @@ test("update check retries, downloads and opens verified package through host ad
   await expect(page.getByRole("alert")).toContainText("网络不可用");
   fail = false;
   await page.getByRole("button", { name: "检查更新", exact: true }).click();
-  await expect(page.getByText("发现新版本 V3.0.1")).toBeVisible();
+  await expect(page.getByText("发现新版本 V3.0.2")).toBeVisible();
   await page
     .getByRole("button", { name: "下载并校验更新", exact: true })
     .click();

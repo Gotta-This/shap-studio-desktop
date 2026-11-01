@@ -1,4 +1,5 @@
-import { createApp } from "vue";
+import { createApp, h } from "vue";
+import { ConfigProvider } from "reka-ui";
 import { createRouter, createWebHashHistory } from "vue-router";
 import App from "./App.vue";
 import Workspace from "./views/Workspace.vue";
@@ -23,4 +24,10 @@ const router = createRouter({
     { path: "/settings", component: Settings },
   ],
 });
-createApp(App).use(router).mount("#app");
+// The app scroll container owns scrollbar space; dialogs must not add body padding.
+createApp({
+  render: () =>
+    h(ConfigProvider, { scrollBody: { padding: 0, margin: 0 } }, () => h(App)),
+})
+  .use(router)
+  .mount("#app");

@@ -106,7 +106,7 @@ def dispatch(method, p):
     if method=='state': return state()
     if method=='runtime.info':
         import importlib.metadata
-        return dict(bundled=bool(getattr(sys,'frozen',False)),versions={name:importlib.metadata.version(name) for name in ['numpy','pandas','scikit-learn','shap','matplotlib','Pillow','openpyxl']})
+        return dict(application_version=__import__('releases').VERSION,bundled=bool(getattr(sys,'frozen',False)),versions={name:importlib.metadata.version(name) for name in ['numpy','pandas','scikit-learn','shap','matplotlib','Pillow','openpyxl']})
     if method=='workspace.enable':
         s=WorkspaceStore(p['root'])
         config=profile()/'workspace.json'
