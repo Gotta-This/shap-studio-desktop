@@ -110,17 +110,21 @@ async function save() {
         deadline: form.deadline,
       });
     else {
+      // The bridge stages native paths before browser uploads. Keep each file's
+      // category aligned when drag/drop and native selection are used together.
+      const ordered = [
+        ...rows.value.filter((r) => r.path),
+        ...rows.value.filter((r) => r.file),
+      ];
       const result = await api<{ received: number; duplicates: string[] }>(
         "files.import",
         {
           task_id: form.task_id || null,
-          paths: rows.value.filter((r) => r.path).map((r) => r.path),
+          paths: ordered.filter((r) => r.path).map((r) => r.path),
           uploads: await upload(
-            rows.value.flatMap((r) => (r.file ? [r.file] : [])),
+            ordered.flatMap((r) => (r.file ? [r.file] : [])),
           ),
-          categories: form.task_id
-            ? rows.value.map((r) => r.category)
-            : undefined,
+          categories: form.task_id ? ordered.map((r) => r.category) : undefined,
           todo_text: form.task_id ? form.todo_text : "",
           deadline: form.deadline,
         },

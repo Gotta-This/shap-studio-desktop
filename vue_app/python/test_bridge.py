@@ -43,6 +43,15 @@ class BridgeTests(unittest.TestCase):
     def test_category_deterministic_and_numeric_actual_statistics(self):
         p={'rows':[{'value':1,'count':28},{'value':0,'count':93}],'seed':12};a=self.call('tool.category',p);self.assertEqual(a,self.call('tool.category',p));self.assertEqual(len(a['values']),121);self.assertEqual(sum(a['values']),28)
         r=self.call('tool.numeric',dict(n=20,mean=10,sd=2,digits=2,seed=12));self.assertEqual(len(r['values']),20);self.assertLess(abs(r['mean']-10),.1)
+    def test_native_and_uploaded_material_categories_match_actual_folders(self):
+        self.enable();tid=self.create()
+        native=Path(self.tmp.name)/'原始数据.csv';native.write_text('x,y\n1,2')
+        received=self.call('files.import',dict(task_id=tid,paths=[str(native)],uploads=[dict(name='原稿.txt',content=base64.b64encode(b'original').decode())],categories=['原始数据','原稿']))
+        files=self.call('task.detail',{'id':tid})['files'];by_name={f['original_name']:f for f in files}
+        self.assertEqual(by_name['原始数据.csv']['category'],'原始数据')
+        self.assertEqual(by_name['原稿.txt']['category'],'原稿')
+        self.assertEqual(bridge.workspace().file_path(by_name['原稿.txt']['id']).parent.name,'原稿')
+        self.assertEqual(native.read_text(),'x,y\n1,2')
     def test_upload_name_cannot_escape_staging(self):
         self.enable()
         with self.assertRaises(ValueError):self.upload('../escape.txt')
