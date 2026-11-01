@@ -1,7 +1,4 @@
 import { test, expect } from "@playwright/test";
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
 
 test("update check retries, downloads and opens verified package through host adapter", async ({
   page,
@@ -70,41 +67,18 @@ test("update check retries, downloads and opens verified package through host ad
     .toEqual(["/tmp/verified-update.zip"]);
 });
 
-test("Qt personal todo migration uses real backend and remains idempotent", async ({
+test("settings shows persistent data directory and hides Qt migration", async ({
   page,
 }) => {
-  const folder = mkdtempSync(join(tmpdir(), "v3-qt-migration-"));
-  const text = "从 Qt 迁移的个人工作 " + Date.now();
-  writeFileSync(
-    join(folder, "todos.json"),
-    JSON.stringify({
-      version: 1,
-      tasks: [
-        {
-          id: text,
-          name: text,
-          priority: "high",
-          due_date: "2028-02-29",
-          completed: false,
-          deleted: false,
-        },
-      ],
-    }),
-  );
-  try {
-    await page.goto("/#/settings");
-    await page.getByLabel("迁移 Qt 版本的数据").fill(folder);
-    await page
-      .getByRole("button", { name: "迁移 Qt 数据", exact: true })
-      .click();
-    await expect(page.getByRole("status")).toContainText("已迁移 1 条");
-    await page
-      .getByRole("button", { name: "迁移 Qt 数据", exact: true })
-      .click();
-    await expect(page.getByRole("status")).toContainText("已迁移 0 条");
-    await page.getByRole("link", { name: /待办事项/ }).click();
-    await expect(page.getByText(text, { exact: true })).toBeVisible();
-  } finally {
-    rmSync(folder, { recursive: true, force: true });
-  }
+  await page.goto("/#/settings");
+  await expect(page.getByText("应用数据目录", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "打开应用数据目录", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "迁移 Qt 数据", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByText("替换或重新安装应用不会清除这些数据", { exact: false }),
+  ).toBeVisible();
 });

@@ -23,32 +23,12 @@ import { state, api, refresh, notify, desktop, openPath } from "@/lib/api";
 const path = ref(""),
   busy = ref(false),
   error = ref("");
-const migrationPath = ref(""),
-  migrating = ref(false),
-  migrationError = ref("");
+const dataDirectory = ref("");
 onMounted(async () => {
   try {
-    const detected = (await api("migration.inspect")).directory;
-    if (!migrationPath.value) migrationPath.value = detected;
+    dataDirectory.value = (await api("storage.info")).directory;
   } catch {}
 });
-async function migrate() {
-  migrating.value = true;
-  migrationError.value = "";
-  try {
-    const result = await api("migration.import", {
-      directory: migrationPath.value,
-    });
-    await refresh();
-    notify(
-      `已迁移 ${result.imported} 条个人待办${result.workspace ? "，并连接旧工作空间" : ""}。原配置已备份。`,
-    );
-  } catch (e) {
-    migrationError.value = (e as Error).message;
-  } finally {
-    migrating.value = false;
-  }
-}
 async function browse() {
   if (!desktop) {
     document.getElementById("workspace-path")?.focus();
@@ -117,7 +97,7 @@ async function connect() {
                 >
               </div>
               <small
-                >新目录会建立任务索引；选择已有工作空间会读取原有索引。</small
+                >默认工作空间已自动建立；也可以切换到其他目录。选择已有工作空间会读取原有索引。</small
               >
             </div>
             <p v-if="error" role="alert" class="field-error">{{ error }}</p>
@@ -134,31 +114,22 @@ async function connect() {
               }}</Button
             >
           </form>
-          <form class="dialog-form" @submit.prevent="migrate">
-            <div class="form-field">
-              <Label for="migration-path">迁移 Qt 版本的数据</Label>
-              <Input
-                id="migration-path"
-                v-model="migrationPath"
-                placeholder="Qt 应用数据目录"
-              />
-              <small
-                >导入个人待办；尚未连接目录时沿用 Qt
-                工作空间。重复迁移不会覆盖现有待办，原配置会备份，Qt
-                数据保持原样。</small
-              >
+          <div v-if="dataDirectory" class="connected-path">
+            <HardDrive :size="20" />
+            <div>
+              <small>应用数据目录</small><code>{{ dataDirectory }}</code>
             </div>
-            <p v-if="migrationError" role="alert" class="field-error">
-              {{ migrationError }}
-            </p>
             <Button
-              variant="outline"
-              class="self-start"
-              :disabled="migrating || !migrationPath"
-              type="submit"
-              >{{ migrating ? "正在迁移…" : "迁移 Qt 数据" }}</Button
-            >
-          </form>
+              size="icon"
+              variant="ghost"
+              aria-label="打开应用数据目录"
+              @click="openPath(dataDirectory)"
+              ><ArrowUpRight :size="17"
+            /></Button>
+          </div>
+          <p class="muted">
+            待办、配置、导入记录和生成结果保存在用户目录中，替换或重新安装应用不会清除这些数据。未另选目录时，稿件使用此目录中的默认工作空间。
+          </p>
           <div class="settings-note">
             <ShieldCheck :size="19" />
             <p>
@@ -221,7 +192,7 @@ async function connect() {
           <div class="settings-note">
             <HardDrive :size="18" />
             <p>
-              备份前关闭应用，并完整复制工作空间文件夹，包含隐藏索引。当前按单人本地使用设计。
+              备份时请先关闭应用，复制完整的应用数据目录；若另选了稿件工作空间，也一并复制该目录及其中的隐藏索引。
             </p>
           </div>
         </div>

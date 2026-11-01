@@ -100,7 +100,7 @@ jobs:
           if [ "$RUNNER_OS" = Windows ]; then suffix='.exe'; fi
           python scripts/test-packaged-engine.py "src-tauri/binaries/research-python-${{ matrix.target }}$suffix"
       - run: npm run tauri -- build --features custom-protocol --target ${{ matrix.target }} --bundles ${{ matrix.bundle }}
-      - name: Verify actual Windows installation and bundled engine
+      - name: Verify installed Windows host, default storage and all four tools
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
@@ -111,7 +111,7 @@ jobs:
           if (-not (Test-Path "$destination/research-studio-v3.exe")) { throw 'Application executable missing' }
           python scripts/test-desktop-bridge.py "$destination/research-studio-v3.exe"
           if ($LASTEXITCODE -ne 0) { throw 'Installed engine failed' }
-      - name: Verify Mac bundle and create archive
+      - name: Verify Mac host, default storage and create archive
         if: runner.os == 'macOS'
         run: |
           app='src-tauri/target/${{ matrix.target }}/release/bundle/macos/科研数据工具集 V3.app'

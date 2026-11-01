@@ -21,6 +21,7 @@ def run(profile,p,progress):
     if p.get('previous'):
         folder(profile,p['previous'])
         previous=joblib.load(profile/'analysis'/p['previous']/'model.joblib')
+        previous.folder=folder(profile,p['previous'])
     result=run_analysis(p['config'],p.get('output') or profile/'exports',progress=progress,previous=previous,data_only=p.get('data_only',False))
     rid=uuid.uuid4().hex;store=profile/'analysis'/rid;store.mkdir(parents=True)
     (store/'reference.json').write_text(json.dumps({'folder':str(result.folder)}));joblib.dump(result,store/'model.joblib')

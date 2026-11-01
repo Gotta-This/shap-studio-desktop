@@ -15,14 +15,27 @@ if not getattr(sys, 'frozen', False):
     sys.path.insert(0, str(ROOT / 'desktop_app'))
 from clinical_studio.manuscripts import WorkspaceStore, CATEGORIES, STATUSES, component, due_date
 
-PROFILE = Path(os.environ.get('RESEARCH_V3_PROFILE', str(ROOT / 'vue_app/.v3-data'))).expanduser().resolve()
+from storage import data_root,initialize
+AUTO_WORKSPACE = not bool(os.environ.get('RESEARCH_V3_PROFILE'))
+DATA_ROOT = data_root() if AUTO_WORKSPACE else Path(os.environ['RESEARCH_V3_PROFILE']).expanduser().resolve()
+PROFILE = DATA_ROOT/'profile' if AUTO_WORKSPACE else DATA_ROOT
+
+def using_default_storage():return AUTO_WORKSPACE and PROFILE==DATA_ROOT/'profile'
 
 def profile():
+    if using_default_storage():initialize(DATA_ROOT,os.environ.get('RESEARCH_V3_LEGACY_PROFILE'))
     PROFILE.mkdir(parents=True, exist_ok=True)
     return PROFILE
 
 def workspace(required=True):
     config = profile() / 'workspace.json'
+    if not config.exists() and using_default_storage():
+        store=WorkspaceStore(DATA_ROOT/'workspace')
+        fd,tmp=tempfile.mkstemp(dir=profile(),prefix='.workspace-')
+        try:
+            with os.fdopen(fd,'w',encoding='utf-8') as stream:json.dump(dict(root=str(store.root)),stream);stream.flush();os.fsync(stream.fileno())
+            os.replace(tmp,config)
+        finally:Path(tmp).unlink(missing_ok=True)
     if config.exists():
         return WorkspaceStore(json.loads(config.read_text(encoding='utf-8'))['root'], create=False)
     if required: raise ValueError('请先选择本地工作空间。')
@@ -103,6 +116,7 @@ def dispatch(method, p):
     if method=='migration.import':
         from migration import migrate
         return migrate(profile(),p.get('directory'))
+    if method=='storage.info': return dict(directory=str(DATA_ROOT),profile=str(profile()),automatic=using_default_storage())
     if method=='state': return state()
     if method=='runtime.info':
         import importlib.metadata
