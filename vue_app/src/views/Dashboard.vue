@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref, onMounted, onUnmounted, onActivated } from "vue";
+import { homeMessage } from "@/lib/home";
 import { useRouter } from "vue-router";
 import {
   ArrowRight,
@@ -11,12 +12,12 @@ import {
   ChartNoAxesCombined,
   FileSpreadsheet,
   ArrowUpRight,
-  Sun,
 } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import PageHeading from "@/components/PageHeading.vue";
 import EmptyState from "@/components/EmptyState.vue";
+import WeatherStatus from "@/components/WeatherStatus.vue";
 import { state, today, dateText } from "@/lib/api";
 const router = useRouter(),
   pending = computed(() => state.todos.filter((t) => !t.completed)),
@@ -53,27 +54,42 @@ const tools = [
     icon: ChartNoAxesCombined,
   },
 ];
+const clock = ref(new Date());
+const greeting = computed(() => homeMessage(clock.value));
+let clockTimer: ReturnType<typeof setInterval> | undefined;
+const updateClock = () => {
+  clock.value = new Date();
+};
+onMounted(() => {
+  clockTimer = setInterval(updateClock, 30_000);
+  document.addEventListener("visibilitychange", updateClock);
+});
+onActivated(updateClock);
+onUnmounted(() => {
+  clearInterval(clockTimer);
+  document.removeEventListener("visibilitychange", updateClock);
+});
 const dayLabel = computed(() =>
   new Intl.DateTimeFormat("zh-CN", {
     month: "long",
     day: "numeric",
     weekday: "long",
-  }).format(new Date()),
+  }).format(clock.value),
 );
 </script>
 <template>
   <section>
     <PageHeading
-      title="工作台"
+      title="丁丁宝宝，欢迎回来 😘❤️"
       subtitle="把稿件、材料与科研工作安排得井井有条。"
-      ><span class="today-label"
-        ><Sun :size="16" />{{ dayLabel }}</span
-      ></PageHeading
-    >
+      ><div class="today-label">
+        <span>{{ dayLabel }}</span
+        ><WeatherStatus /></div
+    ></PageHeading>
     <div class="welcome-panel">
       <div>
         <Badge variant="secondary">个人工作空间</Badge>
-        <h2>从一项清晰的工作开始。</h2>
+        <h2>{{ greeting }}</h2>
         <p>
           {{
             pending.length

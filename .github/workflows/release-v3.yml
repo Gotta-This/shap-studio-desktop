@@ -35,9 +35,10 @@ jobs:
           .venv/bin/python -m pip install -r requirements.txt
           MPLBACKEND=Agg .venv/bin/python -m unittest discover -s python -p 'test_*.py' -v
       - run: npx playwright install --with-deps chromium webkit
-      - run: npm test
+      - name: Chromium UI and personal home regressions
+        run: npm test
       - name: WebKit layout and native error regressions
-        run: npm test -- tests/v301-repairs.spec.ts
+        run: npm test -- tests/v301-repairs.spec.ts tests/personal-home.spec.ts
         env:
           V3_TEST_BROWSER: webkit
       - uses: actions/upload-artifact@v7

@@ -104,6 +104,15 @@ def preview_file(s, fid):
     return dict(kind='text',name=p.name,text=text[:100000])
 
 def dispatch(method, p):
+    if method=='weather.search':
+        from weather import search
+        return search(p['query'])
+    if method=='weather.choose':
+        from weather import choose
+        return choose(profile(),p['location'])
+    if method=='weather.current':
+        from weather import current,DEFAULT_LOCATION
+        return current(profile(),p.get('force',False),DEFAULT_LOCATION if using_default_storage() else None)
     if method=='updates.check':
         from releases import check
         return check()
