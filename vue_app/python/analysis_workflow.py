@@ -8,7 +8,7 @@ def folder(profile,rid):
     if not re.fullmatch('[a-f0-9]{32}',rid or ''):raise ValueError('结果标识无效，请重新生成。')
     ref=profile/'analysis'/rid/'reference.json'
     if not ref.is_file():raise ValueError('结果已不可用，请重新生成。')
-    return Path(json.loads(ref.read_text())['folder'])
+    return Path(json.loads(ref.read_text(encoding='utf-8'))['folder'])
 
 
 def run(profile,p,progress):

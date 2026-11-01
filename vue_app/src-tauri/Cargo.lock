@@ -2774,7 +2774,7 @@ dependencies = [
 
 [[package]]
 name = "research-studio-v3"
-version = "3.0.0-alpha.1"
+version = "3.0.0"
 dependencies = [
  "serde_json",
  "tauri",

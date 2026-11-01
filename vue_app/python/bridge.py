@@ -24,7 +24,7 @@ def profile():
 def workspace(required=True):
     config = profile() / 'workspace.json'
     if config.exists():
-        return WorkspaceStore(json.loads(config.read_text())['root'], create=False)
+        return WorkspaceStore(json.loads(config.read_text(encoding='utf-8'))['root'], create=False)
     if required: raise ValueError('请先选择本地工作空间。')
 
 @contextlib.contextmanager
@@ -91,6 +91,18 @@ def preview_file(s, fid):
     return dict(kind='text',name=p.name,text=text[:100000])
 
 def dispatch(method, p):
+    if method=='updates.check':
+        from releases import check
+        return check()
+    if method=='updates.download':
+        from releases import download
+        return download(profile())
+    if method=='migration.inspect':
+        from migration import inspect
+        return inspect(p.get('directory'))
+    if method=='migration.import':
+        from migration import migrate
+        return migrate(profile(),p.get('directory'))
     if method=='state': return state()
     if method=='runtime.info':
         import importlib.metadata
@@ -100,7 +112,7 @@ def dispatch(method, p):
         config=profile()/'workspace.json'
         fd,tmp=tempfile.mkstemp(dir=profile(),prefix='.workspace-')
         try:
-            with os.fdopen(fd,'w') as f: json.dump(dict(root=str(s.root)),f);f.flush();os.fsync(f.fileno())
+            with os.fdopen(fd,'w',encoding='utf-8') as f: json.dump(dict(root=str(s.root)),f);f.flush();os.fsync(f.fileno())
             os.replace(tmp,config)
         finally: Path(tmp).unlink(missing_ok=True)
         return state()
@@ -250,6 +262,9 @@ def main():
     sys.stdout.write(encoded);sys.stdout.flush()
 
 if __name__=='__main__':
+    # Windows GUI processes may inherit a locale codec; the IPC protocol is UTF-8.
+    for stream in (sys.stdin,sys.stdout,sys.stderr):
+        if hasattr(stream,'reconfigure'):stream.reconfigure(encoding='utf-8')
     if len(sys.argv)==3 and sys.argv[1]=='--job-worker':
         from jobs import worker
         worker(profile(),sys.argv[2])

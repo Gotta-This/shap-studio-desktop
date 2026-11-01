@@ -22,7 +22,7 @@ async fn python_request(app:tauri::AppHandle, request:serde_json::Value, running
             let parent=exe.parent().ok_or("应用目录不可用")?;
             command=Command::new(parent.join(if cfg!(windows){"research-python.exe"}else{"research-python"}));
         }
-        command.env("RESEARCH_V3_PROFILE",profile).env("MPLBACKEND","Agg").stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
+        command.env("RESEARCH_V3_PROFILE",profile).env("MPLBACKEND","Agg").env("PYTHONUTF8","1").stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
         #[cfg(windows)] { use std::os::windows::process::CommandExt;command.creation_flags(0x08000000); }
         let mut child=command.spawn().map_err(|e|format!("Python 引擎无法启动：{e}"))?;
         let mut input=child.stdin.take().ok_or("无法连接 Python 引擎")?;

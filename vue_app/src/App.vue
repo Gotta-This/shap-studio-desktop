@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { state, feedback, refresh, notify, desktop } from "@/lib/api";
+import { updates, checkUpdate } from "@/lib/updates";
 import { scientificJobs } from "@/lib/scientific";
 const route = useRoute(),
   router = useRouter(),
@@ -98,6 +99,7 @@ onMounted(async () => {
   window.addEventListener("keydown", shortcut);
   try {
     await refresh();
+    if (desktop) void checkUpdate();
   } catch (e) {
     notify((e as Error).message, true);
   }
@@ -167,9 +169,10 @@ onUnmounted(() => {
           ><Settings2 :size="17" /><span>设置</span></RouterLink
         >
         <div class="version">
-          <span>V3 · 预览版</span
+          <span>V{{ updates.current }}</span
           ><RouterLink to="/settings"
-            >检查更新 <ArrowUpRight :size="11"
+            >{{ updates.release?.newer ? "有新版" : "检查更新" }}
+            <ArrowUpRight :size="11"
           /></RouterLink>
         </div>
       </div>

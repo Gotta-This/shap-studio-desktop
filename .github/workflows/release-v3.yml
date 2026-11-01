@@ -1,0 +1,159 @@
+name: Build test and release Vue V3
+on:
+  workflow_dispatch:
+  push:
+    branches: [codex/vue3-v3-ui]
+    paths: [.github/workflows/release-v3.yml]
+permissions:
+  contents: read
+concurrency:
+  group: release-v3
+  cancel-in-progress: false
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: vue_app
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: vue_app/package-lock.json
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - run: npm ci
+      - run: npm run build
+      - run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install -r requirements.txt
+          MPLBACKEND=Agg .venv/bin/python -m unittest discover -s python -p 'test_*.py' -v
+      - run: npx playwright install --with-deps chromium
+      - run: npm test
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: v3-browser-checks
+          path: vue_app/test-results/
+  package:
+    needs: verify
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2022
+            target: x86_64-pc-windows-msvc
+            asset: Windows-x64
+            bundle: nsis
+          - os: macos-15
+            target: aarch64-apple-darwin
+            asset: macOS-arm64
+            bundle: app
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+            asset: macOS-x86_64
+            bundle: app
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+        working-directory: vue_app
+    env:
+      PYTHONUTF8: '1'
+      MPLBACKEND: Agg
+      TAURI_ENV_TARGET_TRIPLE: ${{ matrix.target }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: vue_app/package-lock.json
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: vue_app/src-tauri -> target
+      - run: npm ci
+      - run: python -m pip install -r requirements.txt
+      - run: python scripts/build-sidecar.py
+      - name: Test the frozen scientific engine
+        run: |
+          suffix=''
+          if [ "$RUNNER_OS" = Windows ]; then suffix='.exe'; fi
+          python scripts/test-packaged-engine.py "src-tauri/binaries/research-python-${{ matrix.target }}$suffix"
+      - run: npm run tauri -- build --target ${{ matrix.target }} --bundles ${{ matrix.bundle }}
+      - name: Verify actual Windows installation and bundled engine
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*-setup.exe | Select-Object -First 1
+          $destination = Join-Path $env:RUNNER_TEMP 'ResearchStudioV3'
+          $process = Start-Process $setup.FullName -ArgumentList @('/S', "/D=$destination") -PassThru -Wait
+          if ($process.ExitCode -ne 0) { throw 'Installer failed' }
+          if (-not (Test-Path "$destination/research-studio-v3.exe")) { throw 'Application executable missing' }
+          python scripts/test-packaged-engine.py "$destination/research-python.exe"
+          if ($LASTEXITCODE -ne 0) { throw 'Installed engine failed' }
+      - name: Verify Mac bundle and create archive
+        if: runner.os == 'macOS'
+        run: |
+          app='src-tauri/target/${{ matrix.target }}/release/bundle/macos/科研数据工具集 V3.app'
+          codesign --verify --deep --strict "$app"
+          python scripts/test-packaged-engine.py "$app/Contents/MacOS/research-python"
+          mkdir -p release
+          ditto -c -k --sequesterRsrc --keepParent "$app" 'release/ResearchDataTools-${{ matrix.asset }}.zip'
+      - name: Collect Windows installer
+        if: runner.os == 'Windows'
+        run: |
+          mkdir -p release
+          cp src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*-setup.exe release/ResearchDataTools-Setup-Windows-x64.exe
+      - uses: actions/upload-artifact@v7
+        with:
+          name: v3-release-${{ matrix.asset }}
+          path: vue_app/release/*
+          if-no-files-found: error
+          compression-level: 0
+  publish:
+    needs: package
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: v3-release-*
+          path: release
+          merge-multiple: true
+      - name: Publish checked artifacts as latest
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(node -p "require('./vue_app/package.json').version")
+          test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/codex/vue3-v3-ui" --jq .object.sha)" = "$GITHUB_SHA"
+          (cd release && sha256sum *.exe *.zip > SHA256SUMS.txt)
+          if gh release view "v$version" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo 'This version already exists; bump all V3 versions before publishing again.' >&2
+            exit 1
+          fi
+          gh release create "v$version" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft --title "科研数据工具集 v$version" --notes-file vue_app/RELEASE_NOTES.md
+          gh release upload "v$version" release/* --repo "$GITHUB_REPOSITORY"
+          gh release edit "v$version" --repo "$GITHUB_REPOSITORY" --draft=false --latest
+          gh release view "v$version" --repo "$GITHUB_REPOSITORY" --json url,tagName,assets

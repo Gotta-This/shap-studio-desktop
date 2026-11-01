@@ -29,12 +29,12 @@ def start(profile,p):
     threading.Thread(target=process.wait,daemon=True).start()
     return dict(id=jid)
 
-def status(profile,jid):return json.loads((location(profile,jid)/'status.json').read_text())
+def status(profile,jid):return json.loads((location(profile,jid)/'status.json').read_text(encoding='utf-8'))
 def cancel(profile,jid):
     path=location(profile,jid);(path/'cancel').touch();return dict(id=jid,message='正在取消；当前计算步骤结束后停止。')
 
 def worker(profile,jid):
-    path=location(profile,jid);p=json.loads((path/'request.json').read_text())
+    path=location(profile,jid);p=json.loads((path/'request.json').read_text(encoding='utf-8'))
     def progress(message):
         if (path/'cancel').exists():raise InterruptedError('已取消本次计算。')
         write(path/'status.json',dict(id=jid,status='running',message=message))

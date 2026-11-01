@@ -16,7 +16,7 @@ def source_path(profile,session):
     folder=profile/'word-sessions'/session
     source=folder/'source.json'
     if not source.exists():raise ValueError('原文已不可用，请重新导入。')
-    return Path(json.loads(source.read_text())['path'])
+    return Path(json.loads(source.read_text(encoding='utf-8'))['path'])
 
 def scan(profile,path,mode='zero'):
     session=uuid.uuid4().hex;folder=profile/'word-sessions'/session;folder.mkdir(parents=True)
@@ -34,7 +34,7 @@ def match(profile,p):
     return dict(groups=[dict(name=g,tables=imported.group_matches.get(g,0),paragraphs=imported.text_group_matches.get(g,0),n=imported.group_sizes.get(g)) for g in names],table_count=imported.table_count,messages=imported.messages)
 
 def apply(profile,p):
-    path=source_path(profile,p['session']);source_name=json.loads((profile/'word-sessions'/p['session']/'source.json').read_text()).get('name',path.name);options=p.get('options',{});mode=options.get('decimal_mode','zero')
+    path=source_path(profile,p['session']);source_name=json.loads((profile/'word-sessions'/p['session']/'source.json').read_text(encoding='utf-8')).get('name',path.name);options=p.get('options',{});mode=options.get('decimal_mode','zero')
     inventory=scan_precision(scan_word(path),mode);draft=p.get('draft') or inventory
     ungrouped=p.get('ungrouped',False)
     if ungrouped:

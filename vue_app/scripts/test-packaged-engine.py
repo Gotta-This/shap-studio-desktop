@@ -16,11 +16,11 @@ if not binary.is_file():
     raise SystemExit('Embedded engine does not exist: ' + str(binary))
 
 with tempfile.TemporaryDirectory(prefix='dbq-v3-packaged-') as tmp:
-    env = {**os.environ, 'RESEARCH_V3_PROFILE': tmp, 'MPLCONFIGDIR': tmp + '/mpl', 'MPLBACKEND': 'Agg'}
+    env = {**os.environ, 'RESEARCH_V3_PROFILE': tmp, 'MPLCONFIGDIR': tmp + '/mpl', 'MPLBACKEND': 'Agg', 'PYTHONUTF8': '1'}
 
     def call(method, params=None):
         process = subprocess.run([str(binary)], input=json.dumps({'method': method, 'params': params or {}}),
-                                 text=True, capture_output=True, env=env, timeout=45)
+                                 text=True, encoding="utf-8", capture_output=True, env=env, timeout=45)
         response = json.loads(process.stdout)
         assert response['ok'], response
         return response['result']

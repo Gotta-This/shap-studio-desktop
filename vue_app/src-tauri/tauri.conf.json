@@ -1,9 +1,54 @@
 {
-  "$schema":"https://schema.tauri.app/config/2",
-  "productName":"科研数据工具集 V3",
-  "version":"3.0.0-alpha.1",
-  "identifier":"com.researchstudio.vue3.preview",
-  "build":{"beforeDevCommand":"npm run dev","devUrl":"http://127.0.0.1:1420","beforeBuildCommand":"npm run build","frontendDist":"../dist"},
-  "app":{"windows":[{"title":"科研数据工具集 · V3","width":1440,"height":960,"minWidth":800,"minHeight":600}],"security":{"csp":"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src ipc: http://ipc.localhost https://api.github.com; frame-src data: blob:; object-src 'none'"}},
-  "bundle":{"active":true,"targets":"all","externalBin":["binaries/research-python"],"icon":["icons/icon.icns","icons/icon.ico","icons/icon.png"],"macOS":{"minimumSystemVersion":"12.0"}}
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "科研数据工具集 V3",
+  "version": "3.0.0",
+  "identifier": "com.researchstudio.vue3.preview",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://127.0.0.1:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "科研数据工具集 · V3",
+        "width": 1440,
+        "height": 960,
+        "minWidth": 800,
+        "minHeight": 600
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src ipc: http://ipc.localhost https://api.github.com; frame-src data: blob:; object-src 'none'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "externalBin": [
+      "binaries/research-python"
+    ],
+    "icon": [
+      "icons/icon.icns",
+      "icons/icon.ico",
+      "icons/icon.png"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "12.0"
+    },
+    "windows": {
+      "webviewInstallMode": {
+        "type": "offlineInstaller"
+      },
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": [
+          "SimpChinese",
+          "English"
+        ],
+        "displayLanguageSelector": true
+      }
+    }
+  }
 }
