@@ -13,14 +13,14 @@ from clinical_studio.manuscripts import WorkspaceStore
 class ReleaseFlowTests(unittest.TestCase):
     def payload(self, data=b'installer'):
         name='ResearchDataTools-Setup-Windows-x64.exe'
-        return dict(tag_name='v3.0.2', assets=[dict(name=name, size=len(data), digest='sha256:'+hashlib.sha256(data).hexdigest(), browser_download_url=releases.PREFIX+'v3.0.2/'+name)])
+        return dict(tag_name='v3.0.3', assets=[dict(name=name, size=len(data), digest='sha256:'+hashlib.sha256(data).hexdigest(), browser_download_url=releases.PREFIX+'v3.0.3/'+name)])
     def test_platform_and_versions(self):
         self.assertEqual(releases.asset_name('win32','AMD64'),'ResearchDataTools-Setup-Windows-x64.exe')
         self.assertEqual(releases.asset_name('darwin','arm64'),'ResearchDataTools-macOS-arm64.zip')
         self.assertEqual(releases.asset_name('darwin','x86_64'),'ResearchDataTools-macOS-x86_64.zip')
         self.assertTrue(releases.select(self.payload(),releases.asset_name('win32','AMD64'))['newer'])
         with self.assertRaises(ValueError):releases.select(dict(tag_name='v1.1.2'))
-        with self.assertRaises(ValueError):releases.select(dict(tag_name='v3.0.2',prerelease=True))
+        with self.assertRaises(ValueError):releases.select(dict(tag_name='v3.0.3',prerelease=True))
     def test_download_verifies_checksum_and_rejects_corruption(self):
         with tempfile.TemporaryDirectory() as tmp, patch('releases.asset_name',return_value='ResearchDataTools-Setup-Windows-x64.exe'):
             payload=self.payload()
@@ -34,7 +34,7 @@ class ReleaseFlowTests(unittest.TestCase):
     def test_checksum_file_fallback_and_url_rejection(self):
         with tempfile.TemporaryDirectory() as tmp, patch('releases.asset_name',return_value='ResearchDataTools-Setup-Windows-x64.exe'):
             payload=self.payload();asset=payload['assets'][0];digest=asset.pop('digest')[7:]
-            payload['assets'].append(dict(name='SHA256SUMS.txt', browser_download_url=releases.PREFIX+'v3.0.2/SHA256SUMS.txt'))
+            payload['assets'].append(dict(name='SHA256SUMS.txt', browser_download_url=releases.PREFIX+'v3.0.3/SHA256SUMS.txt'))
             with patch('releases.check',return_value=releases.select(payload)), patch('releases.read_url',side_effect=[io.BytesIO((digest+'  '+asset['name']).encode()),io.BytesIO(b'installer')]):
                 self.assertTrue(Path(releases.download(Path(tmp))['path']).is_file())
             asset['browser_download_url']='https://example.com/installer.exe'
