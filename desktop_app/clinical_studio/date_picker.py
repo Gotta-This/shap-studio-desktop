@@ -4,7 +4,7 @@ from PySide6.QtCore import Qt, QDate, QPoint, QPointF, QRect, QEvent, QSize
 from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (QApplication, QDialog, QFrame, QVBoxLayout, QHBoxLayout,
     QGridLayout, QStackedWidget, QWidget, QLabel, QPushButton, QLineEdit,
-    QGraphicsDropShadowEffect)
+    QGraphicsDropShadowEffect, QMenu, QWidgetAction)
 from PySide6.QtCore import Signal
 from .editor_dialogs import native_owner
 
@@ -38,9 +38,11 @@ def popup_position(anchor, size, available):
     return QPoint(x, max(available.top()+6, min(y, available.bottom()-size.height()-5)))
 
 
-class DatePopup(QDialog):
+class DatePopup(QMenu):
     def __init__(self, value=None, parent=None):
-        super().__init__(parent, Qt.Popup | Qt.FramelessWindowHint)
+        super().__init__(parent)
+        self.setWindowFlag(Qt.FramelessWindowHint, True)
+        self._result=QDialog.Rejected
         self.setObjectName('datePopup'); self.setWindowTitle('选择日期')
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.result_value = value
@@ -50,7 +52,7 @@ class DatePopup(QDialog):
         self.mode = 'days'; self.decade = self.page.year()//10*10
         self.setFixedWidth(344)
         self.setStyleSheet('''
-            QDialog#datePopup {background:transparent;}
+            QMenu#datePopup {background:transparent;border:0;padding:0;}
             QFrame#dateCard {background:white;border:1px solid #DEE8DF;border-radius:12px;}
             QFrame#dateCard QWidget {font-size:13px;color:#314C3E;background:transparent;}
             QFrame#dateCard QPushButton {background:transparent;border:0;border-radius:6px;padding:0;min-height:0;font-size:13px;}
@@ -70,7 +72,8 @@ class DatePopup(QDialog):
             QFrame#dateCard QLabel#dateWeek {color:#879B8E;font-size:12px;}
             QFrame#dateCard QFrame#dateDivider {background:#ECF1ED;border:0;}
         ''')
-        outer = QVBoxLayout(self); outer.setContentsMargins(8, 8, 8, 8)
+        content=QWidget();content.setFixedWidth(344)
+        outer = QVBoxLayout(content); outer.setContentsMargins(8, 8, 8, 8)
         card = QFrame(); card.setObjectName('dateCard'); outer.addWidget(card)
         shadow = QGraphicsDropShadowEffect(card); shadow.setBlurRadius(15); shadow.setOffset(0, 3)
         shadow.setColor(QColor(25, 60, 44, 22)); card.setGraphicsEffect(shadow)
@@ -114,6 +117,7 @@ class DatePopup(QDialog):
         foot.addWidget(self.today_button); foot.addWidget(self.tomorrow_button); foot.addStretch(); foot.addWidget(self.clear_button)
         body.addLayout(foot)
         self.error = QLabel(''); self.error.setObjectName('dateError'); self.error.setFixedHeight(16); body.addWidget(self.error)
+        action=QWidgetAction(self);action.setDefaultWidget(content);self.addAction(action)
         self.render(); self.adjustSize()
 
     def make_button(self, text, callback, name='', width=None):
@@ -207,12 +211,22 @@ class DatePopup(QDialog):
             return True
         return super().eventFilter(watched,event)
 
+    def accept(self):
+        self._result=QDialog.Accepted;self.close()
+
+    def reject(self):
+        self._result=QDialog.Rejected;self.close()
+
+    def result(self):
+        return self._result
+
     def exec_at(self, anchor):
         self.adjustSize()
         screen=QApplication.screenAt(anchor.center()) or self.screen()
-        self.move(popup_position(anchor,self.size(),screen.availableGeometry()))
+        position=popup_position(anchor,self.sizeHint(),screen.availableGeometry())
         self.input.setFocus(); self.input.selectAll()
-        return self.exec()
+        self.exec(position)
+        return self._result
 
 
 class DateButton(QPushButton):

@@ -1,4 +1,4 @@
-# Verify the mint date picker, readable tables and existing tools in packaged apps.
+# Verify native date popup stacking, readable tables and existing tools in packaged apps.
 name: Build verify and publish v1.1.1
 on:
   workflow_dispatch:
