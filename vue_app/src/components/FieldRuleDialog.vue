@@ -17,11 +17,15 @@ import NumberField from "./NumberField.vue";
 import RowsEditor from "./RowsEditor.vue";
 import { api } from "@/lib/api";
 import { clone, fieldTypes } from "@/lib/scientific";
-const props = defineProps<{ field: any }>(),
-  emit = defineEmits<{ close: []; save: [field: any, sync: boolean] }>();
+const props = defineProps<{ field: any; peers?: any[] }>(),
+  emit = defineEmits<{
+    close: [];
+    save: [field: any, sync: boolean, peers: any[]];
+  }>();
 const form = ref<any>({}),
   sync = ref(true),
-  error = ref("");
+  error = ref(""),
+  saving = ref(false);
 watch(
   () => props.field,
   (value) => {
@@ -34,10 +38,15 @@ watch(
   { immediate: true },
 );
 async function kind(value: string) {
-  form.value = await api("tool.word.convert", {
-    field: form.value,
-    kind: value,
-  });
+  try {
+    form.value = await api("tool.word.convert", {
+      field: form.value,
+      kind: value,
+    });
+    error.value = "";
+  } catch (e) {
+    error.value = (e as Error).message;
+  }
 }
 function categories() {
   return (form.value.labels || []).map((label: any, i: number) => ({
@@ -51,26 +60,22 @@ function setCategories(rows: any[]) {
   );
   form.value.weights = rows.map((r) => r.weight);
 }
-function save() {
-  if (form.value.kind === "unknown") {
-    error.value = "请先选择数据类型。";
-    return;
+async function save() {
+  if (saving.value) return;
+  error.value = "";
+  saving.value = true;
+  try {
+    const saved = await api("tool.word.field.save", {
+      field: form.value,
+      peers: sync.value ? props.peers || [] : [],
+    });
+    emit("save", saved.field, sync.value, saved.peers);
+    emit("close");
+  } catch (e) {
+    error.value = (e as Error).message;
+  } finally {
+    saving.value = false;
   }
-  if (
-    ["binary", "gender", "yesno", "binary01", "category"].includes(
-      form.value.kind,
-    ) &&
-    ((form.value.weights || []).some((x: any) => x == null) ||
-      Math.abs(
-        form.value.weights.reduce((a: number, b: number) => a + b, 0) - 100,
-      ) > 1e-6)
-  ) {
-    error.value = "类别比例需补全并合计 100%。";
-    return;
-  }
-  form.value.confirmed = true;
-  emit("save", clone(form.value), sync.value);
-  emit("close");
 }
 </script>
 <template>
@@ -78,7 +83,7 @@ function save() {
     :open="!!field"
     @update:open="
       (v) => {
-        if (!v) emit('close');
+        if (!v && !saving) emit('close');
       }
     "
     ><DialogContent class="sm:max-w-2xl max-h-[90vh] overflow-y-auto"
@@ -181,8 +186,11 @@ function save() {
       >
       <p v-if="error" role="alert" class="field-error">{{ error }}</p>
       <DialogFooter
-        ><Button variant="outline" @click="emit('close')">取消</Button
-        ><Button @click="save">确认并应用</Button></DialogFooter
+        ><Button variant="outline" :disabled="saving" @click="emit('close')"
+          >取消</Button
+        ><Button :disabled="saving" @click="save">{{
+          saving ? "正在保存…" : "确认并应用"
+        }}</Button></DialogFooter
       ></DialogContent
     ></Dialog
   >

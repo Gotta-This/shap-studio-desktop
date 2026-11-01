@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, watch } from "vue";
+import { ref, reactive, computed, onMounted, watch, nextTick } from "vue";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -25,6 +25,13 @@ import {
   startJob,
   cancelJob,
 } from "@/lib/scientific";
+const sourceLabels: Record<string, string> = {
+  column: "输出列名",
+  group: "组别 / 数据集",
+  source: "参数来源",
+  rule: "生成规则",
+  original: "原文依据",
+};
 const tabs = [
     "基础资料",
     "表格匹配",
@@ -37,6 +44,7 @@ const tabs = [
   inventory = ref<any>(null),
   draft = ref<any>(null),
   session = ref(""),
+  groupsConfirmed = ref(true),
   names = ref<string[]>([]),
   ungrouped = ref(false),
   ungroupedN = ref<number | null>(70),
@@ -51,7 +59,10 @@ const tabs = [
   proseStale = ref(false),
   proseActive = ref(true),
   studyIndex = ref(0),
+  editorRevision = ref(0),
+  restoring = ref(false),
   sources = ref<any>(null),
+  matches = ref<any>(null),
   file = ref<HTMLInputElement>(),
   configFile = ref<HTMLInputElement>(),
   confirmImport = ref<File | null>(null),
@@ -116,6 +127,10 @@ async function guard(fn: () => Promise<void>) {
 }
 function requestImport(f?: File) {
   if (!f) return;
+  if (busy.value || job.busy) {
+    notify("请等待当前任务完成后再导入。", true);
+    return;
+  }
   if (session.value || job.result) confirmImport.value = f;
   else read(f);
 }
@@ -126,14 +141,24 @@ async function read(f: File) {
       uploads: await upload([f]),
       decimal_mode: options.decimal_mode,
     });
+    groupsConfirmed.value = false;
     session.value = r.session;
     inventory.value = r.scan;
     draft.value = r.draft;
     names.value = [...r.scan.candidates];
     ungrouped.value = r.scan.has_ungrouped && !names.value.length;
-    ungroupedN.value = r.scan.ungrouped_n || 70;
+    ungroupedN.value = r.scan.ungrouped_n ?? null;
+    matches.value = null;
     tab.value = 0;
     notify("已读取原表与识别草稿，请核对并确认组别。");
+  });
+}
+async function matchGroups() {
+  await guard(async () => {
+    matches.value = await api("tool.word.match", {
+      session: session.value,
+      groups: names.value,
+    });
   });
 }
 async function apply() {
@@ -148,6 +173,7 @@ async function apply() {
       previous: config.value,
     });
     config.value = r.config;
+    groupsConfirmed.value = true;
     prose.value = r.prose_document;
     proseStale.value = false;
     groupIndex.value = "0";
@@ -164,8 +190,8 @@ function payload() {
     study_index: studyIndex.value,
   };
 }
-watch([prose, studyIndex], ([doc]) => {
-  if (doc && proseActive.value) {
+watch([prose, studyIndex, proseActive], ([doc]) => {
+  if (doc && proseActive.value && !restoring.value) {
     config.value.include_basics = false;
     config.value.same_group_size = false;
     config.value.shared_basics = false;
@@ -180,6 +206,20 @@ watch([prose, studyIndex], ([doc]) => {
     }
   }
 });
+watch(
+  () => [
+    names.value.join("\0"),
+    ungrouped.value,
+    ungroupedN.value,
+    options.sizes,
+    options.rates,
+    options.prose,
+    options.decimal_mode,
+  ],
+  () => {
+    if (inventory.value) groupsConfirmed.value = false;
+  },
+);
 watch(tab, async (v) => {
   if (v === 3) await review();
 });
@@ -195,45 +235,51 @@ function locate(f: any) {
   }
   return null;
 }
-async function saveField(value: any, sync: boolean) {
-  if (editingDraft.value) {
-    const i = draft.value.fields.indexOf(editing.value);
-    draft.value.fields[i] = value;
-    return;
-  }
+const fieldPeers = computed(() => {
+  const old = editing.value;
+  if (!old) return [];
+  return (editingDraft.value ? draft.value.fields : fields.value).filter(
+    (f: any) => f !== old && f.table === old.table && f.name === old.name,
+  );
+});
+function saveField(value: any, sync: boolean, updatedPeers: any[]) {
   const old = editing.value,
-    pos = locate(old);
-  if (!pos) return;
-  config.value[pos.key].splice(pos.i, 1);
-  config.value.typed_fields ||= [];
-  config.value.typed_fields.push(value);
-  if (sync) {
-    for (const f of fields.value) {
-      if (f !== value && f.table === old.table && f.name === old.name) {
-        const converted = await api("tool.word.convert", {
-          field: f,
-          kind: value.kind,
-        });
-        if (value.labels) converted.labels = clone(value.labels);
-        converted.confirmed = false;
-        const p = locate(f);
-        if (p) {
-          config.value[p.key].splice(p.i, 1);
-          config.value.typed_fields.push(converted);
-        }
-      }
+    preview = editingDraft.value,
+    peers = sync ? fieldPeers.value : [];
+  const replace = (before: any, after: any) => {
+    if (preview) {
+      const i = draft.value.fields.indexOf(before);
+      if (i >= 0) draft.value.fields[i] = after;
+      return;
     }
-  }
+    const pos = locate(before);
+    if (!pos) return;
+    if (
+      pos.key === "typed_fields" ||
+      (pos.key === "indicators" && after.kind === "mean_sd") ||
+      (pos.key === "categoricals" && after.kind === "category")
+    )
+      config.value[pos.key][pos.i] = after;
+    else {
+      config.value[pos.key].splice(pos.i, 1);
+      (config.value.typed_fields ||= []).push(after);
+    }
+  };
+  replace(old, value);
+  peers.forEach((f: any, i: number) => replace(f, updatedPeers[i]));
 }
 function rename(f: any, v: any) {
   const name = f.name;
   for (const a of fields.value)
     if (a.table === f.table && a.name === name) a.name = String(v);
+  for (const a of fields.value)
+    if (a.from_field === name) a.from_field = String(v);
 }
 function remove(f: any) {
   for (const key of ["indicators", "typed_fields", "categoricals"])
     config.value[key] = (config.value[key] || []).filter(
-      (a: any) => !(a.table === f.table && a.name === f.name),
+      (a: any) =>
+        !(a.table === f.table && a.name === f.name) && a.from_field !== f.name,
     );
 }
 function add(table: any) {
@@ -257,12 +303,23 @@ async function load(e: Event) {
   await guard(async () => {
     const f = (e.target as HTMLInputElement).files?.[0];
     if (!f) return;
-    const c = JSON.parse(await f.text());
+    const c = await api("tool.word.configuration", {
+      config: JSON.parse(await f.text()),
+    });
     if (!Array.isArray(c.groups) || !c.groups.length)
       throw Error("不是有效的 Word 生成配置。");
-    if (c.table_match) Object.assign(c, clone(c.table_match));
+    if (c.table_match) {
+      Object.assign(c, clone(c.table_match));
+      delete c.table_match;
+    }
+    inventory.value = null;
+    draft.value = null;
+    session.value = "";
+    matches.value = null;
+    groupsConfirmed.value = true;
     config.value = c;
     Object.assign(options, c.import_options || {});
+    restoring.value = true;
     prose.value = c.prose_document || null;
     proseStale.value = !!c.prose_stale;
     proseActive.value = c.prose_active !== false;
@@ -270,6 +327,9 @@ async function load(e: Event) {
     groupIndex.value = "0";
     names.value = c.groups.map((g: any) => g.name);
     job.result = null;
+    editorRevision.value++;
+    await nextTick();
+    restoring.value = false;
   });
 }
 function save() {
@@ -292,6 +352,10 @@ async function copyResult() {
   notify("已复制完整模拟数据。");
 }
 async function generate() {
+  if (!groupsConfirmed.value) {
+    error.value = "当前 Word 尚未确认组别，请先匹配并确认。";
+    return;
+  }
   await startJob("word", payload());
   if (job.result && !job.error && job.message.includes("完成"))
     notify("已生成完整 Excel，表格预览最多显示 200 行。");
@@ -364,11 +428,14 @@ function sameN(v: any) {
       </div>
       <div v-if="inventory" class="import-summary">
         <div>
-          <strong>{{ inventory.source.split(/[\\/]/).pop() }}</strong>
+          <strong>{{
+            inventory.source_name || inventory.source.split(/[\\/]/).pop()
+          }}</strong>
           <p>
             {{ inventory.tables.length }} 个原表 ·
             {{ inventory.fields.length }} 条识别草稿 ·
-            尚未应用的导入选项将在确认组别时生效
+            {{ groupsConfirmed ? "已确认组别" : "尚未确认组别" }} ·
+            导入选项在确认组别时生效
           </p>
         </div>
         <Button variant="outline" @click="preview = true"
@@ -404,12 +471,27 @@ function sameN(v: any) {
             integer
             :min="2"
             :max="5000"
-          /><Button :disabled="busy || job.busy" @click="apply"
+          /><Button
+            v-if="!ungrouped"
+            variant="outline"
+            :disabled="busy || job.busy"
+            @click="matchGroups"
+            >核对组别匹配</Button
+          ><Button :disabled="busy || job.busy" @click="apply"
             >匹配并确认组别</Button
           >
         </div></template
       >
-      <p v-else class="tool-note">
+      <div v-if="matches" class="tool-note">
+        <p v-for="g in matches.groups" :key="g.name">
+          {{ g.name }}：{{ g.tables }} 张表、{{ g.paragraphs }} 处正文 ·
+          {{ g.n == null ? "原文例数未识别" : g.n + " 例"
+          }}<strong v-if="!g.tables && !g.paragraphs"
+            >（未匹配，请修改或移除）</strong
+          >
+        </p>
+      </div>
+      <p v-if="!inventory" class="tool-note">
         导入 .doc /
         .docx，或拖入文档。先核对原表、方向、候选组别与识别草稿，再应用。
       </p>
@@ -455,7 +537,7 @@ function sameN(v: any) {
           <label class="file-check"
             ><Checkbox
               v-model="config.include_basics"
-              :disabled="config.ungrouped || !!prose"
+              :disabled="config.ungrouped || (!!prose && proseActive)"
             />包含基础资料与结局列</label
           ><label class="file-check"
             ><Checkbox
@@ -483,80 +565,94 @@ function sameN(v: any) {
           </div>
         </div>
         <template v-if="config.include_basics"
-          ><div class="subsection">
-            <h3>性别与病情</h3>
-            <div class="form-grid">
-              <NumberField
-                v-model="group.male"
-                label="男性占比 %"
-              /><NumberField
-                v-model="group.severity[0]"
-                label="轻度占比 %"
-              /><NumberField
-                v-model="group.severity[1]"
-                label="中度占比 %"
-              /><NumberField v-model="group.severity[2]" label="重度占比 %" />
+          ><p
+            v-if="config.shared_basics && Number(groupIndex) > 0"
+            class="tool-note"
+          >
+            基础分布共用第一组的设置；有效率、复发率仍可在下方独立修改。
+          </p>
+          <fieldset
+            :disabled="config.shared_basics && Number(groupIndex) > 0"
+            class="basics-distributions"
+          >
+            <div class="subsection">
+              <h3>性别与病情</h3>
+              <div class="form-grid">
+                <NumberField
+                  v-model="group.male"
+                  label="男性占比 %"
+                /><NumberField
+                  v-model="group.severity[0]"
+                  label="轻度占比 %"
+                /><NumberField
+                  v-model="group.severity[1]"
+                  label="中度占比 %"
+                /><NumberField v-model="group.severity[2]" label="重度占比 %" />
+              </div>
             </div>
-          </div>
-          <div class="subsection">
-            <RowsEditor
-              v-model="group.age"
-              :columns="rangeColumns"
-              title="年龄区间"
-            /><label class="file-check"
-              ><Checkbox
-                :model-value="!!group.age_stats"
-                @update:model-value="
-                  (v) => (group.age_stats = v ? { mean: 50, sd: 10 } : null)
-                "
-              />同时约束年龄均数与标准差</label
-            >
-            <div v-if="group.age_stats" class="two-columns">
-              <NumberField
-                v-model="group.age_stats.mean"
-                label="年龄均数"
-              /><NumberField v-model="group.age_stats.sd" label="年龄标准差" />
+            <div class="subsection">
+              <RowsEditor
+                v-model="group.age"
+                :columns="rangeColumns"
+                title="年龄区间"
+              /><label class="file-check"
+                ><Checkbox
+                  :model-value="!!group.age_stats"
+                  @update:model-value="
+                    (v) => (group.age_stats = v ? { mean: 50, sd: 10 } : null)
+                  "
+                />同时约束年龄均数与标准差</label
+              >
+              <div v-if="group.age_stats" class="two-columns">
+                <NumberField
+                  v-model="group.age_stats.mean"
+                  label="年龄均数"
+                /><NumberField
+                  v-model="group.age_stats.sd"
+                  label="年龄标准差"
+                />
+              </div>
             </div>
-          </div>
-          <div class="subsection">
-            <RowsEditor
-              v-model="group.course"
-              :columns="rangeColumns"
-              title="病程区间"
-            /><NumberField
-              v-model="group.course_digits"
-              label="病程小数位"
-              integer
-              :min="0"
-              :max="4"
-            />
-          </div>
-          <div class="subsection">
-            <h3>病变范围</h3>
-            <SelectField
-              v-model="group.extent_mode"
-              :options="[
-                { value: 'blank', label: '留空' },
-                { value: 'category', label: '分类比例' },
-                { value: 'range', label: '连续区间' },
-              ]"
-              label="病变范围模式"
-            /><RowsEditor
-              v-if="group.extent_mode === 'category'"
-              v-model="group.extent"
-              :columns="[
-                { key: 'label', label: '类别', text: true },
-                { key: 'percent', label: '占比 %' },
-              ]"
-            /><template v-if="group.extent_mode === 'range'"
-              ><RowsEditor
-                v-model="group.extent_ranges"
-                :columns="rangeColumns" /><NumberField
-                v-model="group.extent_digits"
-                label="病变范围小数位"
+            <div class="subsection">
+              <RowsEditor
+                v-model="group.course"
+                :columns="rangeColumns"
+                title="病程区间"
+              /><NumberField
+                v-model="group.course_digits"
+                label="病程小数位"
                 integer
-            /></template>
-          </div>
+                :min="0"
+                :max="4"
+              />
+            </div>
+            <div class="subsection">
+              <h3>病变范围</h3>
+              <SelectField
+                v-model="group.extent_mode"
+                :options="[
+                  { value: 'blank', label: '留空' },
+                  { value: 'category', label: '分类比例' },
+                  { value: 'range', label: '连续区间' },
+                ]"
+                label="病变范围模式"
+              /><RowsEditor
+                v-if="group.extent_mode === 'category'"
+                v-model="group.extent"
+                :columns="[
+                  { key: 'label', label: '类别', text: true },
+                  { key: 'percent', label: '占比 %' },
+                ]"
+              /><template v-if="group.extent_mode === 'range'"
+                ><RowsEditor
+                  v-model="group.extent_ranges"
+                  :columns="rangeColumns" /><NumberField
+                  v-model="group.extent_digits"
+                  label="病变范围小数位"
+                  integer
+              /></template>
+            </div>
+          </fieldset>
           <div class="subsection">
             <h3>{{ group.name }} · 有效与复发</h3>
             <div class="form-grid">
@@ -650,7 +746,8 @@ function sameN(v: any) {
         <label class="file-check"
           ><Checkbox v-model="proseActive" />生成时采用文字匹配数据</label
         ><ProseMatching
-          :key="session + '-' + !!prose"
+          :key="session + '-' + editorRevision"
+          :study-index="studyIndex"
           v-model="prose"
           :groups="config.groups.map((g: any) => g.name)"
           :mode="options.decimal_mode"
@@ -672,7 +769,7 @@ function sameN(v: any) {
             <thead>
               <tr>
                 <th v-for="key in Object.keys(sources.rows[0])" :key="key">
-                  {{ key }}
+                  {{ sourceLabels[key] || key }}
                 </th>
               </tr>
             </thead>
@@ -691,7 +788,9 @@ function sameN(v: any) {
             <p>输出为模拟病例；完整 Excel 含参数、字段来源和生成校验。</p>
           </div>
           <div class="toolbar">
-            <Button :disabled="busy || job.busy" @click="generate"
+            <Button
+              :disabled="busy || job.busy || !groupsConfirmed"
+              @click="generate"
               >生成模拟数据</Button
             ><Button
               v-if="job.busy"
@@ -721,7 +820,7 @@ function sameN(v: any) {
               >复制完整数据</Button
             >
           </div>
-          <div class="table-scroll">
+          <div class="table-scroll result-table-scroll">
             <table class="data-table">
               <thead>
                 <tr>
@@ -746,6 +845,7 @@ function sameN(v: any) {
     </div>
     <FieldRuleDialog
       :field="editing"
+      :peers="fieldPeers"
       @close="editing = null"
       @save="saveField"
     /><Dialog :open="preview" @update:open="(v) => (preview = v)"

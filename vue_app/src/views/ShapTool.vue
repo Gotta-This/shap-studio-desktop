@@ -67,12 +67,15 @@ const continuous = computed(
     () =>
       images.value.find((x: any) => x.name === image.value) || images.value[0],
   ),
-  previewImage = computed(
-    () =>
-      previewJob.result?.images?.find((x: any) =>
-        x.name.includes(config.value.plots.plots[style.value]?.filename),
-      ) || previewJob.result?.images?.[0],
-  ),
+  previewImage = computed(() => {
+    const images = previewJob.result?.images || [];
+    return style.value === "common"
+      ? images[0]
+      : images.find(
+          (x: any) =>
+            x.name === config.value.plots.plots[style.value]?.filename + ".png",
+        );
+  }),
   allBusy = computed(() => job.busy || previewJob.busy);
 const mainStyleKeys = [
     "font_size",
@@ -189,7 +192,7 @@ async function run(mode: string) {
     data_only: mode === "data",
     previous: mode === "redraw" ? result.value.id : undefined,
   });
-  if (!job.error) {
+  if (!job.error && job.message.includes("完成")) {
     tab.value = 3;
     page.value = 0;
     resultTab.value = mode === "data" ? "data" : "figures";
@@ -211,19 +214,19 @@ async function preview() {
     "shap-preview",
   );
 }
+let tableRequest = 0;
 async function loadTable() {
-  if (!result.value || ["figures", "metrics"].includes(resultTab.value)) {
-    table.value = null;
-    return;
-  }
+  const request = ++tableRequest,
+    id = result.value?.id,
+    kind = resultTab.value,
+    currentPage = page.value;
+  table.value = null;
+  if (!id || ["figures", "metrics"].includes(kind)) return;
   try {
-    table.value = await api("tool.shap.table", {
-      id: result.value.id,
-      kind: resultTab.value,
-      page: page.value,
-    });
+    const value = await api("tool.shap.table", { id, kind, page: currentPage });
+    if (request === tableRequest) table.value = value;
   } catch (e) {
-    error.value = (e as Error).message;
+    if (request === tableRequest) error.value = (e as Error).message;
   }
 }
 watch([resultTab, page], loadTable);
@@ -251,7 +254,9 @@ async function load(e: Event) {
   try {
     const f = (e.target as HTMLInputElement).files?.[0];
     if (!f) return;
-    const c = JSON.parse(await f.text());
+    const c = await api("tool.shap.configuration", {
+      config: JSON.parse(await f.text()),
+    });
     if (c.schema_version !== 1 || !c.data?.features || !c.plots?.common)
       throw Error("不是有效的模拟生图配置。");
     config.value = c;
@@ -263,10 +268,12 @@ async function load(e: Event) {
 }
 async function copyTable() {
   if (!result.value) return;
+  const id = result.value.id,
+    kind = resultTab.value;
   try {
     const first = await api("tool.shap.table", {
-        id: result.value.id,
-        kind: resultTab.value,
+        id,
+        kind,
         page: 0,
       }),
       rows = [...first.rows];
@@ -274,8 +281,8 @@ async function copyTable() {
       rows.push(
         ...(
           await api("tool.shap.table", {
-            id: result.value.id,
-            kind: resultTab.value,
+            id,
+            kind,
             page: p,
           })
         ).rows,
@@ -819,6 +826,11 @@ async function copyTable() {
                   ><strong>{{ result.metrics.intercept.toFixed(4) }}</strong>
                 </div>
               </div>
+              <div class="tool-note">
+                训练集 {{ result.metrics.n_train }} 行 · 测试集
+                {{ result.metrics.n_test }} 行 · 迭代次数
+                {{ result.metrics.iterations }}
+              </div>
               <h3>混淆矩阵</h3>
               <table class="data-table">
                 <thead>
@@ -865,6 +877,29 @@ async function copyTable() {
                   </tbody>
                 </table>
               </div>
+              <h3>颜色核对</h3>
+              <table class="data-table">
+                <tbody>
+                  <tr v-for="(audit, key) in result.audit || {}" :key="key">
+                    <th>{{ plotNames[key] || key }}</th>
+                    <td>
+                      {{ audit.passed ? "通过" : "未通过，请查看核对报告" }}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              <p
+                v-if="!Object.keys(result.audit || {}).length"
+                class="tool-note"
+              >
+                本次没有启用需要颜色核对的图表。
+              </p>
+              <details v-if="result.messages?.length">
+                <summary>运行提示（{{ result.messages.length }} 项）</summary>
+                <p v-for="(message, i) in result.messages" :key="i">
+                  {{ message }}
+                </p>
+              </details>
               <h3>局部样本预测</h3>
               <pre>{{
                 JSON.stringify(result.metrics.sample_prediction, null, 2)
@@ -890,7 +925,7 @@ async function copyTable() {
                 >复制完整结果表</Button
               >
             </div>
-            <div class="table-scroll">
+            <div class="table-scroll result-table-scroll">
               <table class="data-table">
                 <thead>
                   <tr>

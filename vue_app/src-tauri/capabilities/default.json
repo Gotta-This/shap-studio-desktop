@@ -1,1 +1,21 @@
-{"identifier":"main","description":"Local desktop preview window with native file selection and explicit path opening.","windows":["main"],"permissions":["core:default","dialog:allow-open","opener:allow-open-path",{"identifier":"opener:allow-open-path","allow":[{"path":"**"}]}]}
+{
+  "identifier": "main",
+  "description": "Local desktop preview window with native file selection and explicit path opening.",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:default",
+    "dialog:allow-open",
+    "dialog:allow-save",
+    "opener:allow-open-path",
+    {
+      "identifier": "opener:allow-open-path",
+      "allow": [
+        {
+          "path": "**"
+        }
+      ]
+    }
+  ]
+}

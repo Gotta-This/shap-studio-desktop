@@ -36,8 +36,9 @@ export default defineConfig({
           }
           let body = "";
           let size = 0;
-          req.on("data", (chunk) => {
-            size += chunk.length;
+          req.setEncoding("utf8");
+          req.on("data", (chunk: string) => {
+            size += Buffer.byteLength(chunk, "utf8");
             if (size > 48 * 1024 * 1024) req.destroy();
             else body += chunk;
           });
@@ -60,6 +61,10 @@ export default defineConfig({
             res.on("close", () => {
               if (!done) child.kill();
             });
+            // Decode across pipe chunk boundaries. A Chinese character can span
+            // two Buffer chunks; coercing each Buffer separately corrupts names.
+            child.stdout.setEncoding("utf8");
+            child.stderr.setEncoding("utf8");
             child.stdout.on("data", (data) => {
               output += data;
             });
@@ -97,6 +102,19 @@ export default defineConfig({
     },
   ],
   resolve: { alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) } },
-  server: { port: 1420, strictPort: true, host: "127.0.0.1" },
+  server: {
+    port: 1420,
+    strictPort: true,
+    host: "127.0.0.1",
+    watch: {
+      ignored: [
+        "**/.v3-data/**",
+        "**/test-results/**",
+        "**/playwright-report/**",
+        "**/src-tauri/target/**",
+        "**/tests/**",
+      ],
+    },
+  },
   clearScreen: false,
 });

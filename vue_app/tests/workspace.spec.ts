@@ -28,7 +28,7 @@ test("connect workspace, create, search, edit date, upload, preview and complete
   await page.getByLabel("客户 / 甲方").fill("Vue 巡检客户");
   await page.getByLabel("任务名称").fill("V3 冠心病论文返修");
   await page.getByLabel("标签", { exact: true }).fill("预测模型，返修");
-  await page.getByLabel("第一项待办").fill("核对原稿与图表");
+  await page.locator("#first-todo").fill("核对原稿与图表");
   await page.getByRole("button", { name: "任务截止日期", exact: true }).click();
   await page.getByLabel("输入日期").fill("2027-02-29");
   await page.getByLabel("输入日期").press("Enter");

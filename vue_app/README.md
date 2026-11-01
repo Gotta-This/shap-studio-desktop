@@ -53,6 +53,9 @@ npm run desktop:build
 npm run build
 .venv/bin/python -m unittest discover -s python -p 'test_*.py' -v
 npm test
+# 本机完整对照（需要已安装 PySide6 的 Python，以及无界面的 LibreOffice）
+QT_QPA_PLATFORM=offscreen .venv/bin/python scripts/audit-qt-corpus.py
+npm test
 cargo check --manifest-path src-tauri/Cargo.toml
 ```
 
@@ -70,4 +73,4 @@ shadcn-vue 官方源码及 MIT 许可证保存在 `src/components/ui`，来源�
 - 模拟生图：四个页面（数据、模型与分类变量、样式、结果）；连续/分类变量独立表格与顺序、完整模型参数、公共样式与六类图独立继承、实际预览与已有模型重绘、结果表分页、图像放大保存和按内容选择复制/打包。数据或模型变化后，重绘要求重新完整分析。
 - 运行中切换模块保留参数、进度和结果；原生关闭事件阻止中断计算。取消为协作式，当前引擎步骤完成后生效。
 
-这是 V3 预览分支，尚未声明 Qt 所有特殊表格修复对话框、所有异常文档交互与原生平台行为完全等同。V3 签名自动更新和 Windows 实际桌面验收仍需后续专项验收。当前不会发布或覆盖正式版 GitHub Release。
+本轮已使用项目内 18 份 Word 完成 36 组 Qt/V3 配置与校验对照，并验证完整浏览器流程及打包引擎。详细覆盖、修复项与边界见 [Qt 对照检查记录](QA_QT_PARITY.md)。V3 签名自动更新、Windows 原生窗口和真实系统对话框的操作验收仍需后续专项验收。当前不会发布或覆盖正式版 GitHub Release。

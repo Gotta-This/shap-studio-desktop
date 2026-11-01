@@ -24,7 +24,7 @@ def run(profile,p,progress):
     result=run_analysis(p['config'],p.get('output') or profile/'exports',progress=progress,previous=previous,data_only=p.get('data_only',False))
     rid=uuid.uuid4().hex;store=profile/'analysis'/rid;store.mkdir(parents=True)
     (store/'reference.json').write_text(json.dumps({'folder':str(result.folder)}));joblib.dump(result,store/'model.joblib')
-    return dict(id=rid,folder=str(result.folder),metrics=result.metrics,config=result.config,has_model=result.model is not None,columns=list(result.data.columns),rows=json.loads(result.data.head(200).to_json(orient='values')),total=len(result.data),images=[dict(name=f.name,url='data:image/png;base64,'+base64.b64encode(f.read_bytes()).decode()) for f in (result.folder/'figures').glob('*.png')])
+    return dict(id=rid,folder=str(result.folder),metrics=result.metrics,audit=result.audit,messages=result.messages,config=result.config,has_model=result.model is not None,columns=list(result.data.columns),rows=json.loads(result.data.head(200).to_json(orient='values')),total=len(result.data),images=[dict(name=f.name,url='data:image/png;base64,'+base64.b64encode(f.read_bytes()).decode()) for f in (result.folder/'figures').glob('*.png')])
 
 
 def table(profile,p):

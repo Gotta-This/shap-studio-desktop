@@ -15,19 +15,22 @@ const props = defineProps<{ file: Material | null }>(),
 const content = ref<any>(null),
   error = ref(""),
   loading = ref(false);
+let request = 0;
 watch(
   () => props.file,
   async (file) => {
+    const ticket = ++request;
     content.value = null;
     error.value = "";
     if (!file) return;
     loading.value = true;
     try {
-      content.value = await api("files.preview", { id: file.id });
+      const value = await api("files.preview", { id: file.id });
+      if (ticket === request) content.value = value;
     } catch (e) {
-      error.value = (e as Error).message;
+      if (ticket === request) error.value = (e as Error).message;
     } finally {
-      loading.value = false;
+      if (ticket === request) loading.value = false;
     }
   },
 );

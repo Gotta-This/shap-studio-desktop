@@ -31,6 +31,11 @@ print(p)`,
   await page.getByRole("button", { name: "查看原表与识别草稿" }).click();
   await expect(page.getByRole("dialog")).toContainText("表名与原表");
   await page.keyboard.press("Escape");
+  await page.getByRole("tab", { name: /生成与导出/ }).click();
+  await expect(
+    page.getByRole("button", { name: "生成模拟数据", exact: true }),
+  ).toBeDisabled();
+  await page.getByRole("tab", { name: /基础资料/ }).click();
   await page.getByRole("button", { name: "匹配并确认组别" }).click();
   await expect(page.getByLabel("当前组生成例数")).toHaveValue("70");
   await page.screenshot({
@@ -49,6 +54,11 @@ print(p)`,
   await expect(
     page.getByRole("columnheader", { name: "年龄", exact: true }),
   ).toBeVisible();
+  const viewport = page.locator(".result-table-scroll");
+  await expect(viewport).toBeVisible();
+  expect(
+    await viewport.evaluate((node: HTMLElement) => node.clientHeight),
+  ).toBeLessThanOrEqual(560);
   await page.screenshot({
     path: "test-results/v3-word-export.png",
     fullPage: true,

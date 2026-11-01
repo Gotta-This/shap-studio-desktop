@@ -16,7 +16,7 @@ def location(profile,jid):
     return path
 
 def start(profile,p):
-    if p['kind'] not in ('word','shap'):raise ValueError('计算任务类型无效。')
+    if p['kind'] not in ('word','shap','numeric','category'):raise ValueError('计算任务类型无效。')
     jid=uuid.uuid4().hex;path=profile/'jobs'/jid;path.mkdir(parents=True)
     write(path/'request.json',p);write(path/'status.json',dict(id=jid,status='running',message='正在准备本机计算…'))
     args=[sys.executable]+([] if getattr(sys,'frozen',False) else [str(Path(__file__).with_name('bridge.py'))])+['--job-worker',jid]
@@ -47,6 +47,12 @@ def worker(profile,jid):
             config=compose(p['params']);r=generate_batch(config,progress,lambda:(path/'cancel').exists());progress('正在保存完整 Excel…')
             target=profile/'exports'/('word-'+jid[:8]+'.xlsx');target.parent.mkdir(exist_ok=True);export_batch(r,target)
             result=dict(text='\n'.join('\t'.join(map(str,row)) for row in [r['columns']]+r['rows']),columns=r['columns'],rows=r['rows'][:200],total=len(r['rows']),checks=r['checks'],name=target.name,base64=base64.b64encode(target.read_bytes()).decode(),config=config)
+        elif p['kind'] in ('numeric','category'):
+            from clinical_studio.data_tools_engine import numeric_numbers,category_numbers
+            from bridge import csv_result,dispatch
+            params=p['params'];progress('正在生成模拟数值…')
+            values=numeric_numbers(**params,cancelled=lambda:(path/'cancel').exists()) if p['kind']=='numeric' else None
+            result=csv_result(values,params.get('digits')) if p['kind']=='numeric' else dispatch('tool.category',params);result['params']=params
         else:
             from analysis_workflow import run
             result=run(profile,p['params'],progress)

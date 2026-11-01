@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -12,6 +12,7 @@ const props = defineProps<{
     groups: string[];
     mode: string;
     fields: any[];
+    studyIndex?: number;
   }>(),
   emit = defineEmits<{
     "update:modelValue": [any];
@@ -21,11 +22,28 @@ const props = defineProps<{
 const autoGroups = ref(true),
   customGroups = ref(props.groups.join("、"));
 const text = ref(props.modelValue?.source_text || ""),
-  index = ref("0"),
+  index = ref(String(props.studyIndex || 0)),
   error = ref(""),
   selected = ref<any>(null),
   busy = ref(false),
   file = ref<HTMLInputElement>();
+watch(
+  () => props.studyIndex,
+  (v) => {
+    index.value = String(v || 0);
+    selected.value = null;
+  },
+);
+watch(
+  () => props.modelValue?.source_text,
+  (v) => {
+    if (v !== undefined && v !== text.value) text.value = v;
+  },
+);
+watch(
+  () => props.groups,
+  (v) => (customGroups.value = v.join("、")),
+);
 const study = computed(() => props.modelValue?.studies?.[Number(index.value)]);
 async function parse() {
   busy.value = true;
@@ -141,12 +159,15 @@ async function load(e: Event) {
   try {
     const f = (e.target as HTMLInputElement).files?.[0];
     if (!f) return;
-    const d = JSON.parse(await f.text());
+    const d = await api("tool.word.prose.configuration", {
+      config: JSON.parse(await f.text()),
+    });
     if (!Array.isArray(d.studies)) throw Error("这不是文字匹配配置。");
     text.value = d.source_text || "";
     emit("update:modelValue", d);
     emit("stale", false);
     index.value = "0";
+    emit("study", 0);
   } catch (e) {
     error.value = (e as Error).message;
   }

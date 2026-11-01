@@ -63,7 +63,9 @@ def sources(params):
         for i, f in enumerate(params.get('uploads', [])):
             data = base64.b64decode(f['content'], validate=True)
             if len(data)>32*1024*1024: raise ValueError('单个材料最多 32 MB，请使用桌面版导入更大文件。')
-            target=Path(folder)/str(i)/component(f['name']);target.parent.mkdir();target.write_bytes(data);paths.append(target)
+            name=f['name']
+            if not isinstance(name,str) or not name or name in ('.','..') or any(c in name for c in ('/','\\','\0')) or len(name.encode('utf-8'))>255:raise ValueError('上传文件名无效，不能含路径且 UTF-8 最多 255 字节。')
+            target=Path(folder)/str(i)/name;target.parent.mkdir();target.write_bytes(data);paths.append(target)
         yield paths
 
 def csv_result(values, digits=None):
@@ -114,12 +116,22 @@ def dispatch(method, p):
         with sources(p) as paths:
             return workspace().receive_files(paths,task_id=p.get('task_id'),categories=p.get('categories'),todo_text=p.get('todo_text',''),deadline=p.get('deadline'),priority=p.get('priority','normal'))
     if method=='files.archive':
-        workspace().archive_files(p['ids'],p['task_id'],p['categories'],p.get('todo_text',''),p.get('deadline'));return state()
+        workspace().archive_files(p['ids'],p['task_id'],p['categories'],p.get('todo_text',''),p.get('deadline'),p.get('priority','normal'));return state()
     if method=='files.undo': workspace().undo_archive(p['id']);return state()
     if method=='files.relocate':
         with sources(p) as paths:
             if len(paths)!=1: raise ValueError('请选择一个原始文件。')
             workspace().relocate_file(p['id'],paths[0]);return True
+    if method=='exports.save':
+        target=Path(p['path']).expanduser()
+        if not target.is_absolute() or not target.parent.is_dir() or target.is_dir():raise ValueError('请选择有效的导出文件位置。')
+        content=base64.b64decode(p['content'],validate=True) if p.get('base64') else p['content'].encode('utf-8')
+        fd,tmp=tempfile.mkstemp(dir=target.parent,prefix='.research-export-')
+        try:
+            with os.fdopen(fd,'wb') as f:f.write(content);f.flush();os.fsync(f.fileno())
+            os.replace(tmp,target)
+        finally:Path(tmp).unlink(missing_ok=True)
+        return dict(path=str(target),size=len(content))
     if method=='files.preview': return preview_file(workspace(),p['id'])
     if method=='files.path': return str(workspace().file_path(p['id']))
     if method=='task.path':
@@ -160,12 +172,19 @@ def dispatch(method, p):
         with sources(p) as paths:
             if len(paths)!=1:raise ValueError('请选择一个 Word 文档。')
             return scan(profile(),paths[0],p.get('decimal_mode','zero'))
+    if method=='tool.word.match':
+        from word_workflow import match
+        return match(profile(),p)
     if method=='tool.word.apply':
         from word_workflow import apply
         return apply(profile(),p)
     if method=='tool.word.review':
         from word_workflow import review
         return review(p)
+    if method=='tool.word.field.save':
+        from clinical_studio.typed_field_rules import validate_edit,peer_schema
+        value=validate_edit(p['field'])
+        return dict(field=value,peers=[peer_schema(f,value) for f in p.get('peers',[])])
     if method=='tool.word.convert':
         from clinical_studio.typed_field_rules import convert
         return convert(p['field'],p['kind'])
@@ -188,6 +207,9 @@ def dispatch(method, p):
     if method=='tool.shap.export':
         from analysis_workflow import export
         return export(profile(),p)
+    if method in ('tool.word.configuration','tool.shap.configuration','tool.word.prose.configuration'):
+        from configuration import word,shap,prose_document
+        return {'tool.word.configuration':word,'tool.shap.configuration':shap,'tool.word.prose.configuration':prose_document}[method](p['config'])
     if method=='tool.word.defaults':
         from clinical_studio.word_batch_engine import default_batch_config
         return default_batch_config()

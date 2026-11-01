@@ -25,6 +25,8 @@ const form = reactive({
     deadline: null as string | null,
     notes: "",
     first_todo: "整理稿件材料",
+    todo_deadline: null as string | null,
+    priority: "normal",
   }),
   busy = ref(false),
   error = ref("");
@@ -41,6 +43,8 @@ watch(
         deadline: t?.due_date || null,
         notes: t?.notes || "",
         first_todo: "整理稿件材料",
+        todo_deadline: null,
+        priority: "normal",
       });
       error.value = "";
     }
@@ -64,6 +68,8 @@ async function save() {
       : await api<string>("task.create", {
           ...payload,
           first_todo: form.first_todo,
+          todo_deadline: form.todo_deadline,
+          priority: form.priority,
         });
     await refresh();
     notify(
@@ -146,6 +152,27 @@ async function save() {
           /><small
             >完成状态由你手动确认，导入新材料不会撤回已完成的工作。</small
           >
+        </div>
+        <div v-if="!task" class="two-columns">
+          <div class="form-field">
+            <Label>第一项待办截止日期</Label
+            ><DatePicker
+              v-model="form.todo_deadline"
+              label="第一项待办截止日期"
+            /><small>留空时沿用任务截止日期</small>
+          </div>
+          <div class="form-field">
+            <Label>第一项待办优先级</Label
+            ><SelectField
+              v-model="form.priority"
+              :options="[
+                { value: 'high', label: '高' },
+                { value: 'normal', label: '普通' },
+                { value: 'low', label: '低' },
+              ]"
+              label="第一项待办优先级"
+            />
+          </div>
         </div>
         <div class="form-field">
           <Label for="task-notes">备注</Label

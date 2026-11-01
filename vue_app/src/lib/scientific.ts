@@ -3,7 +3,14 @@ import { api } from "./api";
 export const scientificJobs = reactive<
   Record<
     string,
-    { id: string; message: string; busy: boolean; error: string; result: any }
+    {
+      id: string;
+      message: string;
+      busy: boolean;
+      error: string;
+      result: any;
+      cancelRequested: boolean;
+    }
   >
 >({});
 export function jobFor(kind: string) {
@@ -13,23 +20,26 @@ export function jobFor(kind: string) {
     busy: false,
     error: "",
     result: null,
+    cancelRequested: false,
   };
   return scientificJobs[kind];
 }
 export async function startJob(
-  kind: "word" | "shap",
+  kind: "word" | "shap" | "numeric" | "category",
   params: any,
   slot: string = kind,
 ) {
   const job = jobFor(slot);
   if (job.busy) return;
   job.id = "";
+  job.cancelRequested = false;
   job.busy = true;
   job.error = "";
   job.message = "正在准备…";
   try {
     const started = await api("tool.job.start", { kind, params });
     job.id = started.id;
+    if (job.cancelRequested) await api("tool.job.cancel", { id: job.id });
     while (job.busy) {
       await new Promise((r) => setTimeout(r, 500));
       const status = await api("tool.job.status", { id: job.id });
@@ -49,9 +59,14 @@ export async function startJob(
 }
 export async function cancelJob(kind: string) {
   const job = jobFor(kind);
-  if (job.busy && job.id) {
-    await api("tool.job.cancel", { id: job.id });
+  if (job.busy) {
+    job.cancelRequested = true;
     job.message = "正在取消，等待当前步骤结束…";
+    try {
+      if (job.id) await api("tool.job.cancel", { id: job.id });
+    } catch (e) {
+      job.error = (e as Error).message;
+    }
   }
 }
 export const fieldTypes = [

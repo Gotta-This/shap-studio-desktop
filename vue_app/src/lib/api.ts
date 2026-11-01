@@ -138,12 +138,47 @@ export async function upload(files: File[]) {
     }),
   );
 }
-export function download(
+let nativeSaveBusy = false;
+export async function download(
   name: string,
   content: string,
   mime = "text/plain;charset=utf-8",
   base64 = false,
 ) {
+  if (desktop) {
+    if (nativeSaveBusy) {
+      notify("请先完成当前文件的保存。");
+      return;
+    }
+    nativeSaveBusy = true;
+    try {
+      const { save } = await import("@tauri-apps/plugin-dialog");
+      const extension = name.split(".").pop()?.toLowerCase();
+      const path = await save({
+        title: "保存文件",
+        defaultPath: name,
+        ...(extension && /^[a-z0-9]{1,8}$/.test(extension)
+          ? {
+              filters: [
+                {
+                  name: extension.toUpperCase() + " 文件",
+                  extensions: [extension],
+                },
+              ],
+            }
+          : {}),
+      });
+      if (path) {
+        await api("exports.save", { path, content, base64 });
+        notify("已保存到 " + path);
+      }
+    } catch (e) {
+      notify((e as Error).message, true);
+    } finally {
+      nativeSaveBusy = false;
+    }
+    return;
+  }
   const blob = new Blob(
     [base64 ? Uint8Array.from(atob(content), (c) => c.charCodeAt(0)) : content],
     { type: mime },

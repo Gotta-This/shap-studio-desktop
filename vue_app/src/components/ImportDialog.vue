@@ -46,6 +46,7 @@ const rows = ref<
 const form = reactive({
   task_id: "",
   todo_text: "",
+  priority: "normal",
   deadline: null as string | null,
 });
 watch(
@@ -61,6 +62,7 @@ watch(
       Object.assign(form, {
         task_id: props.taskId || "",
         todo_text: "",
+        priority: "normal",
         deadline: null,
       });
       error.value = "";
@@ -108,6 +110,7 @@ async function save() {
         categories: rows.value.map((r) => r.category),
         todo_text: form.todo_text,
         deadline: form.deadline,
+        priority: form.priority,
       });
     else {
       // The bridge stages native paths before browser uploads. Keep each file's
@@ -127,6 +130,7 @@ async function save() {
           categories: form.task_id ? ordered.map((r) => r.category) : undefined,
           todo_text: form.task_id ? form.todo_text : "",
           deadline: form.deadline,
+          priority: form.priority,
         },
       );
       notify(
@@ -233,6 +237,18 @@ async function save() {
           <div class="form-field">
             <Label>待办截止日期</Label><DatePicker v-model="form.deadline" />
           </div>
+        </div>
+        <div v-if="form.task_id" class="form-field">
+          <Label>新待办优先级</Label
+          ><SelectField
+            v-model="form.priority"
+            :options="[
+              { value: 'high', label: '高' },
+              { value: 'normal', label: '普通' },
+              { value: 'low', label: '低' },
+            ]"
+            label="材料新待办优先级"
+          />
         </div>
         <p v-if="error" role="alert" class="field-error">{{ error }}</p>
         <DialogFooter

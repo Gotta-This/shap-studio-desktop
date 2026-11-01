@@ -19,7 +19,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import PageHeading from "@/components/PageHeading.vue";
 import EmptyState from "@/components/EmptyState.vue";
 import SelectField from "@/components/SelectField.vue";
-import { api, notify, download } from "@/lib/api";
+import { notify, download } from "@/lib/api";
+import { startJob, cancelJob, jobFor, clone } from "@/lib/scientific";
 const route = useRoute(),
   tool = computed(() => String(route.params.tool)),
   busy = ref(false),
@@ -59,7 +60,9 @@ const numericValues = computed(() => {
     tool.value === "category" ? categoryResult.value : numericResult.value;
   if (!result) return "";
   const list = result.values.map((n: number) =>
-    tool.value === "numeric" ? n.toFixed(numeric.digits) : String(n),
+    tool.value === "numeric"
+      ? n.toFixed(result.params?.digits ?? 0)
+      : String(n),
   );
   return format.value === "comma"
     ? list.join(", ")
@@ -68,6 +71,12 @@ const numericValues = computed(() => {
       : format.value === "r"
         ? "c(" + list.join(", ") + ")"
         : list.join("\n");
+});
+const categoryCounts = computed(() => {
+  const counts = new Map<number, number>();
+  for (const n of categoryResult.value?.values || [])
+    counts.set(n, (counts.get(n) || 0) + 1);
+  return [...counts].map(([value, count]) => ({ value, count }));
 });
 const histogram = computed(() => {
   if (!numericResult.value) return [];
@@ -85,8 +94,14 @@ async function run(method: string, params: any, callback: (r: any) => void) {
   runningTool.value = tool.value;
   error.value = "";
   try {
-    callback(await api(method, params));
-    notify("已生成模拟数据，原文件保持不变。");
+    const kind = method === "tool.numeric" ? "numeric" : "category",
+      job = jobFor(kind);
+    await startJob(kind, clone(params));
+    if (job.error) throw Error(job.error);
+    if (job.message.includes("完成")) {
+      callback(job.result);
+      notify("已生成模拟数据。");
+    } else notify(job.message);
   } catch (e) {
     error.value = (e as Error).message;
   } finally {
@@ -183,6 +198,11 @@ async function copy() {
               ><Play :size="14" />{{
                 busy ? "正在生成…" : "生成随机数列"
               }}</Button
+            ><Button
+              v-if="busy && runningTool === 'numeric'"
+              variant="outline"
+              @click="cancelJob('numeric')"
+              >停止生成</Button
             ></template
           ><template v-else
             ><div class="form-field">
@@ -283,6 +303,11 @@ async function copy() {
               ><Play :size="14" />{{
                 busy ? "正在生成…" : "生成模拟数据"
               }}</Button
+            ><Button
+              v-if="busy && runningTool === 'numeric'"
+              variant="outline"
+              @click="cancelJob('numeric')"
+              >停止生成</Button
             ></template
           >
         </div>
@@ -321,6 +346,82 @@ async function copy() {
               }}</strong>
             </div>
           </div>
+          <details v-if="tool === 'category'" class="tool-note">
+            <summary>类别计数与前 10 行</summary>
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>类别</th>
+                  <th>实际数量</th>
+                  <th>实际占比</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="c in categoryCounts" :key="c.value">
+                  <td>{{ c.value }}</td>
+                  <td>{{ c.count }}</td>
+                  <td>
+                    {{
+                      ((c.count / categoryResult.values.length) * 100).toFixed(
+                        1,
+                      )
+                    }}%
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <pre>{{
+              categoryResult.values
+                .slice(0, 10)
+                .map((v: number, i: number) => i + 1 + "  " + v)
+                .join("\n")
+            }}</pre>
+          </details>
+          <details v-if="tool === 'numeric'" class="tool-note">
+            <summary>目标与实际（上次生成参数）</summary>
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>指标</th>
+                  <th>目标值</th>
+                  <th>实际值</th>
+                  <th>偏差</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>例数</td>
+                  <td>{{ numericResult.params.n }}</td>
+                  <td>{{ numericResult.values.length }}</td>
+                  <td>
+                    {{ numericResult.values.length - numericResult.params.n }}
+                  </td>
+                </tr>
+                <tr>
+                  <td>均数</td>
+                  <td>{{ numericResult.params.mean }}</td>
+                  <td>{{ numericResult.mean.toFixed(4) }}</td>
+                  <td>
+                    {{
+                      (numericResult.mean - numericResult.params.mean).toFixed(
+                        4,
+                      )
+                    }}
+                  </td>
+                </tr>
+                <tr>
+                  <td>标准差</td>
+                  <td>{{ numericResult.params.sd }}</td>
+                  <td>{{ numericResult.sd.toFixed(4) }}</td>
+                  <td>
+                    {{
+                      (numericResult.sd - numericResult.params.sd).toFixed(4)
+                    }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </details>
           <div
             v-if="tool === 'numeric'"
             class="histogram"
