@@ -1,0 +1,69 @@
+name: Vue V3 branch verification
+on:
+  workflow_dispatch:
+  push:
+    branches: [codex/vue3-v3-ui]
+    paths: ['vue_app/**', '.github/workflows/vue-v3.yml']
+  pull_request:
+    paths: ['vue_app/**', '.github/workflows/vue-v3.yml']
+permissions:
+  contents: read
+concurrency:
+  group: vue-v3-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  frontend-and-bridge:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: vue_app
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: vue_app/package-lock.json
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - run: npm ci
+      - run: npm run build
+      - run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install -r requirements.txt
+          MPLBACKEND=Agg .venv/bin/python -m unittest discover -s python -p 'test_*.py' -v
+      - run: npx playwright install --with-deps chromium
+      - run: npm test
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: vue-v3-browser-review
+          path: |
+            vue_app/test-results/
+            vue_app/playwright-report/
+  native-check:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    env:
+      TAURI_CONFIG: '{"bundle":{"externalBin":[]}}'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+      - uses: dtolnay/rust-toolchain@stable
+      - run: npm ci
+        working-directory: vue_app
+      - run: npm run build
+        working-directory: vue_app
+      - run: cargo check --locked --manifest-path vue_app/src-tauri/Cargo.toml

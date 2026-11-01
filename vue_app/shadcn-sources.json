@@ -1,0 +1,486 @@
+{
+  "license": "MIT",
+  "registry": "https://www.shadcn-vue.com/r/styles/new-york-v4/",
+  "files": [
+    {
+      "path": "src/components/ui/button/Button.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/button.json",
+      "sha256": "524555c91c024c0effb776b0af08fe2e8c15d44d01b15660d0b6b527d9bb21b3"
+    },
+    {
+      "path": "src/components/ui/button/index.ts",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/button.json",
+      "sha256": "1710820182b3f7c91823da7f4f516026a124ec86f7a3a10a96fb55e518f12b41"
+    },
+    {
+      "path": "src/components/ui/badge/Badge.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/badge.json",
+      "sha256": "fea4cc90e930423455694f59b200cf0b9da654ffdb60044cdd55dd6c5a3b931e"
+    },
+    {
+      "path": "src/components/ui/badge/index.ts",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/badge.json",
+      "sha256": "40059c209ec5a43b52aed1339767bfb9801d76a837aeed9b5a6991608c501c67"
+    },
+    {
+      "path": "src/components/ui/input/Input.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/input.json",
+      "sha256": "f139b995951243c34bf94be82d97c2e737b72d75484d9e0485ebe1d41c42e81a"
+    },
+    {
+      "path": "src/components/ui/input/index.ts",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/input.json",
+      "sha256": "ba728db29f97b894318836d094705b34c0f792352548189703224c694d29ed5b"
+    },
+    {
+      "path": "src/components/ui/label/Label.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/label.json",
+      "sha256": "41d39f5558cfa960ba4ffa67520e3f3281e0b7fb8ff2c0e6b590c0b72ea75be6"
+    },
+    {
+      "path": "src/components/ui/label/index.ts",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/label.json",
+      "sha256": "66c26173360bc6213b18473375aaa22debd4cc493f26e5331a6087851ff03ec7"
+    },
+    {
+      "path": "src/components/ui/textarea/Textarea.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/textarea.json",
+      "sha256": "7828106d17155c4cf36a8772d0db1bc2390d592886e256b9cc9ae75fa655991d"
+    },
+    {
+      "path": "src/components/ui/textarea/index.ts",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/textarea.json",
+      "sha256": "9212587988979849b3bbcddebdf46d9b1f80a513c0cf92391d83c9d50b648007"
+    },
+    {
+      "path": "src/components/ui/dialog/Dialog.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/dialog.json",
+      "sha256": "e42a0978a57dd1891ed40778e9c77f8b2feec3dd35ba1dd8acbb44c4f229f050"
+    },
+    {
+      "path": "src/components/ui/dialog/DialogClose.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/dialog.json",
+      "sha256": "bd8526926a98c67f0efd358693eca331252271bf6ad78cd99abacf51184025c4"
+    },
+    {
+      "path": "src/components/ui/dialog/DialogContent.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/dialog.json",
+      "sha256": "5eed1130741789a5494dab9dff822d32829172f68e8b6f48bfef3771ae74c6e3"
+    },
+    {
+      "path": "src/components/ui/dialog/DialogDescription.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/dialog.json",
+      "sha256": "2669737230a80b9dc9467c2b09447088f68444c9a9d12b8d0014b3439fe8fe61"
+    },
+    {
+      "path": "src/components/ui/dialog/DialogFooter.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/dialog.json",
+      "sha256": "419fcc5cf11ca36eb693ab425c5d900ca6f21d45f7de7874a4ec00eadef55bc6"
+    },
+    {
+      "path": "src/components/ui/dialog/DialogHeader.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/dialog.json",
+      "sha256": "5d1a2725d6b8db23f1706ca3596ab2a12a867668ecfa70f8b076d88484b30638"
+    },
+    {
+      "path": "src/components/ui/dialog/DialogOverlay.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/dialog.json",
+      "sha256": "81e3192c6dea84c7d26f7644d0640b8799fb8ab58b4e152e742eabde7c9e680f"
+    },
+    {
+      "path": "src/components/ui/dialog/DialogScrollContent.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/dialog.json",
+      "sha256": "0975116ed0784ced1d9e85a0699c3566473a27f534e50058fab37753f87210a8"
+    },
+    {
+      "path": "src/components/ui/dialog/DialogTitle.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/dialog.json",
+      "sha256": "00ba0157b9d0e6b5220e37a6259df67efb5112c28ebe6b3b84838fdf139d66cb"
+    },
+    {
+      "path": "src/components/ui/dialog/DialogTrigger.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/dialog.json",
+      "sha256": "6458b0ad97b9f9345942869d84a3b8a6ed22bc545760f5bd95d4949dadc0fae6"
+    },
+    {
+      "path": "src/components/ui/dialog/index.ts",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/dialog.json",
+      "sha256": "0eb610cf650df70f213447e4d86f818c22f3785f72dccbaf0d88b411c210b9bc"
+    },
+    {
+      "path": "src/components/ui/popover/Popover.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/popover.json",
+      "sha256": "2acd4ebc20f75b11155573f6af9badca316606c5cc2695efbff75923883caa60"
+    },
+    {
+      "path": "src/components/ui/popover/PopoverAnchor.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/popover.json",
+      "sha256": "8e6f46b87044cee29c0f1eb1299510f28b683eea4934ee0f715f764d3422b650"
+    },
+    {
+      "path": "src/components/ui/popover/PopoverContent.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/popover.json",
+      "sha256": "f517589d7b8ce808a57403de76bada025d3f87dc3d980a5883399cccc75f65c5"
+    },
+    {
+      "path": "src/components/ui/popover/PopoverTrigger.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/popover.json",
+      "sha256": "3ce37a26b38d46d97c624a5952c9159e931cb4166ecf9d094441fbc06edc49fd"
+    },
+    {
+      "path": "src/components/ui/popover/index.ts",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/popover.json",
+      "sha256": "3fe227faf42fdc1d0da9b9511d28d0870479684d2f6ff49ab765fbe32ce76eab"
+    },
+    {
+      "path": "src/components/ui/calendar/Calendar.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/calendar.json",
+      "sha256": "149355d9ae398acb246662fd80f65140b8f8b32c7979501bca90b339c99230cd"
+    },
+    {
+      "path": "src/components/ui/calendar/CalendarCell.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/calendar.json",
+      "sha256": "c6d4e3b006683d8d4c1de3a535f171e42cbf0182c6fce1438c7760f63c07698f"
+    },
+    {
+      "path": "src/components/ui/calendar/CalendarCellTrigger.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/calendar.json",
+      "sha256": "50c5fbda922c9e02cd559d7510038b189bebab1de06270cc8e4cbe81e52df0a2"
+    },
+    {
+      "path": "src/components/ui/calendar/CalendarGrid.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/calendar.json",
+      "sha256": "8260c5da5c9d3602b1a3ebef2b19ba4e5d3e276c7c47efc6eb78a57e46d081bf"
+    },
+    {
+      "path": "src/components/ui/calendar/CalendarGridBody.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/calendar.json",
+      "sha256": "d4a93114ad51159e8c3e9ff77690782fac62c97aa371dd5db753cb354b743a8f"
+    },
+    {
+      "path": "src/components/ui/calendar/CalendarGridHead.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/calendar.json",
+      "sha256": "74748a3def79663c68be431604469dbca5dbc6703638a5e5c89c0627703bc815"
+    },
+    {
+      "path": "src/components/ui/calendar/CalendarGridRow.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/calendar.json",
+      "sha256": "c8f50544fbb3638c1465040077637999c66275847e9eb71fb21fadf71b15a5d2"
+    },
+    {
+      "path": "src/components/ui/calendar/CalendarHeadCell.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/calendar.json",
+      "sha256": "56109630f2711d18f08ca9c1864b37c1970cc9d14db0d7ea58cbb9d5cfae7d58"
+    },
+    {
+      "path": "src/components/ui/calendar/CalendarHeader.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/calendar.json",
+      "sha256": "6246592a499ef6f72adae0f3cf9a00b64df3c19e6a34e79773de8c6b7de165aa"
+    },
+    {
+      "path": "src/components/ui/calendar/CalendarHeading.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/calendar.json",
+      "sha256": "581c4711ff38e93e5326ed721331a5fe8a9bc6c399c9bb27067d9d55caca46b8"
+    },
+    {
+      "path": "src/components/ui/calendar/CalendarNextButton.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/calendar.json",
+      "sha256": "c86c3d79748c3dfded4fc0331365a95981cd1449ebe80aa49f04c7e9f660d291"
+    },
+    {
+      "path": "src/components/ui/calendar/CalendarPrevButton.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/calendar.json",
+      "sha256": "4837ba4861ccf27a76a8ef247a420b99c2eaaf6fd49dc98804124640c1bfbce7"
+    },
+    {
+      "path": "src/components/ui/calendar/index.ts",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/calendar.json",
+      "sha256": "cfe9b6a45d358872b02faa068972667d9630b15dc18eed57dc17835869b5995c"
+    },
+    {
+      "path": "src/components/ui/select/Select.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/select.json",
+      "sha256": "0a100251a7ad449679f49b078f613492940b05de92f744e8ca072fa6acadf8fa"
+    },
+    {
+      "path": "src/components/ui/select/SelectContent.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/select.json",
+      "sha256": "09129a712b3c57ba52d2065cd143fef5e9e5c3ac7131d0e66201b98e77d73501"
+    },
+    {
+      "path": "src/components/ui/select/SelectGroup.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/select.json",
+      "sha256": "d75787597511f18b2f879d53c83a2d17776ebd010802cf35dad4f593ce9a6a09"
+    },
+    {
+      "path": "src/components/ui/select/SelectItem.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/select.json",
+      "sha256": "914462d8c788136da0abec6b407db15eb96aea86f6d773e2364f43b805116792"
+    },
+    {
+      "path": "src/components/ui/select/SelectItemText.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/select.json",
+      "sha256": "76ad26caa4ad1a8c9cd25a5c69edeaca4e30de90551f3d16ef405eed821b023a"
+    },
+    {
+      "path": "src/components/ui/select/SelectLabel.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/select.json",
+      "sha256": "fc5c073084e0b6888fa9aa1a06a842c890bbe808b21f73746d02c124b4212b96"
+    },
+    {
+      "path": "src/components/ui/select/SelectScrollDownButton.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/select.json",
+      "sha256": "c9373458a3887e6097f8641011e74e8c354087c24070d8b3dbf1b3b11f3f3733"
+    },
+    {
+      "path": "src/components/ui/select/SelectScrollUpButton.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/select.json",
+      "sha256": "b91a550b27e3400e0b99e8dab8a1c11b4437b8676977a8c3696ad94bc56045ff"
+    },
+    {
+      "path": "src/components/ui/select/SelectSeparator.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/select.json",
+      "sha256": "2a185c8b94e3c7ff3cfb3e12d2a2e5e0840ec6f94bb331dcacf6e30f5fe562b1"
+    },
+    {
+      "path": "src/components/ui/select/SelectTrigger.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/select.json",
+      "sha256": "76142eca82d53a15b9829f16c47c70418b2b0c386bb5a69aa22b7fc759d13185"
+    },
+    {
+      "path": "src/components/ui/select/SelectValue.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/select.json",
+      "sha256": "ab6a9b14358eb3e32c3ab40f7c01ce12b7edeb1b6a459159b41ac9cce1612794"
+    },
+    {
+      "path": "src/components/ui/select/index.ts",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/select.json",
+      "sha256": "700c60f2ee037e450cecdb2a0ede7c992eb3260c00ec7632a204556839de2b58"
+    },
+    {
+      "path": "src/components/ui/checkbox/Checkbox.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/checkbox.json",
+      "sha256": "79ea8caf3304043dd333da8096f19b483e6eea433058a46720ebeaad94be01b5"
+    },
+    {
+      "path": "src/components/ui/checkbox/index.ts",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/checkbox.json",
+      "sha256": "5348cc51dbc04b363f3ac552969d85bcbf674764d5f3b6c265495c0cdbbef0f8"
+    },
+    {
+      "path": "src/components/ui/table/Table.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/table.json",
+      "sha256": "5d037621ff9fe9819500ba5596342aeecd254702807fb64630c74cede1329a8b"
+    },
+    {
+      "path": "src/components/ui/table/TableBody.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/table.json",
+      "sha256": "5f5c913838cd7cf2223e0c173e5746c5fdeacd85b8cb4ce3bfafde7ba82029de"
+    },
+    {
+      "path": "src/components/ui/table/TableCaption.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/table.json",
+      "sha256": "7ac3921a524b3601c5da0ee19338f0a6db6b18f36e8dbb2ba837475cc8d2900f"
+    },
+    {
+      "path": "src/components/ui/table/TableCell.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/table.json",
+      "sha256": "5930bbf1f5fa1f0a5bba0fcb616aeb2b8369180c02fd7096e90c83e808f7f532"
+    },
+    {
+      "path": "src/components/ui/table/TableEmpty.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/table.json",
+      "sha256": "a55204a768c09c8365ab968706ddd30baa055958b658c2ce15ffc80a408a341a"
+    },
+    {
+      "path": "src/components/ui/table/TableFooter.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/table.json",
+      "sha256": "b14e67742becb00702ab5a60da3bb613abaffdaf1c1a79af66fc8943f3e9d53c"
+    },
+    {
+      "path": "src/components/ui/table/TableHead.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/table.json",
+      "sha256": "76c52bbfa00c7b11d59f2953e514497d9bcdde53e7f4e826719c3048a7746532"
+    },
+    {
+      "path": "src/components/ui/table/TableHeader.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/table.json",
+      "sha256": "d5f02c122c00d159742605328ebe51eebe4894bc8d669601ac7b654a8058839b"
+    },
+    {
+      "path": "src/components/ui/table/TableRow.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/table.json",
+      "sha256": "66d2f6ec53c2ae28c4c40972ffbf791320f7206dc177a91c7695dcf8fdc98e50"
+    },
+    {
+      "path": "src/components/ui/table/index.ts",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/table.json",
+      "sha256": "3913c7028c3e85b66506b711840979eb6c11b3eb4789532eb59c21522a3674e2"
+    },
+    {
+      "path": "src/components/ui/tabs/Tabs.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/tabs.json",
+      "sha256": "4127f1999834c7a460da6d3d16e7d38eafdac92a0ac04df7193168fd0da8bb3a"
+    },
+    {
+      "path": "src/components/ui/tabs/TabsContent.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/tabs.json",
+      "sha256": "9bf9e4fdc2e1826a2717ffacfb7d3ab6f46896c695cc05a074d433b58e4d1eb2"
+    },
+    {
+      "path": "src/components/ui/tabs/TabsList.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/tabs.json",
+      "sha256": "8f5d6ad5bf132484993867b6e7f58dcc57cccec8019757cc456f82345dfcf776"
+    },
+    {
+      "path": "src/components/ui/tabs/TabsTrigger.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/tabs.json",
+      "sha256": "3c45abce5d7c76c5d3686dc445c54285f2b4c76042736b02a12b19611fe35d67"
+    },
+    {
+      "path": "src/components/ui/tabs/index.ts",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/tabs.json",
+      "sha256": "5e98735f90589ee6b48c4932a7b939b014d657ae346a7b07a99ffef6ba2fa437"
+    },
+    {
+      "path": "src/components/ui/dropdown-menu/DropdownMenu.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/dropdown-menu.json",
+      "sha256": "ad0759b7b6d57e02444a4ba3f00412400a77d49262fd6f2b186f18d83f7fb0cc"
+    },
+    {
+      "path": "src/components/ui/dropdown-menu/DropdownMenuCheckboxItem.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/dropdown-menu.json",
+      "sha256": "366e2fa384159392b14aa125c297d8a0b9a628e5ab694019f624a8c0c7f82803"
+    },
+    {
+      "path": "src/components/ui/dropdown-menu/DropdownMenuContent.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/dropdown-menu.json",
+      "sha256": "6c16fef3a3b15b534a14bd70bc48e2aa39baa267eec443b2eab845f7655bc16f"
+    },
+    {
+      "path": "src/components/ui/dropdown-menu/DropdownMenuGroup.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/dropdown-menu.json",
+      "sha256": "24fd1c9c8a0e251a6cd4aaf77a6698d0af5314432809552c72b2123932351164"
+    },
+    {
+      "path": "src/components/ui/dropdown-menu/DropdownMenuItem.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/dropdown-menu.json",
+      "sha256": "d47310f7e26e9fca00690dde46b904b034b76f651b850ccd15a20ba34ef350de"
+    },
+    {
+      "path": "src/components/ui/dropdown-menu/DropdownMenuLabel.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/dropdown-menu.json",
+      "sha256": "afa273d5906ad1e185e05fba56faa922d3935d43289f6a61dd35d9e8da63d727"
+    },
+    {
+      "path": "src/components/ui/dropdown-menu/DropdownMenuRadioGroup.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/dropdown-menu.json",
+      "sha256": "864ff5483045095d1d42c401e6774c891df2d1196b99d0ad60a71199fa2d54ff"
+    },
+    {
+      "path": "src/components/ui/dropdown-menu/DropdownMenuRadioItem.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/dropdown-menu.json",
+      "sha256": "37fad342962ebcf59f27a140d226e503ac72c7d23a8394cd39c4493bf92b6674"
+    },
+    {
+      "path": "src/components/ui/dropdown-menu/DropdownMenuSeparator.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/dropdown-menu.json",
+      "sha256": "11c42c63c4b2739ff436c1c101ebadcbd8ddb95827f1b40f90473624990b0432"
+    },
+    {
+      "path": "src/components/ui/dropdown-menu/DropdownMenuShortcut.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/dropdown-menu.json",
+      "sha256": "949ef7a405aed30fdba04e79ed0ab8de7f4438f9477ea7d8881263450200e5c5"
+    },
+    {
+      "path": "src/components/ui/dropdown-menu/DropdownMenuSub.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/dropdown-menu.json",
+      "sha256": "6aa6307d0cf7da4e55748ff90da006e210cda12517d4e444771d7f3b32ed1377"
+    },
+    {
+      "path": "src/components/ui/dropdown-menu/DropdownMenuSubContent.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/dropdown-menu.json",
+      "sha256": "2b70fb975793226f5c369f96da29810e74c6dcd189c2aaef3da97520c214d822"
+    },
+    {
+      "path": "src/components/ui/dropdown-menu/DropdownMenuSubTrigger.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/dropdown-menu.json",
+      "sha256": "dccfbed56c075bca65c59bb3935b46a97b9b4fb8c9ceadd7340b967aac1303ee"
+    },
+    {
+      "path": "src/components/ui/dropdown-menu/DropdownMenuTrigger.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/dropdown-menu.json",
+      "sha256": "052aeba71e7accc3f4b1e733f98592d7c7f9eabedaf82ba25caaac7f651e6ba2"
+    },
+    {
+      "path": "src/components/ui/dropdown-menu/index.ts",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/dropdown-menu.json",
+      "sha256": "19ee04e0a51375d18aa2d8310f86cdfcc4abe15439033df6a54a3134b3e1d415"
+    },
+    {
+      "path": "src/components/ui/separator/Separator.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/separator.json",
+      "sha256": "2dbcb527b42b16f1abe1e709336c0dab683354a94f7b68caa05d611b6ad63af1"
+    },
+    {
+      "path": "src/components/ui/separator/index.ts",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/separator.json",
+      "sha256": "fcd7839dc204de276f98b80a4ccdb58c7d7494f64389c682312d3490e01b9025"
+    },
+    {
+      "path": "src/components/ui/progress/Progress.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/progress.json",
+      "sha256": "f6647fe2bf6926e3f12536297d2d72331aa42b468bc2862d5df6fb049ecdee5b"
+    },
+    {
+      "path": "src/components/ui/progress/index.ts",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/progress.json",
+      "sha256": "c7a63e05c3f5851c0f7be1a91d57062aa833448ac649d7b974f43ac66bd54e96"
+    },
+    {
+      "path": "src/components/ui/tooltip/Tooltip.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/tooltip.json",
+      "sha256": "674df497bf245dcbbcdccd5f35e0b349276241f8fcde9a75e4e7900da0e72088"
+    },
+    {
+      "path": "src/components/ui/tooltip/TooltipContent.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/tooltip.json",
+      "sha256": "215e44e12f06500fb1a3bb50ad882d420ade85b0ed86afc753e428594bb7946f"
+    },
+    {
+      "path": "src/components/ui/tooltip/TooltipProvider.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/tooltip.json",
+      "sha256": "80df7529706596c9f5df586e4a4c23efb774dc45961680da83864e76c2f139d1"
+    },
+    {
+      "path": "src/components/ui/tooltip/TooltipTrigger.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/tooltip.json",
+      "sha256": "c904e72f5f8602337e67765d2bb1d8939232abb98966c6a437dcfd03c66165c6"
+    },
+    {
+      "path": "src/components/ui/tooltip/index.ts",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/tooltip.json",
+      "sha256": "3fe07cbcde58fa5cb95582566192e833d4c171184c7d3d338519c2b95784f627"
+    },
+    {
+      "path": "src/components/ui/native-select/NativeSelect.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/native-select.json",
+      "sha256": "c55e855236aa2831dbf44b29da54c9cacecc2383b947b7f0a1aa9fb69dc7f03e"
+    },
+    {
+      "path": "src/components/ui/native-select/NativeSelectOptGroup.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/native-select.json",
+      "sha256": "26964af41cae7201b1c74636200596c095b5c1b5ba8ded80834ee4759b2159fe"
+    },
+    {
+      "path": "src/components/ui/native-select/NativeSelectOption.vue",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/native-select.json",
+      "sha256": "18c15cccd75870db7ff5f9655c454e1ec06f7a4fe24d2bb092c9357fa4cbabe8"
+    },
+    {
+      "path": "src/components/ui/native-select/index.ts",
+      "source": "https://www.shadcn-vue.com/r/styles/new-york-v4/native-select.json",
+      "sha256": "e63785b1a1c30e8075bb4f238152448829da58399249b05bca8c333c2c1479e1"
+    }
+  ]
+}
