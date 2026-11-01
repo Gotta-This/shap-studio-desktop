@@ -37,12 +37,17 @@ def main():
     parser.add_argument("--merged-tables-verify",metavar="OUTPUT_DIR",help="核对同文档竖表、横表、多层合并表头及汇总率确认")
     parser.add_argument("--resize-verify",metavar="OUTPUT_DIR",help="核对四个工具文本框和表格拉伸及外层滚动")
     parser.add_argument("--todo-verify",metavar="OUTPUT_DIR",help="核对待办的本地保存、编辑、完成、重启和默认勾选项")
+    parser.add_argument("--manuscript-verify",metavar="OUTPUT_DIR",help="核对稿件工作空间、真实文件归档与原待办联动")
     parser.add_argument("--word-source",help="Word流程验证的docx来源")
     parser.add_argument("--open-tool",choices=["category","numeric","word","shap"],help="启动时打开指定工具")
     args=parser.parse_args()
     if args.todo_verify:
         todo_root=Path(args.todo_verify).resolve();todo_root.mkdir(parents=True,exist_ok=True)
         os.environ["CLINICAL_STUDIO_TODO_PATH"]=str(todo_root/"todos.json")
+    if args.manuscript_verify:
+        workspace_verify_root=Path(args.manuscript_verify).resolve();workspace_verify_root.mkdir(parents=True,exist_ok=True)
+        os.environ['CLINICAL_STUDIO_WORKSPACE_CONFIG']=str(workspace_verify_root/'workspace-config.json')
+        os.environ['CLINICAL_STUDIO_TODO_PATH']=str(workspace_verify_root/'todos.json')
     from clinical_studio.config import default_config,load_config
     config=load_config(args.config) if args.config else default_config()
     if args.self_test:
@@ -53,7 +58,7 @@ def main():
         (Path(args.self_test)/"self_test_passed.json").write_text(json.dumps({"passed":True,"folder":str(result.folder),"images":len(result.images)},ensure_ascii=False,indent=2),encoding="utf-8")
         return 0
     from PySide6.QtCore import QTimer, Qt, QCoreApplication, QEvent
-    if args.ui_verify or args.shap_verify or args.word_verify or args.word_groups_verify or args.word_layout_verify or args.input_verify or args.shell_verify or args.prose_verify or args.table_types_verify:
+    if args.ui_verify or args.shap_verify or args.word_verify or args.word_groups_verify or args.word_layout_verify or args.input_verify or args.shell_verify or args.prose_verify or args.table_types_verify or args.manuscript_verify:
         from PySide6.QtWidgets import QApplication
         QApplication.setAttribute(Qt.AA_DontUseNativeDialogs,True)
     from clinical_studio.app import create_application
@@ -63,6 +68,12 @@ def main():
         from clinical_studio.updates import https_context
         https_context()  # Verify the bundled CA file without making network requests.
     app=create_application(sys.argv); window=DesktopWindow(config,args.output,auto_check_updates=False if verification_mode else None); window.show()
+    if args.manuscript_verify:
+        from clinical_studio.manuscript_verify import verify_manuscripts
+        def verify_manuscript_flow():
+            window.verification_passed=verify_manuscripts(window,args.manuscript_verify)
+            app.quit()
+        QTimer.singleShot(250,verify_manuscript_flow)
     if args.open_tool:window.open_module(args.open_tool)
     if args.todo_verify:
         from clinical_studio.todo_verify import verify_todos
@@ -162,7 +173,7 @@ def main():
     # may otherwise visit signal-connected buttons after their Qt parent is gone.
     window.deleteLater()
     QCoreApplication.sendPostedEvents(None,QEvent.DeferredDelete)
-    if args.todo_verify or args.shap_verify or args.word_verify or args.word_groups_verify or args.word_layout_verify or args.input_verify or args.shell_verify or args.prose_verify or args.table_types_verify or args.word_drop_verify or args.resize_verify or args.merged_tables_verify or args.unified_preview_verify or args.ungrouped_verify:
+    if args.manuscript_verify or args.todo_verify or args.shap_verify or args.word_verify or args.word_groups_verify or args.word_layout_verify or args.input_verify or args.shell_verify or args.prose_verify or args.table_types_verify or args.word_drop_verify or args.resize_verify or args.merged_tables_verify or args.unified_preview_verify or args.ungrouped_verify:
         return 0 if window.verification_passed else 1
     if args.ui_verify:
         return 0 if verifier.passed else 1
@@ -176,7 +187,7 @@ if __name__=="__main__":
         code=main()
     except Exception:
         import traceback
-        flag=next((f for f in ("--todo-verify","--self-test","--ui-verify","--shap-verify","--word-verify","--word-groups-verify","--word-layout-verify","--input-verify","--shell-verify","--prose-verify","--table-types-verify","--word-drop-verify","--resize-verify","--merged-tables-verify","--unified-preview-verify","--ungrouped-verify") if f in sys.argv),None)
+        flag=next((f for f in ("--manuscript-verify","--todo-verify","--self-test","--ui-verify","--shap-verify","--word-verify","--word-groups-verify","--word-layout-verify","--input-verify","--shell-verify","--prose-verify","--table-types-verify","--word-drop-verify","--resize-verify","--merged-tables-verify","--unified-preview-verify","--ungrouped-verify") if f in sys.argv),None)
         if flag and sys.argv.index(flag)+1<len(sys.argv):
             target=Path(sys.argv[sys.argv.index(flag)+1]);target.mkdir(parents=True,exist_ok=True)
             (target/"fatal_error.json").write_text(json.dumps({"passed":False,"traceback":traceback.format_exc()},ensure_ascii=False,indent=2),encoding="utf-8")

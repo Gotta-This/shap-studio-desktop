@@ -21,9 +21,12 @@ class SidebarButton(QPushButton):
             p.setPen(QPen(Qt.white,1.8,Qt.SolidLine,Qt.RoundCap,Qt.RoundJoin));path=QPainterPath(QPointF(21,22));path.lineTo(25,26);path.lineTo(32,18);p.drawPath(path)
         elif self.mark=='home':
             p.setPen(QPen(muted,1.5,Qt.SolidLine,Qt.RoundCap,Qt.RoundJoin));path=QPainterPath(QPointF(19,23));path.lineTo(24,18);path.lineTo(29,23);path.lineTo(29,30);path.lineTo(20,30);path.lineTo(20,23);p.drawPath(path)
+        elif self.mark=='workspace':
+            p.setPen(QPen(color,1.5,Qt.SolidLine,Qt.RoundCap,Qt.RoundJoin));p.setBrush(Qt.NoBrush)
+            path=QPainterPath(QPointF(18,18));path.lineTo(24,18);path.lineTo(27,21);path.lineTo(36,21);path.lineTo(36,32);path.lineTo(18,32);path.closeSubpath();p.drawPath(path)
         else:
             font=QFont(self.font());font.setPixelSize(12);font.setWeight(QFont.DemiBold);p.setFont(font);p.setPen(muted);p.drawText(QRectF(16,0,26,self.height()),Qt.AlignVCenter|Qt.AlignLeft,self.mark)
-        font=QFont(self.font());font.setPixelSize(14 if self.mark in ('todo','home') else 13);font.setWeight(QFont.DemiBold if active else QFont.Medium);p.setFont(font);p.setPen(color)
+        font=QFont(self.font());font.setPixelSize(14 if self.mark in ('todo','home','workspace') else 13);font.setWeight(QFont.DemiBold if active else QFont.Medium);p.setFont(font);p.setPen(color)
         p.drawText(QRectF(48,0,self.width()-52-(34 if self.count is not None else 0),self.height()),Qt.AlignLeft|Qt.AlignVCenter,self.label)
         if self.count is not None:
             text=str(self.count);font.setPixelSize(11);font.setWeight(QFont.DemiBold);p.setFont(font)

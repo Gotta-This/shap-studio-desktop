@@ -80,6 +80,7 @@ class TodoTable(QTableWidget):
 
 class TodoPage(QWidget):
     changed=Signal()
+    open_manuscript=Signal(str)
     def __init__(self,parent=None,store=None):
         super().__init__(parent);self.store=store or TodoStore();self.completed=False;self.editing=False;self.signature=None;self.last_deleted=None;self.dialog=None
         self.setObjectName('todoPage');self.setStyleSheet('''
@@ -118,6 +119,7 @@ class TodoPage(QWidget):
         status=QHBoxLayout();self.message=QLabel();self.message.setWordWrap(True);self.message.setObjectName('todoMuted');status.addWidget(self.message,1);self.undo=QPushButton('撤销删除');self.undo.clicked.connect(self.undo_delete);self.undo.hide();status.addWidget(self.undo);layout.addLayout(status);layout.addStretch()
         self.refresh()
     def file_signature(self):
+        if hasattr(self.store,'signature'):return self.store.signature()
         try:s=self.store.path.stat();return (s.st_mtime_ns,s.st_size)
         except FileNotFoundError:return None
     def refresh_from_disk(self):
@@ -160,7 +162,7 @@ class TodoPage(QWidget):
             self.table.clearContents();self.table.setRowCount(len(tasks))
             for row,task in enumerate(tasks):
                 check=QTableWidgetItem();check.setFlags(Qt.ItemIsEnabled|Qt.ItemIsSelectable|Qt.ItemIsUserCheckable);check.setCheckState(Qt.Checked if task['completed'] else Qt.Unchecked);check.setData(Qt.UserRole,task['id']);self.table.setItem(row,0,check)
-                name=QTableWidgetItem(task['name']);name.setData(Qt.UserRole,task['id']);name.setToolTip(task['name']);self.table.setItem(row,1,name)
+                name=QTableWidgetItem(task['name']);name.setData(Qt.UserRole,task['id']);name.setToolTip('\n'.join(filter(None,[task.get('client'),task.get('manuscript_title'),task['name']])));self.table.setItem(row,1,name)
                 combo=priority_combo(task['priority']);combo.setMaximumWidth(100);combo.currentIndexChanged.connect(lambda _,i=task['id'],c=combo:self.action(lambda:self.store.update(i,priority=c.currentData())))
                 colors={'high':('#FBEEE7','#B36A42'),'normal':('#ECF5EF','#507963'),'low':('#F0F3F1','#8A9B90')};bg,fg=colors[task['priority']];combo.setStyleSheet(f'QComboBox{{background:{bg};color:{fg};}}')
                 cell=QWidget();box=QHBoxLayout(cell);box.setContentsMargins(8,0,8,0);box.addWidget(combo);box.addStretch();self.table.setCellWidget(row,2,cell)
@@ -168,8 +170,12 @@ class TodoPage(QWidget):
                 due.changed.connect(lambda value,i=task['id']:self.action(lambda:self.store.update(i,due_date=value)))
                 self.table.setCellWidget(row,3,due)
                 actions=QWidget();buttons=QHBoxLayout(actions);buttons.setContentsMargins(2,0,2,0);buttons.setSpacing(3)
+                if task.get('workspace_task_id'):
+                    linked=QPushButton('稿件');linked.setToolTip('打开关联稿件及文件');linked.setStyleSheet('border:0;padding:2px;color:#277453;');linked.clicked.connect(lambda _,i=task['workspace_task_id']:self.open_manuscript.emit(i));buttons.addWidget(linked)
                 edit=QPushButton('修改');edit.setToolTip('修改这条待办');edit.setStyleSheet('border:0;padding:4px;color:#507963;');edit.clicked.connect(lambda _,data=task:self.open_editor(data));buttons.addWidget(edit)
                 remove=QPushButton('删除');remove.setToolTip('删除后可撤销');remove.setStyleSheet('border:0;padding:4px;color:#879D8D;');remove.clicked.connect(lambda _,i=task['id']:self.delete(i));buttons.addWidget(remove);self.table.setCellWidget(row,4,actions)
+            self.table.setColumnWidth(4,160 if any(t.get('workspace_task_id') for t in tasks) else 108)
+            if getattr(self.store,'workspace_error',None):self.message.setText(self.store.workspace_error)
             self.table.setFixedHeight(keep_user_height(self.table,min(540,42+max(220,len(tasks)*58)+4)));self.count.setText(f'{len(tasks)} 项'+('已完成' if self.completed else '待办'))
             self.table.empty.setText('没有找到匹配的文档' if self.search.text().strip() else '还没有已完成的文档' if self.completed else '还没有待办文档\n\n在上方填写文档名称，即可添加。');self.table.empty.setVisible(not tasks);self.table.empty.raise_()
         except (ValueError,OSError) as exc:self.message.setText(str(exc));self.table.setRowCount(0);self.table.empty.setText('待办暂时无法读取，原文件已保留。');self.table.empty.show()

@@ -14,8 +14,10 @@ def default_path():
 
 
 class TodoStore:
-    def __init__(self,path=None):self.path=Path(path) if path is not None else default_path()
-    def read(self):
+    def __init__(self,path=None):
+        self.path=Path(path) if path is not None else default_path()
+        self.link_workspace=path is None;self.workspace_error=None
+    def _read_local(self):
         if not self.path.exists():return []
         try:
             data=json.loads(self.path.read_text(encoding='utf-8'))
@@ -27,6 +29,30 @@ class TodoStore:
                 if type(task.get('completed')) is not bool or type(task.get('deleted',False)) is not bool:raise ValueError()
             return data['tasks']
         except (ValueError,TypeError,KeyError,AttributeError) as exc:raise ValueError('待办文件无法读取，原文件已保留。请检查本地待办文件后重试。') from exc
+    def read(self):
+        tasks=self._read_local();self.workspace_error=None
+        if self.link_workspace:
+            from .manuscripts import configured_workspace
+            import sqlite3
+            try:
+                store=configured_workspace()
+                if store:tasks+=store.linked_todos()
+            except (ValueError,OSError,sqlite3.Error) as exc:self.workspace_error='稿件待办暂不可用：'+str(exc)
+        return tasks
+    def signature(self):
+        def stat(path):
+            try:s=path.stat();return (s.st_mtime_ns,s.st_size)
+            except OSError:return None
+        result=[stat(self.path)]
+        if self.link_workspace:
+            from .manuscripts import config_path
+            path=config_path();result.append(stat(path))
+            if path.exists():
+                try:
+                    root=Path(json.loads(path.read_text(encoding='utf-8'))['root'])
+                    result.append(stat(root/'.manuscripts.sqlite3'))
+                except (OSError,ValueError,KeyError,TypeError):result.append('unavailable')
+        return tuple(result)
     @staticmethod
     def validate(task):
         if not isinstance(task.get('name'),str) or not task['name'].strip():raise ValueError('请填写谁的文档。')
@@ -42,7 +68,7 @@ class TodoStore:
         if not lock.tryLock(1500):raise ValueError('另一个窗口正在保存待办，请稍后重试。')
         temporary=None
         try:
-            tasks=self.read();result=action(tasks)
+            tasks=self._read_local();result=action(tasks)
             for task in tasks:self.validate(task)
             fd,temporary=tempfile.mkstemp(prefix='.todos-',suffix='.tmp',dir=self.path.parent)
             with os.fdopen(fd,'w',encoding='utf-8') as stream:
@@ -59,6 +85,17 @@ class TodoStore:
         return self.mutate(action)
     def update(self,task_id,**changes):
         if set(changes)-{'name','priority','due_date','completed','deleted'}:raise ValueError('不支持的待办字段。')
+        if self.link_workspace and task_id.startswith('workspace:'):
+            from .manuscripts import configured_workspace
+            import sqlite3
+            try:
+                store=configured_workspace()
+                if store is None:raise ValueError('请先恢复稿件工作空间。')
+                mapped={('text' if k=='name' else k):v for k,v in changes.items()}
+                store.update_todo(task_id.split(':',1)[1],**mapped)
+                return next(t for t in store.linked_todos() if t['id']==task_id)
+            except sqlite3.Error as exc:
+                raise ValueError('稿件待办未能保存，请检查工作空间后重试：'+str(exc)) from exc
         def action(tasks):
             task=next((t for t in tasks if t['id']==task_id),None)
             if task is None:raise ValueError('这条待办已不存在，请刷新后重试。')
@@ -69,5 +106,5 @@ class TodoStore:
     def delete(self,task_id):return self.update(task_id,deleted=True)
     def restore(self,task_id):return self.update(task_id,deleted=False)
     def visible(self,completed=False,query=''):
-        tasks=[t for t in self.read() if not t.get('deleted') and t['completed']==completed and query.casefold() in t['name'].casefold()]
+        tasks=[t for t in self.read() if not t.get('deleted') and t['completed']==completed and query.casefold() in ' '.join([t['name'],t.get('client',''),t.get('manuscript_title','')]).casefold()]
         return sorted(tasks,key=lambda t:(t['due_date'] or '9999-12-31',{'high':0,'normal':1,'low':2}[t['priority']],t.get('created_at',''),t['id']))

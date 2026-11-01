@@ -18,7 +18,7 @@ from .config import ROOT,PLOT_NAMES
 from .editor_dialogs import EditorDialog
 
 PLOT_ORDER=['bar','summary','force','waterfall','dependence_protective','dependence_risk']
-KEY_FOR_BOARD={0:None,1:'category',2:'numeric',3:'word',4:'shap',5:'shap',6:'shap',7:'shap',8:None,9:None}
+KEY_FOR_BOARD={0:None,1:'category',2:'numeric',3:'word',4:'shap',5:'shap',6:'shap',7:'shap',8:None,9:None,10:None}
 
 
 def set_field(field,value):
@@ -184,16 +184,16 @@ class DesktopWindow(QMainWindow):
         if key:self.controller(key)
         if index not in self.boards:
             board=DesignBoard(index);self.boards[index]=board;self.build_shell(board)
-            getattr(self,'build_'+['home','category','numeric','word','data','model','style','results','system','todos'][index])(board)
+            getattr(self,'build_'+['home','category','numeric','word','data','model','style','results','system','todos','manuscripts'][index])(board)
             view=DesignView(board);self.views[index]=view;self.stack.addWidget(view)
             if key and key not in self.module_pages:self.module_pages[key]=board
         self.board_index=index;self.current_module=key;self.stack.setCurrentWidget(self.views[index])
         if index==6:
             editor=self.style_editor();editor.selector.setCurrentIndex(editor.selector.findData(self.style_key))
         self.home_button=self.boards[index].controls['nav-home']
-        self.nav_buttons={None:self.home_button,'todo':self.boards[index].controls['nav-todo'],**{k:self.boards[index].controls['nav-'+k] for k in ('category','numeric','word','shap')}}
+        self.nav_buttons={None:self.home_button,'todo':self.boards[index].controls['nav-todo'],'manuscript':self.boards[index].controls['nav-manuscript'],**{k:self.boards[index].controls['nav-'+k] for k in ('category','numeric','word','shap')}}
         for name,button in self.nav_buttons.items():
-            button.setChecked(index==9 if name=='todo' else index==0 if name is None else name==key);button.clearFocus()
+            button.setChecked(index==9 if name=='todo' else index==10 if name=='manuscript' else index==0 if name is None else name==key);button.clearFocus()
         self.setWindowTitle(self.boards[index].spec['name'].split(' · ',1)[-1]+' · 科研数据工具集')
         self._last_state=None;self.refresh(force=True)
 
@@ -213,16 +213,16 @@ class DesktopWindow(QMainWindow):
         # Replace the old painted sidebar with one consistent native hierarchy.
         for shape in b.spec['shapes']:
             if shape['x']<224 and 90<=shape['y']<767:b.hidden_shapes.add(shape['id'])
-        for name,text,y in [('space','我的空间',103),('tools','科研工具',266)]:
+        for name,text,y in [('space','我的空间',103),('tools','科研工具',298)]:
             label=QLabel(text);label.setStyleSheet('color:#789187;background:transparent;font-size:11px;font-weight:600;')
             b.place(label,(28,y,168,26),'sidebar-'+name)
-        divider=QFrame();divider.setStyleSheet('background:#DFEAE3;border:0;');b.place(divider,(28,250,168,1),'sidebar-divider')
+        divider=QFrame();divider.setStyleSheet('background:#DFEAE3;border:0;');b.place(divider,(28,285,168,1),'sidebar-divider')
         from .sidebar import SidebarButton
-        entries=[('todo',9,'待办事项','todo',143),('home',0,'工作台','home',193),('category',1,'自定义类别数列','01',303),('numeric',2,'均数 / 标准差模拟','02',359),('word',3,'Word 转 Excel','03',415),('shap',4,'模拟数据生图','04',471)]
+        entries=[('todo',9,'待办事项','todo',139),('home',0,'工作台','home',185),('manuscript',10,'稿件工作空间','workspace',231),('category',1,'自定义类别数列','01',332),('numeric',2,'均数 / 标准差模拟','02',382),('word',3,'Word 转 Excel','03',432),('shap',4,'模拟数据生图','04',482)]
         for name,target,label,mark,y in entries:
             button=SidebarButton(label,mark);button.clicked.connect(lambda checked=False,t=target:self.show_board(t))
             b.place(button,(16,y,192,44),'nav-'+name)
-        if b.index and b.index!=9:
+        if b.index and b.index not in (9,10):
             b.hotspot((1240,120,140,28),lambda:self.parameter_menu(),'all-parameters')
             b.controls['all-parameters'].setToolTip('全部参数、配置文件与更多操作')
         if b.index in (4,5,6,7):
@@ -238,10 +238,27 @@ class DesktopWindow(QMainWindow):
             if shape['x']>=224 and shape['y']>=76:b.hidden_shapes.add(shape['id'])
         b.text(256,28,'dbq   /   待办事项')
         self.todo_page=TodoPage();self.todo_page.setMinimumWidth(680)
+        self.todo_page.open_manuscript.connect(self.open_manuscript_task)
         from .resizable_fields import enable_content_scroll
         self.todo_area=enable_content_scroll(self.todo_page)
         b.place(self.todo_area,(260,108,1144,max(600,b.height()-76)),'todo-workflow')
         self.todo_area.setGeometry(260,52,max(1,b.width()-296),max(600,b.height()-76))
+
+    def build_manuscripts(self,b):
+        from .manuscript_ui import ManuscriptPage
+        from .resizable_fields import enable_content_scroll
+        for shape in b.spec['shapes']:
+            if shape['x']>=224 and shape['y']>=76:b.hidden_shapes.add(shape['id'])
+        b.text(256,28,'dbq   /   稿件工作空间')
+        self.manuscript_page=ManuscriptPage();self.manuscript_page.setMinimumWidth(680)
+        self.manuscript_page.changed.connect(lambda:self.todo_page.refresh() if hasattr(self,'todo_page') else None)
+        self.manuscript_area=enable_content_scroll(self.manuscript_page)
+        b.place(self.manuscript_area,(260,108,1144,max(600,b.height()-76)),'manuscript-workflow')
+        self.manuscript_area.setGeometry(260,52,max(1,b.width()-296),max(600,b.height()-76))
+
+    def open_manuscript_task(self,task_id):
+        self.show_board(10)
+        if self.board_index==10:self.manuscript_page.open_task(task_id)
 
     def build_system(self,b):pass
 
@@ -693,6 +710,7 @@ class DesktopWindow(QMainWindow):
         b=self.boards.get(self.board_index)
         if b is None:return
         if self.board_index==9:self.todo_page.refresh_from_disk()
+        if self.board_index==10:self.manuscript_page.refresh_from_disk()
         self.refresh_todo_badges()
         if self.board_index==6 and 'shap' in self.modules:
             editor=self.style_editor()
@@ -775,7 +793,7 @@ class DesktopWindow(QMainWindow):
         b.update()
 
     def has_running_tasks(self):
-        return any(t.is_running() if hasattr(t,'is_running') else bool(getattr(t,'worker',None) and t.worker.isRunning()) for t in self.modules.values())
+        return (hasattr(self,'manuscript_page') and self.manuscript_page.busy()) or any(t.is_running() if hasattr(t,'is_running') else bool(getattr(t,'worker',None) and t.worker.isRunning()) for t in self.modules.values())
 
     def closeEvent(self,event):
         if self.has_running_tasks():QMessageBox.information(self,'任务仍在运行','请等待当前任务完成后关闭。');event.ignore()
