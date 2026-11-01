@@ -77,7 +77,7 @@ shadcn-vue 官方源码及 MIT 许可证保存在 `src/components/ui`，来源�
 
 ## V3 发布
 
-`.github/workflows/release-v3.yml` 在 V3 分支变更该文件时或手动触发。先构建前端、运行后端与无头浏览器测试，再在 Windows x64、Apple Silicon Mac 和 Intel Mac 分别打包 Python 引擎与 Tauri。Windows 静默安装到 CI 临时目录，再运行实际安装后的科学计算引擎；Mac 验证签名和 app 内引擎。全部通过才创建 Release、上传 Windows 安装版/便携版、两种 Mac 安装包及 SHA256SUMS.txt，再标记 latest。Qt 历史 Release 保留。
+`.github/workflows/release-v3.yml` 在 V3 分支变更该文件时或手动触发。先构建前端、运行后端与无头浏览器测试，再在 Windows x64、Apple Silicon Mac 和 Intel Mac 分别打包 Python 引擎与 Tauri。Windows 静默安装到 CI 临时目录，再运行实际安装后的科学计算引擎；Mac 添加本机临时签名、验证完整性和 app 内引擎。全部通过才创建 Release、上传 Windows 安装版/便携版、两种 Mac 安装包及 SHA256SUMS.txt，再标记 latest。Qt 历史 Release 保留。
 
 后续发布先同步修改 `package.json`、`package-lock.json`、`src-tauri/tauri.conf.json`、`src-tauri/Cargo.toml`、`src-tauri/Cargo.lock` 和 `python/releases.py` 的版本，更新发布说明后触发流程。已存在的版本拒绝覆盖，以免已下载的安装包校验变化。
 
