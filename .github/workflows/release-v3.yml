@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
   push:
     branches: [codex/vue3-v3-ui]
-    paths: [.github/workflows/release-v3.yml, vue_app/package.json]
+    paths: [.github/workflows/release-v3.yml, vue_app/package.json, vue_app/src/**, vue_app/src-tauri/src/**]
 permissions:
   contents: read
 concurrency:

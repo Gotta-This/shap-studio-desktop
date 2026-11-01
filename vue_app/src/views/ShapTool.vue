@@ -77,6 +77,10 @@ const continuous = computed(
         );
   }),
   allBusy = computed(() => job.busy || previewJob.busy);
+watch(images, (items: any[]) => {
+  if (!items.some((item) => item.name === image.value))
+    image.value = items[0]?.name || "";
+}, { immediate: true });
 const mainStyleKeys = [
     "font_size",
     "title_size",

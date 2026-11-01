@@ -73,7 +73,7 @@
     for(const [key,value] of Object.entries(config.plots.plots))value.enabled=key==='bar';
     upload(document.querySelector('input[type=file]'),'native-analysis.json',JSON.stringify(config),'application/json');
     await wait(()=>labelled('样本量')?.value==='80','SHAP configuration restore');await click(button('生成完整分析'));
-    await wait(()=>document.querySelector('img.result-figure')?.naturalWidth>0,'SHAP full analysis image',180000);await snap('16-shap-result');
+    await wait(()=>document.querySelector('img.result-figure')?.naturalWidth>0,'SHAP full analysis image',180000);await wait(()=>document.querySelector('[aria-label="结果图选择"]')?.textContent.trim() === document.querySelector('img.result-figure')?.alt, 'selected plot name is visible');await snap('16-shap-result');
     if(errors.length)throw Error(errors.join('\n'));
     await invoke('review_finish',{result:{ok:true,steps,errors,mouse_moved:false,system_screen_recording:false,renderer:'actual app WKWebView',limitations:['OS file chooser/save dialogs and system application opening were not clicked; uploads used real in-memory files through the native webview.']}});
   } catch(e) {

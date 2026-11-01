@@ -27,6 +27,9 @@ test("all six real plots, metrics, zoom and PNG/SVG/PDF export", async ({
   await expect(page.getByRole("button", { name: "保存当前图" })).toBeVisible({
     timeout: 100000,
   });
+  await expect(page.getByLabel("结果图选择")).toHaveText(
+    await page.locator("img.result-figure").getAttribute("alt") || "missing image",
+  );
   for (const style of Object.values(config.plots.plots) as any[]) {
     await page.getByLabel("结果图选择").click();
     await page
