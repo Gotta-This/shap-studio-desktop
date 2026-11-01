@@ -1,6 +1,6 @@
 """Mint date picker with a native popup, complete calendar and keyboard input."""
 from datetime import date, timedelta
-from PySide6.QtCore import Qt, QDate, QPoint, QPointF, QRect, QEvent, QSize
+from PySide6.QtCore import Qt, QDate, QPoint, QPointF, QRect, QEvent, QSize, QTimer
 from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (QApplication, QDialog, QFrame, QVBoxLayout, QHBoxLayout,
     QGridLayout, QStackedWidget, QWidget, QLabel, QPushButton, QLineEdit,
@@ -210,6 +210,13 @@ class DatePopup(QMenu):
                 next(b for b in self.days if b.date_value==value).setFocus()
             return True
         return super().eventFilter(watched,event)
+
+    def showEvent(self,event):
+        super().showEvent(event)
+        QTimer.singleShot(0,self.focus_input)
+
+    def focus_input(self):
+        self.input.setFocus();self.input.selectAll()
 
     def accept(self):
         self._result=QDialog.Accepted;self.close()
