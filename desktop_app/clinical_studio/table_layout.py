@@ -18,7 +18,9 @@ def control_width(widget):
     if isinstance(widget,QLineEdit):return max(84,min(200,fm.horizontalAdvance(widget.text() or '0000.00')+32))
     if isinstance(widget,QAbstractSpinBox):return max(84,fm.horizontalAdvance(widget.text())+40)
     if isinstance(widget,QComboBox):return max(92,fm.horizontalAdvance(widget.currentText())+52)
-    if isinstance(widget,QPushButton):return max(40,fm.horizontalAdvance(widget.text())+30)
+    if isinstance(widget,QPushButton):
+        icon=widget.iconSize().width()+8 if not widget.icon().isNull() else 0
+        return max(40,widget.minimumWidth(),widget.sizeHint().width(),fm.horizontalAdvance(widget.text())+icon+30)
     if isinstance(widget,QLabel):return max(36,min(420,fm.horizontalAdvance(widget.text())+12))
     layout=widget.layout()
     if layout:

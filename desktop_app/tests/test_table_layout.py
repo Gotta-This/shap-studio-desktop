@@ -46,6 +46,17 @@ class ContentColumnTests(unittest.TestCase):
             self.assertGreater(table_widget.rowHeight(0),before)
         finally:table_widget.close();table_widget.deleteLater();self.pump()
 
+    def test_inline_date_column_includes_calendar_icon_and_padding(self):
+        from clinical_studio.date_picker import DateButton
+        table=QTableWidget(1,1);table.setHorizontalHeaderLabels(['截止日期'])
+        button=DateButton('2028-02-29');button.setStyleSheet('border:0;background:transparent;')
+        table.setCellWidget(0,0,button);table.show();fit_table_columns(table);self.pump()
+        try:
+            needed=button.fontMetrics().horizontalAdvance(button.text())+button.iconSize().width()+30
+            self.assertGreaterEqual(button.width(),needed)
+            self.assertGreaterEqual(button.width(),button.sizeHint().width())
+        finally:table.close();table.deleteLater();self.pump()
+
     def test_category_remove_visible_first_and_edits_keep_original_mapping(self):
         with tempfile.TemporaryDirectory() as folder:
             with patch('clinical_studio.todos.default_path',return_value=Path(folder)/'todos.json'):window=DesktopWindow()
