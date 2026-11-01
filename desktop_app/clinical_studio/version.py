@@ -1,3 +1,3 @@
 """Application version, also read by the packaging configuration."""
 
-APP_VERSION = "1.1.0"
+APP_VERSION = "1.1.1"

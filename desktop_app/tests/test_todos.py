@@ -62,7 +62,7 @@ class TodoUiTests(unittest.TestCase):
     def test_calendar_selection_and_clear_are_saved(self):
         self.store.add('带日期文档');self.page.refresh();self.pump()
         field=self.page.table.cellWidget(0,3)
-        def select_today():field.date_menu.actions()[0].trigger();field.date_menu.close()
+        def select_today():QTest.mouseClick(field.date_popup.today_button,Qt.LeftButton)
         QTimer.singleShot(40,select_today);field.click();self.pump()
         self.assertEqual(self.store.visible()[0]['due_date'],date.today().isoformat())
         self.page.table.cellWidget(0,3).set_date(None);self.pump();self.assertIsNone(self.store.visible()[0]['due_date'])

@@ -27,6 +27,25 @@ class ContentColumnTests(unittest.TestCase):
             self.assertEqual(before,[table.columnWidth(c) for c in range(4)])
             text.setText('新的文字内容比之前更长一点');self.pump();self.assertGreater(table.columnWidth(2),before[2])
         finally:table.close();table.deleteLater();self.pump()
+    def test_manuscript_multiline_and_checkbox_text_fit_without_elision(self):
+        from clinical_studio.manuscript_ui import table,cell
+        table_widget=table(['任务 / 客户','待办'])
+        table_widget.setRowCount(1)
+        name=cell('实际点击稿件_第二轮返修\n桌面巡检客户')
+        table_widget.setItem(0,0,name)
+        work=cell('第二轮核对原始数据和图表');work.setFlags(work.flags()|Qt.ItemIsUserCheckable);work.setCheckState(Qt.Checked)
+        table_widget.setItem(0,1,work);table_widget.resize(1000,300);table_widget.show();self.pump()
+        try:
+            self.assertGreaterEqual(table_widget.rowHeight(0),table_widget.fontMetrics().height()*2+14)
+            needed=table_widget.fontMetrics().horizontalAdvance(work.text())+48
+            self.assertGreaterEqual(table_widget.columnWidth(1),needed)
+            self.assertEqual(table_widget.textElideMode(),Qt.ElideNone)
+            before=table_widget.rowHeight(0)
+            name.setText('较长稿件标题'*30+'\n客户');self.pump()
+            self.assertLessEqual(table_widget.columnWidth(0),480)
+            self.assertGreater(table_widget.rowHeight(0),before)
+        finally:table_widget.close();table_widget.deleteLater();self.pump()
+
     def test_category_remove_visible_first_and_edits_keep_original_mapping(self):
         with tempfile.TemporaryDirectory() as folder:
             with patch('clinical_studio.todos.default_path',return_value=Path(folder)/'todos.json'):window=DesktopWindow()

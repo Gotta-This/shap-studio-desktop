@@ -2,8 +2,9 @@
 from datetime import date,timedelta
 from PySide6.QtCore import Qt,QDate,Signal
 from PySide6.QtGui import QColor
-from PySide6.QtWidgets import (QWidget,QVBoxLayout,QHBoxLayout,QLabel,QPushButton,QLineEdit,QComboBox,QFrame,QTableWidget,QTableWidgetItem,QHeaderView,QAbstractItemView,QMenu,QCalendarWidget,QWidgetAction,QDialog)
+from PySide6.QtWidgets import (QWidget,QVBoxLayout,QHBoxLayout,QLabel,QPushButton,QLineEdit,QComboBox,QFrame,QTableWidget,QTableWidgetItem,QHeaderView,QAbstractItemView,QMenu,QDialog)
 from .todos import TodoStore,PRIORITIES
+from .date_picker import DateButton
 from .resizable_fields import keep_user_height
 from .editor_dialogs import EditorDialog,native_owner
 
@@ -14,25 +15,6 @@ def date_text(value):
     prefix='今天 · ' if d==today else '明天 · ' if d==today+timedelta(days=1) else ''
     return prefix+(f'{d.year}年' if d.year!=today.year else '')+f'{d.month}月{d.day}日'
 
-
-class DateButton(QPushButton):
-    changed=Signal(object)
-    def __init__(self,value=None,parent=None):
-        super().__init__(parent);self.value=value;self.setObjectName('todoDate');self.setMinimumHeight(34);self.update_text();self.clicked.connect(self.pick)
-    def update_text(self):self.setText(date_text(self.value)+'  ⌄');self.setToolTip(self.value or '可不设置截止日期')
-    def set_date(self,value):
-        self.value=value;self.update_text();self.changed.emit(value)
-    def pick(self):
-        menu=QMenu(native_owner(self))
-        menu.addAction('今天',lambda:self.set_date(date.today().isoformat()))
-        menu.addAction('明天',lambda:self.set_date((date.today()+timedelta(days=1)).isoformat()))
-        calendar=QCalendarWidget();calendar.setGridVisible(False)
-        d=date.fromisoformat(self.value) if self.value else date.today();calendar.setSelectedDate(QDate(d.year,d.month,d.day))
-        action=QWidgetAction(menu);action.setDefaultWidget(calendar);menu.addAction(action)
-        calendar.clicked.connect(lambda d:(self.set_date(d.toString('yyyy-MM-dd')),menu.close()))
-        menu.addSeparator();menu.addAction('不设日期',lambda:self.set_date(None));self.date_menu=menu
-        try:menu.exec(self.mapToGlobal(self.rect().bottomLeft()))
-        finally:self.date_menu=None;menu.deleteLater()
 
 
 def priority_combo(value='normal'):
@@ -63,6 +45,7 @@ class TodoTable(QTableWidget):
     def __init__(self):
         super().__init__(0,5);self.setHorizontalHeaderLabels(['完成','谁的文档','优先级','截止日期','操作'])
         self.verticalHeader().hide();self.setShowGrid(False);self.setAlternatingRowColors(True)
+        self.setProperty('wrapContentRows',True);self.setWordWrap(True);self.setTextElideMode(Qt.ElideNone)
         self.setSelectionBehavior(QAbstractItemView.SelectRows);self.setSelectionMode(QAbstractItemView.SingleSelection)
         self.setEditTriggers(QAbstractItemView.DoubleClicked|QAbstractItemView.EditKeyPressed)
         self.horizontalHeader().setDefaultAlignment(Qt.AlignLeft|Qt.AlignVCenter)

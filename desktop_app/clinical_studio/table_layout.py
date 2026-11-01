@@ -1,7 +1,15 @@
 """Content-sized table columns and leading row actions throughout the desktop UI."""
-from PySide6.QtCore import QObject,QTimer,Qt
+from PySide6.QtCore import QObject,QTimer,Qt,QRect
 from PySide6.QtWidgets import (QWidget,QTableView,QLineEdit,QComboBox,QAbstractSpinBox,
-    QPushButton,QLabel,QHeaderView,QBoxLayout)
+    QPushButton,QLabel,QHeaderView,QBoxLayout,QCalendarWidget,QStyle,QStyleOptionViewItem)
+
+
+def calendar_view(widget):
+    owner=widget
+    while owner is not None:
+        if isinstance(owner,QCalendarWidget):return True
+        owner=owner.parentWidget()
+    return False
 
 
 def control_width(widget):
@@ -65,13 +73,33 @@ class ContentColumns(QObject):
                     text='' if value is None else str(value)
                     width=max(width,min(480,max((fm.horizontalAdvance(line) for line in text.splitlines()),default=0)+32))
                     if model.flags(index)&Qt.ItemIsEditable:width=max(width,84)
-                    if model.data(index,Qt.CheckStateRole) is not None:width=max(width,54)
+                    option=QStyleOptionViewItem();option.initFrom(t);option.widget=t
+                    option.rect=QRect(0,0,10000,10000)
+                    size=t.itemDelegateForIndex(index).sizeHint(option,index)
+                    width=max(width,min(480,size.width()+8))
+                    if model.data(index,Qt.CheckStateRole) is not None:
+                        indicator=t.style().pixelMetric(QStyle.PM_IndicatorWidth,None,t)
+                        width=max(width,min(480,fm.horizontalAdvance(text)+32+indicator+8),54)
                     widget=t.indexWidget(index)
                     if widget:
                         width=max(width,control_width(widget)+12)
                         if is_delete_action(widget) and col not in actions:actions.append(col)
                 width=max(44,width)
                 if t.columnWidth(col)!=width:t.setColumnWidth(col,width)
+            if t.property('wrapContentRows'):
+                t.resizeRowsToContents()
+                padding=int(t.property('rowTextPadding') or 20)
+                for row in range(rows):
+                    height=max(t.verticalHeader().defaultSectionSize(),t.rowHeight(row))
+                    for col in range(model.columnCount()):
+                        index=model.index(row,col);value=model.data(index,Qt.DisplayRole)
+                        if value is None:continue
+                        text=str(value);available=max(30,t.columnWidth(col)-32)
+                        if model.data(index,Qt.CheckStateRole) is not None:
+                            available=max(30,available-t.style().pixelMetric(QStyle.PM_IndicatorWidth,None,t)-8)
+                        bounds=fm.boundingRect(QRect(0,0,available,10000),Qt.TextWordWrap|Qt.TextWrapAnywhere,text)
+                        height=max(height,bounds.height()+padding)
+                    if t.rowHeight(row)!=height:t.setRowHeight(row,height)
             # Reorder visually, preserving logical model indices and edit handlers.
             for target,col in enumerate(actions):
                 visual=header.visualIndex(col)
@@ -80,5 +108,6 @@ class ContentColumns(QObject):
 
 
 def fit_table_columns(table):
+    if calendar_view(table):return
     if not hasattr(table,'content_columns'):table.content_columns=ContentColumns(table)
     table.content_columns.schedule()

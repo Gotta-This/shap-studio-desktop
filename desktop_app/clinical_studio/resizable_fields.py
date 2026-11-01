@@ -118,6 +118,8 @@ def resize_field(widget,width,height,resize_width=True,resize_height=True):
 
 class FieldResizeController(QObject):
     def attach(self,widget):
+        from .table_layout import calendar_view
+        if calendar_view(widget):return
         if hasattr(widget,'resize_grip'):return
         if widget.window().windowType()==Qt.Popup:return
         widget.resize_grip=FieldResizeGrip(widget);widget.resize_grip.show()
@@ -126,6 +128,8 @@ class FieldResizeController(QObject):
             fit_table_columns(widget)
     def eventFilter(self,watched,event):
         if isinstance(watched,(QPlainTextEdit,QTextEdit,QTableView)):
+            from .table_layout import calendar_view
+            if calendar_view(watched):return False
             if event.type()==QEvent.Show:self.attach(watched)
             elif event.type()==QEvent.Resize and hasattr(watched,'resize_grip'):watched.resize_grip.position()
             if isinstance(watched,QTableView) and event.type() in (QEvent.Show,QEvent.Resize,QEvent.LayoutRequest):

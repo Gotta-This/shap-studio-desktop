@@ -3,7 +3,7 @@ import json,time,traceback
 from pathlib import Path
 from datetime import date,timedelta
 from PySide6.QtCore import Qt,QTimer,QPoint
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication,QAbstractScrollArea
 from PySide6.QtTest import QTest
 from .todos import TodoStore
 from .todo_ui import DateButton
@@ -35,7 +35,11 @@ def verify_todos(window,directory):
         check('直接修改名称落盘',any(t['name']=='李老师 · 最新修改稿' for t in TodoStore(page.store.path).visible()))
         due=page.table.cellWidget(0,3)
         def tomorrow():
-            try:due.date_menu.actions()[1].trigger();due.date_menu.close()
+            try:
+                picker=due.date_popup;picker.grab().save(str(root/'date-picker.png'))
+                check('日期弹层完整显示42天且没有内部滚动区',len(picker.days)==42 and not picker.findChildren(QAbstractScrollArea))
+                check('日期弹层七列六行均未被裁切',all(picker.rect().contains(b.mapTo(picker,b.rect().bottomRight())) for b in picker.days))
+                QTest.mouseClick(picker.tomorrow_button,Qt.LeftButton)
             except Exception:errors.append(traceback.format_exc())
         QTimer.singleShot(100,tomorrow);due.click();pump();check('日期菜单真实操作保存明天',not errors and any(t['due_date']==(date.today()+timedelta(days=1)).isoformat() for t in page.store.visible()))
         window.grab().save(str(root/'populated.png'))
