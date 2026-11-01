@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 use std::{io::{Read, Write}, path::PathBuf, process::{Command,Stdio}, sync::{Arc,atomic::{AtomicUsize,Ordering}}};
 use tauri::{Manager,Emitter};
+mod ui_review;
 #[derive(Clone,Default)]
 struct Running(Arc<AtomicUsize>);
 struct CountGuard(Arc<AtomicUsize>);
@@ -36,7 +37,7 @@ async fn python_request(app:tauri::AppHandle, request:serde_json::Value, running
     tauri::async_runtime::spawn_blocking(move || {
         let _guard=count;
         let profile=std::env::var_os("RESEARCH_V3_PROFILE").map(PathBuf::from);
-        let legacy=app.path().app_data_dir().ok();
+        let legacy=if ui_review::enabled() {None} else {app.path().app_data_dir().ok()};
         request_engine(profile,legacy,request)
     }).await.map_err(|e|e.to_string())?
 }
@@ -58,9 +59,13 @@ fn main() {
         }
         return;
     }
+    ui_review::initialize(&args);
+    let mut context=tauri::generate_context!();
+    if ui_review::enabled() { for window in &mut context.config_mut().app.windows { window.visible=false;window.focus=false;window.incognito=true; } }
     tauri::Builder::default().manage(Running::default()).plugin(tauri_plugin_dialog::init()).plugin(tauri_plugin_opener::init())
-      .setup(|app| { if std::env::var("RESEARCH_V3_DEBUG").as_deref()==Ok("1") { if let Some(window)=app.get_webview_window("main") { eprintln!("V3 URL: {:?}",window.url()); #[cfg(debug_assertions)] window.open_devtools(); } } Ok(()) })
-      .invoke_handler(tauri::generate_handler![python_request])
+      .setup(|app| { if ui_review::enabled() { #[cfg(target_os="macos")] app.set_activation_policy(tauri::ActivationPolicy::Accessory); ui_review::arm_timeout(app.handle().clone()); } if std::env::var("RESEARCH_V3_DEBUG").as_deref()==Ok("1") { if let Some(window)=app.get_webview_window("main") { eprintln!("V3 URL: {:?}",window.url()); #[cfg(debug_assertions)] window.open_devtools(); } } Ok(()) })
+      .on_page_load(|webview,payload| { if payload.event()==tauri::webview::PageLoadEvent::Finished { ui_review::install(webview); } })
+      .invoke_handler(tauri::generate_handler![python_request,ui_review::review_fixture,ui_review::review_resize,ui_review::review_snapshot,ui_review::review_finish])
       .on_window_event(|window,event| { if let tauri::WindowEvent::CloseRequested{api,..}=event { if window.state::<Running>().0.load(Ordering::SeqCst)>0 { api.prevent_close();let _=window.emit("close-blocked",()); } } })
-      .run(tauri::generate_context!()).expect("启动科研数据工具集失败");
+      .run(context).expect("启动科研数据工具集失败");
 }

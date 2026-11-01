@@ -2776,6 +2776,8 @@ dependencies = [
 name = "research-studio-v3"
 version = "3.0.1"
 dependencies = [
+ "block2",
+ "objc2",
  "serde_json",
  "tauri",
  "tauri-build",
