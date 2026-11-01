@@ -120,6 +120,10 @@ jobs:
         run: |
           mkdir -p release
           cp src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*-setup.exe release/ResearchDataTools-Setup-Windows-x64.exe
+          mkdir -p portable/ResearchDataTools-V3
+          cp src-tauri/target/${{ matrix.target }}/release/research-studio-v3.exe portable/ResearchDataTools-V3/
+          cp src-tauri/binaries/research-python-${{ matrix.target }}.exe portable/ResearchDataTools-V3/research-python.exe
+          python -c "import shutil; shutil.make_archive('release/ResearchDataTools-Portable-Windows-x64', 'zip', 'portable')"
       - uses: actions/upload-artifact@v7
         with:
           name: v3-release-${{ matrix.asset }}

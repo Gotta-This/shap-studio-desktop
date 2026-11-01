@@ -5,7 +5,7 @@
 - 设置中可迁移 Qt 个人待办和工作空间配置；迁移保留原文件并备份，重复导入不会覆盖现有待办。
 - 启动检查新版，设置中下载并校验更新包；Windows 打开安装向导，Mac 解压替换应用。
 
-下载：Windows x64 选择 Setup.exe；Apple Silicon 选择 macOS-arm64.zip；Intel Mac 选择 macOS-x86_64.zip。无需另外安装 Node 或 Python。Windows 安装包包含 WebView2 离线安装程序。
+下载：Windows x64 推荐 Setup.exe（首次安装或缺少 WebView2 时使用），已有 WebView2 也可选 Portable.zip 解压运行；Apple Silicon 选择 macOS-arm64.zip；Intel Mac 选择 macOS-x86_64.zip。无需另外安装 Node 或 Python。Windows 安装包包含 WebView2 离线安装程序。
 
 安装前退出旧版本；Mac 解压后将“科研数据工具集 V3.app”放入应用程序目录。个人分发包没有商业代码签名或 Apple 公证，首次启动可能需要通过系统的允许打开操作。
 
