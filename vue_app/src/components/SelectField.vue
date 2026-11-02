@@ -11,18 +11,20 @@ const props = defineProps<{
   options: (string | { value: string; label: string })[];
   placeholder?: string;
   label?: string;
+  disabled?: boolean;
 }>();
 const emit = defineEmits<{ "update:modelValue": [value: string] }>();
 </script>
 <template>
   <Select
+    :disabled="disabled"
     :model-value="modelValue || '__all'"
     @update:model-value="
       (v) => emit('update:modelValue', String(v) === '__all' ? '' : String(v))
     "
     ><SelectTrigger :aria-label="label || placeholder" class="w-full"
       ><SelectValue :placeholder="placeholder" /></SelectTrigger
-    ><SelectContent
+    ><SelectContent class="z-[80]"
       ><SelectItem
         v-for="(o, i) in props.options"
         :key="i"

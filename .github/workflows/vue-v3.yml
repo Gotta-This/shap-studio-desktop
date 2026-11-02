@@ -2,10 +2,21 @@ name: Vue V3 branch verification
 on:
   workflow_dispatch:
   push:
-    branches: [codex/vue3-v3-ui]
-    paths: ['vue_app/**', 'desktop_app/clinical_studio/**', '.github/workflows/vue-v3.yml']
+    branches: [master, codex/vue3-v3-ui]
+    paths:
+      [
+        "vue_app/**",
+        "desktop_app/clinical_studio/**",
+        ".github/workflows/vue-v3.yml",
+      ]
   pull_request:
-    paths: ['vue_app/**', 'desktop_app/clinical_studio/**', '.github/workflows/vue-v3.yml']
+    branches: [master]
+    paths:
+      [
+        "vue_app/**",
+        "desktop_app/clinical_studio/**",
+        ".github/workflows/vue-v3.yml",
+      ]
 permissions:
   contents: read
 concurrency:
@@ -24,12 +35,12 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@v7
         with:
-          node-version: '22'
+          node-version: "22"
           cache: npm
           cache-dependency-path: vue_app/package-lock.json
       - uses: actions/setup-python@v7
         with:
-          python-version: '3.12'
+          python-version: "3.12"
       - run: npm ci
       - run: npm run build
       - run: |
@@ -60,7 +71,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@v7
         with:
-          node-version: '22'
+          node-version: "22"
       - uses: dtolnay/rust-toolchain@stable
       - run: npm ci
         working-directory: vue_app

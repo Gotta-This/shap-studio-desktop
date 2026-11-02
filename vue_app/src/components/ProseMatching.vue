@@ -142,6 +142,7 @@ function count(v: number, g: string, label: string, value: any) {
 }
 async function confirm() {
   if (!selected.value) return;
+  error.value = "";
   const { v, g } = selected.value;
   try {
     const cell = await api("tool.word.prose.confirm", {
@@ -168,8 +169,12 @@ async function load(e: Event) {
     emit("stale", false);
     index.value = "0";
     emit("study", 0);
+    selected.value = null;
+    error.value = "";
   } catch (e) {
     error.value = (e as Error).message;
+  } finally {
+    (e.target as HTMLInputElement).value = "";
   }
 }
 const activeCell = computed(

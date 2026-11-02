@@ -1,0 +1,4 @@
+# Local documents, audit artifacts and machine-specific data are not source.
+/word/
+/vue_app/audits/
+.DS_Store

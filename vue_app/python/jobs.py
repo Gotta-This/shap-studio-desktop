@@ -56,8 +56,8 @@ def worker(profile,jid):
             result=dict(text='\n'.join('\t'.join(map(str,row)) for row in [r['columns']]+r['rows']),columns=r['columns'],rows=r['rows'][:200],total=len(r['rows']),checks=r['checks'],name=target.name,base64=base64.b64encode(target.read_bytes()).decode(),config=config)
         elif p['kind'] in ('numeric','category'):
             from clinical_studio.data_tools_engine import numeric_numbers,category_numbers
-            from bridge import csv_result,dispatch
-            params=p['params'];progress('正在生成模拟数值…')
+            from bridge import csv_result,dispatch,numeric_parameters
+            params=numeric_parameters(p['params']) if p['kind']=='numeric' else p['params'];progress('正在生成模拟数值…')
             values=numeric_numbers(**params,cancelled=lambda:(path/'cancel').exists()) if p['kind']=='numeric' else None
             result=csv_result(values,params.get('digits')) if p['kind']=='numeric' else dispatch('tool.category',params);result['params']=params
         else:

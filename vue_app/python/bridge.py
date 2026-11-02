@@ -83,6 +83,12 @@ def sources(params):
             target=Path(folder)/str(i)/name;target.parent.mkdir();target.write_bytes(data);paths.append(target)
         yield paths
 
+def numeric_parameters(params):
+    result=dict(params)
+    if result.get('mode')=='range':result.update(mean=0.,sd=0.)
+    if result.get('seed')=='':result['seed']=None
+    return result
+
 def csv_result(values, digits=None):
     from clinical_studio.data_tools_engine import format_values, statistics
     mean, sd=statistics(values)
@@ -194,7 +200,7 @@ def dispatch(method, p):
         return csv_result(category_numbers([(float(r['value']),int(r['count'])) for r in p['rows']],str(p.get('seed',12))))
     if method=='tool.numeric':
         from clinical_studio.data_tools_engine import numeric_numbers
-        return csv_result(numeric_numbers(**p),p.get('digits',0))
+        return csv_result(numeric_numbers(**numeric_parameters(p)),p.get('digits',0))
     if method=='tool.job.start':
         from jobs import start
         return start(profile(),p)

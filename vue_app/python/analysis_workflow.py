@@ -1,5 +1,6 @@
 """Persist owned analysis snapshots for full tables, redraw and selective export."""
 from pathlib import Path
+from copy import deepcopy
 import base64,json,re,uuid,zipfile,io,os
 from clinical_studio.config import default_config
 
@@ -22,7 +23,9 @@ def run(profile,p,progress):
         folder(profile,p['previous'])
         previous=joblib.load(profile/'analysis'/p['previous']/'model.joblib')
         previous.folder=folder(profile,p['previous'])
-    result=run_analysis(p['config'],p.get('output') or profile/'exports',progress=progress,previous=previous,data_only=p.get('data_only',False))
+    output=p.get('output') or p['config'].get('plots',{}).get('output_dir') or profile/'exports'
+    config=deepcopy(p['config']);config['plots']['output_dir']=str(Path(output).expanduser())
+    result=run_analysis(config,output,progress=progress,previous=previous,data_only=p.get('data_only',False))
     rid=uuid.uuid4().hex;store=profile/'analysis'/rid;store.mkdir(parents=True)
     (store/'reference.json').write_text(json.dumps({'folder':str(result.folder)}));joblib.dump(result,store/'model.joblib')
     return dict(id=rid,folder=str(result.folder),metrics=result.metrics,audit=result.audit,messages=result.messages,config=result.config,has_model=result.model is not None,columns=list(result.data.columns),rows=json.loads(result.data.head(200).to_json(orient='values')),total=len(result.data),images=[dict(name=f.name,url='data:image/png;base64,'+base64.b64encode(f.read_bytes()).decode()) for f in (result.folder/'figures').glob('*.png')])

@@ -33,9 +33,21 @@ def match(profile,p):
     path=source_path(profile,p['session']);names=group_names(p['groups']);imported=read_word(path,names,parse_indicators=False)
     return dict(groups=[dict(name=g,tables=imported.group_matches.get(g,0),paragraphs=imported.text_group_matches.get(g,0),n=imported.group_sizes.get(g)) for g in names],table_count=imported.table_count,messages=imported.messages)
 
+def preserve_explicit_precision(imported,draft,previous):
+    """Changing recognition defaults must not discard an edited applied precision."""
+    key=lambda f:(str(f.get('table') or 0),f.get('group'),f.get('name'))
+    explicit=lambda f:'_default_digits' in f and f.get('digits')!=f['_default_digits']
+    edits={key(f):f['digits'] for part in ('indicators','typed_fields') for f in previous.get(part,[])
+           if f.get('kind','mean_sd')=='mean_sd' and explicit(f)}
+    draft_edits={key(f) for f in draft.get('fields',[]) if explicit(f)}
+    for f in imported.indicators+imported.typed_fields:
+        if f.get('kind','mean_sd')=='mean_sd' and key(f) in edits and key(f) not in draft_edits:
+            f['digits']=edits[key(f)]
+
 def apply(profile,p):
     path=source_path(profile,p['session']);source_name=json.loads((profile/'word-sessions'/p['session']/'source.json').read_text(encoding='utf-8')).get('name',path.name);options=p.get('options',{});mode=options.get('decimal_mode','zero')
-    inventory=scan_precision(scan_word(path),mode);draft=p.get('draft') or inventory
+    inventory=scan_precision(scan_word(path),mode)
+    draft=scan_precision(deepcopy(p.get('draft') or inventory),mode)
     ungrouped=p.get('ungrouped',False)
     if ungrouped:
         n=p.get('n') or inventory.get('ungrouped_n')
@@ -44,11 +56,12 @@ def apply(profile,p):
         from clinical_studio.word_batch_engine import ImportResult
         fields,_,issues=scan_ungrouped(deepcopy(inventory['tables']),n)
         obj=ImportResult([],{}, {},[],str(path),len(inventory['tables']),typed_fields=fields)
-        fields_precision(obj.typed_fields,mode);apply_preview_fields(obj,inventory,draft,[DATASET]);fields=obj.typed_fields
+        fields_precision(obj.typed_fields,mode);apply_preview_fields(obj,inventory,draft,[DATASET])
+        preserve_explicit_precision(obj,draft,p.get('previous',{}));fields=obj.typed_fields
         if not fields:raise ValueError('未发现无分组竖表。')
         config=default_batch_config(['未分组数据']);config.update(ungrouped=True,include_basics=False,typed_fields=fields,table_titles={str(t['table']):t['title'] for t in draft['tables']})
         config['groups'][0]['n']=n
-        return dict(config=config,prose_document=None,imported=None,report=scan_report(inventory))
+        return dict(config=config,draft=draft,prose_document=None,imported=None,report=scan_report(inventory))
     names=group_names(p['groups']);imported=read_word(path,names)
     missing=[g for g in names if not(imported.group_matches.get(g) or imported.text_group_matches.get(g))]
     if missing:raise ValueError('以下组别未匹配到 Word 表格或正文：'+'、'.join(missing)+'。请修改或移除后重新确认。')
@@ -58,6 +71,7 @@ def apply(profile,p):
     known={f['_preview_key'] for f in inventory['fields']}
     inventory['fields'] += [f for f in fields_for_groups(path,names,{t['table']:t['title'] for t in inventory['tables']}) if f['_preview_key'] not in known]
     apply_preview_fields(imported,inventory,draft,names)
+    preserve_explicit_precision(imported,draft,p.get('previous',{}))
     document=None
     if options.get('prose'):
         document=preview_prose(inventory,draft,names) or matching_document(path,names)
@@ -73,7 +87,7 @@ def apply(profile,p):
         if options.get('rates'):
             for k,v in imported.outcome_rates.get(g['name'],{}).items():g['effective' if k=='总有效率' else 'recurrence']=v
     config.update(source=source_name,indicators=imported.indicators,typed_fields=imported.typed_fields,categoricals=[],include_basics=not imported.baseline_columns and not bool(document),same_group_size=not options.get('sizes') and not bool(document),shared_basics=not bool(document),import_options=options,table_titles={str(t['table']):t['title'] for t in draft['tables']},imported_basics={g['name']:deepcopy(g) for g in config['groups']},detected_basics={g['name']:list(imported.outcome_rates.get(g['name'],{})) if options.get('rates') else [] for g in config['groups']})
-    return dict(config=config,prose_document=document,imported=asdict(imported),report=scan_report(inventory)+'\n'+'\n'.join(imported.messages))
+    return dict(config=config,draft=draft,prose_document=document,imported=asdict(imported),report=scan_report(inventory)+'\n'+'\n'.join(imported.messages))
 
 
 def signature(field,n):

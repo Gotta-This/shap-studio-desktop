@@ -86,7 +86,7 @@ async function save() {
         if (!v && !saving) emit('close');
       }
     "
-    ><DialogContent class="sm:max-w-2xl max-h-[90vh] overflow-y-auto"
+    ><DialogContent class="z-[70] sm:max-w-2xl max-h-[90vh] overflow-y-auto"
       ><DialogHeader
         ><DialogTitle>编辑字段 · {{ field?.name }}</DialogTitle
         ><DialogDescription

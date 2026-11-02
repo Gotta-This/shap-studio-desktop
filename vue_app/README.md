@@ -1,6 +1,6 @@
 # 科研数据工具集 · Vue V3
 
-独立开发分支 `codex/vue3-v3-ui`，从 Qt v1.1.2 分出。界面依据 `design/shadcn-v3` 已确认的浅绿色 Penpot 稿实现，使用 Vue 3、TypeScript、真正的 shadcn-vue / Reka UI 组件、Tailwind CSS 4 和 Tauri 2。Qt 引擎继续复用，V3 安装包使用独立发布流程。
+当前开发主线为 `master`，早期开发分支 `codex/vue3-v3-ui` 保留。Qt v1.1.2 源码位于 `master-qt`。V3 使用 Vue 3、TypeScript、shadcn-vue / Reka UI、Tailwind CSS 4 和 Tauri 2，继续复用 Python 科学计算模块，安装包使用独立发布流程。
 
 ## 运行
 
@@ -17,7 +17,7 @@ npm run dev
 
 访问 `http://127.0.0.1:1420`。Windows 的 Python 路径为 `.venv/Scripts/python.exe`。浏览器通过本机 Vite 桥接调用 Python；开发服务仅监听 127.0.0.1，检查 Host / Origin，并拒绝跨站写入。`npm run preview` 仅展示静态构建，不带 Python 桥接，功能验收应使用 `dev` 或 Tauri。
 
-开发服务默认使用 `vue_app/.v3-data`。正式应用的数据保存在用户隐藏目录，旧 V3 应用目录会自动保留到新位置。可以用 `RESEARCH_V3_PROFILE` 指向独立测试配置。前端不再提供 Qt 数据迁移入口。用户在设置中明确选择已有稿件工作空间后，读写与 Qt 相同的 `.manuscripts.sqlite3` 和实际目录；请关闭另一版本后再使用同一空间。
+开发服务和正式应用未指定测试配置时，都使用用户隐藏目录；可以用 `RESEARCH_V3_PROFILE` 指向独立测试配置。本地自动化测试使用 `vue_app/.v3-data` 下的隔离目录。旧 V3 应用数据会保留到新位置，前端不再提供 Qt 数据迁移入口。用户选择已有稿件工作空间后，会读写该目录的 `.manuscripts.sqlite3` 和实际文件；请避免两个版本同时使用同一空间。
 
 ## 桌面运行与打包
 
@@ -71,13 +71,15 @@ shadcn-vue 官方源码及 MIT 许可证保存在 `src/components/ui`，来源�
 
 - Word：五个页面（基础资料、表格匹配、文字匹配、全部字段以及来源、生成与导出）；导入前扫描原表与候选组别，可编辑识别草稿，确认组别后应用。例数默认 70，Word 例数和结局比例显式选择采用。支持无分组竖表、按原表分块编辑字段规则、正文独立编辑与冲突确认、配置保存恢复、完整 Excel 导出及后台计算取消。
 - 模拟生图：四个页面（数据、模型与分类变量、样式、结果）；连续/分类变量独立表格与顺序、完整模型参数、公共样式与六类图独立继承、实际预览与已有模型重绘、结果表分页、图像放大保存和按内容选择复制/打包。数据或模型变化后，重绘要求重新完整分析。
-- 运行中切换模块保留参数、进度和结果；原生关闭事件阻止中断计算。取消为协作式，当前引擎步骤完成后生效。
+- 运行中切换模块保留参数、进度和结果。关闭窗口会退出应用，已经接受的保存与后台任务由 Python 引擎完成；取消为协作式，当前引擎步骤完成后生效。
 
 本轮已使用项目内 18 份 Word 完成 36 组 Qt/V3 配置与校验对照，并验证完整浏览器流程及打包引擎。详细覆盖、修复项与边界见 [Qt 对照检查记录](QA_QT_PARITY.md)。V3 采用与 Qt 类似的安装包更新方式：Windows 打开 NSIS 安装向导，Mac 解压后替换应用。不是静默热更新。个人分发包暂无商业签名或 Apple 公证。原生窗口与系统对话框未使用用户桌面进行点击测试。
 
 ## V3 发布
 
-`.github/workflows/release-v3.yml` 在 V3 分支变更该文件时或手动触发。先构建前端、运行后端与无头浏览器测试，再在 Windows x64、Apple Silicon Mac 和 Intel Mac 分别打包 Python 引擎与 Tauri。Windows 静默安装到 CI 临时目录，再通过安装后的桌面主程序调用科学计算引擎；Mac 添加本机临时签名、验证完整性和 app 内引擎。全部通过才创建 Release、上传 Windows 安装版/便携版、两种 Mac 安装包及 SHA256SUMS.txt，再标记 latest。Qt 历史 Release 保留。
+推送 `master` 只触发验证，不自动打包发布。用户完成本地试用并确认后，在 `master` 手动运行 `.github/workflows/release-v3.yml`，才执行前端、后端和浏览器检查，再在 Windows x64、Apple Silicon Mac 和 Intel Mac 分别打包。Windows 静默安装到 CI 临时目录，再验证安装后的主程序；Mac 添加本机临时签名并验证 app 内引擎和界面。全部通过才创建 Release、上传四个安装包及 SHA256SUMS.txt，最后标记 latest。Qt 历史 Release 保留。
+
+当前 Vue 独立验收见 [QA_CURRENT_VUE.md](QA_CURRENT_VUE.md)。早期 Qt 对照记录保留为历史参考，不再作为 V3 的功能验收标准。
 
 后续发布先同步修改 `package.json`、`package-lock.json`、`src-tauri/tauri.conf.json`、`src-tauri/Cargo.toml`、`src-tauri/Cargo.lock` 和 `python/releases.py` 的版本，更新发布说明后触发流程。已存在的版本拒绝覆盖，以免已下载的安装包校验变化。
 

@@ -78,13 +78,14 @@ const tabs = [
   configFile = ref<HTMLInputElement>(),
   confirmImport = ref<File | null>(null),
   job = jobFor("word");
-const options = reactive({
-    sizes: false,
-    rates: false,
-    prose: false,
-    leave_unknown_blank: false,
-    decimal_mode: "zero",
-  }),
+const importDefaults = () => ({
+  sizes: false,
+  rates: false,
+  prose: false,
+  leave_unknown_blank: false,
+  decimal_mode: "zero",
+});
+const options = reactive(importDefaults()),
   group = computed(
     () =>
       config.value?.groups?.[Number(groupIndex.value)] ||
@@ -210,6 +211,7 @@ async function applyCurrent() {
     previous: config.value,
   });
   config.value = r.config;
+  draft.value = r.draft;
   prose.value = r.prose_document;
   proseStale.value = false;
   groupIndex.value = "0";
@@ -279,6 +281,7 @@ watch(
   [config, prose, proseStale, proseActive, studyIndex, groupsConfirmed],
   () => {
     clearTimeout(auditTimer);
+    if (!job.busy) job.error = "";
     const version = ++auditVersion;
     if (
       !config.value ||
@@ -312,6 +315,26 @@ function payload() {
     study_index: studyIndex.value,
   };
 }
+watch(
+  () => options.decimal_mode,
+  (mode) => {
+    const document = draft.value;
+    if (!document) return;
+    const update = (f: any) => {
+      if ((f.kind || "mean_sd") !== "mean_sd") return;
+      f._source_digits ??= f.digits ?? 2;
+      const previous = f._default_digits ?? f.digits ?? 2;
+      if ((f.digits ?? 2) !== previous) return;
+      f.digits = mode === "zero" ? 0 : f._source_digits;
+      f._default_digits = f.digits;
+    };
+    for (const f of document.fields || []) update(f);
+    for (const study of document.prose_document?.studies || [])
+      for (const variable of study.variables || [])
+        if (variable.kind === "mean_sd")
+          for (const cell of Object.values(variable.cells || {})) update(cell);
+  },
+);
 watch([prose, studyIndex, proseActive], ([doc]) => {
   if (doc && proseActive.value && !restoring.value) {
     config.value.include_basics = false;
@@ -391,20 +414,25 @@ function saveField(value: any, sync: boolean, updatedPeers: any[]) {
   peers.forEach((f: any, i: number) => replace(f, updatedPeers[i]));
   error.value = "";
 }
+const tableKey = (f: any) => String(f.table || 0);
 function rename(f: any, v: any) {
   error.value = "";
   const name = f.name;
   for (const a of fields.value)
-    if (a.table === f.table && a.name === name) a.name = String(v);
+    if (tableKey(a) === tableKey(f) && a.name === name) a.name = String(v);
   for (const a of fields.value)
-    if (a.from_field === name) a.from_field = String(v);
+    if (tableKey(a) === tableKey(f) && a.from_field === name)
+      a.from_field = String(v);
 }
 function remove(f: any) {
   error.value = "";
   for (const key of ["indicators", "typed_fields", "categoricals"])
     config.value[key] = (config.value[key] || []).filter(
       (a: any) =>
-        !(a.table === f.table && a.name === f.name) && a.from_field !== f.name,
+        !(
+          tableKey(a) === tableKey(f) &&
+          (a.name === f.name || a.from_field === f.name)
+        ),
     );
 }
 function add(table: any) {
@@ -443,7 +471,7 @@ async function load(e: Event) {
     matches.value = null;
     groupsConfirmed.value = true;
     config.value = c;
-    Object.assign(options, c.import_options || {});
+    Object.assign(options, importDefaults(), c.import_options || {});
     restoring.value = true;
     prose.value = c.prose_document || null;
     proseStale.value = !!c.prose_stale;
@@ -456,6 +484,7 @@ async function load(e: Event) {
     await nextTick();
     restoring.value = false;
   });
+  (e.target as HTMLInputElement).value = "";
 }
 function save() {
   const c = clone(config.value);
@@ -505,7 +534,10 @@ function sameN(v: any) {
         :disabled="busy || job.busy"
         @click="configFile?.click()"
         >载入配置</Button
-      ><Button variant="outline" :disabled="!config" @click="save"
+      ><Button
+        variant="outline"
+        :disabled="!config || busy || job.busy"
+        @click="save"
         >保存配置</Button
       ><Button :disabled="busy || job.busy" @click="file?.click()"
         >导入 Word</Button
@@ -532,18 +564,24 @@ function sameN(v: any) {
     <section class="surface scientific-section word-import-controls">
       <div class="toolbar">
         <label class="file-check"
-          ><Checkbox v-model="options.sizes" />采用 Word 中的例数</label
+          ><Checkbox v-model="options.sizes" :disabled="busy || job.busy" />采用
+          Word 中的例数</label
         ><label class="file-check"
-          ><Checkbox v-model="options.rates" />采用 Word
-          表中的有效／复发比例</label
+          ><Checkbox v-model="options.rates" :disabled="busy || job.busy" />采用
+          Word 表中的有效／复发比例</label
         ><label class="file-check"
-          ><Checkbox v-model="options.prose" />采用正文一般资料</label
+          ><Checkbox
+            v-model="options.prose"
+            :disabled="busy || job.busy"
+          />采用正文一般资料</label
         ><label class="file-check"
           ><Checkbox
             v-model="options.leave_unknown_blank"
+            :disabled="busy || job.busy"
           />未识别的基础字段留空</label
         ><SelectField
           v-model="options.decimal_mode"
+          :disabled="busy || job.busy"
           label="导入小数精度"
           :options="[
             { value: 'zero', label: '默认整数（0 位）' },
@@ -1036,12 +1074,7 @@ function sameN(v: any) {
         >上一步</Button
       ><Button @click="tab = Math.min(4, tab + 1)">下一步</Button>
     </div>
-    <FieldRuleDialog
-      :field="editing"
-      :peers="fieldPeers"
-      @close="editing = null"
-      @save="saveField"
-    /><Dialog :open="preview" @update:open="(v) => (preview = v)"
+    <Dialog :open="preview" @update:open="(v) => (preview = v)"
       ><DialogContent class="sm:max-w-6xl max-h-[90vh] overflow-y-auto"
         ><DialogHeader
           ><DialogTitle>Word 原表与识别草稿</DialogTitle
@@ -1147,5 +1180,11 @@ function sameN(v: any) {
         </div></DialogContent
       ></Dialog
     >
+    <FieldRuleDialog
+      :field="editing"
+      :peers="fieldPeers"
+      @close="editing = null"
+      @save="saveField"
+    />
   </div>
 </template>

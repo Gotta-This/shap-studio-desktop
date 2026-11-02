@@ -2,8 +2,14 @@ name: Build test and release Vue V3
 on:
   workflow_dispatch:
   push:
-    branches: [codex/vue3-v3-ui]
-    paths: [.github/workflows/release-v3.yml, vue_app/package.json, vue_app/src/**, vue_app/src-tauri/src/**]
+    branches: [master]
+    paths:
+      [
+        .github/workflows/release-v3.yml,
+        vue_app/package.json,
+        vue_app/src/**,
+        vue_app/src-tauri/src/**,
+      ]
 permissions:
   contents: read
 concurrency:
@@ -16,7 +22,7 @@ jobs:
     steps:
       - run: echo 'Preview changes only. Release requires manual dispatch after user testing.'
   verify:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master'
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     defaults:
@@ -28,12 +34,12 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@v7
         with:
-          node-version: '22'
+          node-version: "22"
           cache: npm
           cache-dependency-path: vue_app/package-lock.json
       - uses: actions/setup-python@v7
         with:
-          python-version: '3.12'
+          python-version: "3.12"
       - run: npm ci
       - run: npm run build
       - run: |
@@ -77,7 +83,7 @@ jobs:
         shell: bash
         working-directory: vue_app
     env:
-      PYTHONUTF8: '1'
+      PYTHONUTF8: "1"
       MPLBACKEND: Agg
       TAURI_ENV_TARGET_TRIPLE: ${{ matrix.target }}
     steps:
@@ -86,12 +92,12 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@v7
         with:
-          node-version: '22'
+          node-version: "22"
           cache: npm
           cache-dependency-path: vue_app/package-lock.json
       - uses: actions/setup-python@v7
         with:
-          python-version: '3.12'
+          python-version: "3.12"
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
@@ -175,7 +181,7 @@ jobs:
         run: |
           set -euo pipefail
           version=$(node -p "require('./vue_app/package.json').version")
-          test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/codex/vue3-v3-ui" --jq .object.sha)" = "$GITHUB_SHA"
+          test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/master" --jq .object.sha)" = "$GITHUB_SHA"
           (cd release && sha256sum *.exe *.zip > SHA256SUMS.txt)
           if gh release view "v$version" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo 'This version already exists; bump all V3 versions before publishing again.' >&2

@@ -26,7 +26,8 @@ const route = useRoute(),
   tool = computed(() => String(route.params.tool)),
   busy = ref(false),
   runningTool = ref(""),
-  error = ref("");
+  errors = reactive<Record<string, string>>({}),
+  error = computed(() => errors[tool.value] || "");
 const titles: Record<string, { name: string; desc: string }> = {
   category: {
     name: "自定义类别数列",
@@ -80,12 +81,12 @@ const categoryCounts = computed(() => {
   return [...counts].map(([value, count]) => ({ value, count }));
 });
 async function run(method: string, params: any, callback: (r: any) => void) {
+  const kind = method === "tool.numeric" ? "numeric" : "category";
   busy.value = true;
   runningTool.value = tool.value;
-  error.value = "";
+  errors[kind] = "";
   try {
-    const kind = method === "tool.numeric" ? "numeric" : "category",
-      job = jobFor(kind);
+    const job = jobFor(kind);
     await startJob(kind, clone(params));
     if (job.error) throw Error(job.error);
     if (job.message.includes("完成")) {
@@ -93,7 +94,7 @@ async function run(method: string, params: any, callback: (r: any) => void) {
       notify("已生成模拟数据。");
     } else notify(job.message);
   } catch (e) {
-    error.value = (e as Error).message;
+    errors[kind] = (e as Error).message;
   } finally {
     busy.value = false;
     runningTool.value = "";
@@ -389,29 +390,53 @@ async function copy() {
                 </tr>
                 <tr>
                   <td>均数</td>
-                  <td>{{ numericResult.params.mean }}</td>
+                  <td>
+                    {{
+                      numericResult.params.mode === "range"
+                        ? "—"
+                        : numericResult.params.mean
+                    }}
+                  </td>
                   <td>{{ numericResult.mean.toFixed(4) }}</td>
                   <td>
                     {{
-                      (numericResult.mean - numericResult.params.mean).toFixed(
-                        4,
-                      )
+                      numericResult.params.mode === "range"
+                        ? "—"
+                        : (
+                            numericResult.mean - numericResult.params.mean
+                          ).toFixed(4)
                     }}
                   </td>
                 </tr>
                 <tr>
                   <td>标准差</td>
-                  <td>{{ numericResult.params.sd }}</td>
+                  <td>
+                    {{
+                      numericResult.params.mode === "range"
+                        ? "—"
+                        : numericResult.params.sd
+                    }}
+                  </td>
                   <td>{{ numericResult.sd.toFixed(4) }}</td>
                   <td>
                     {{
-                      (numericResult.sd - numericResult.params.sd).toFixed(4)
+                      numericResult.params.mode === "range"
+                        ? "—"
+                        : (numericResult.sd - numericResult.params.sd).toFixed(
+                            4,
+                          )
                     }}
                   </td>
                 </tr>
               </tbody>
             </table>
           </details>
+          <p
+            v-if="tool === 'numeric' && numericResult.params.mode === 'range'"
+            class="tool-note"
+          >
+            按上下限均匀随机生成，不约束均数和标准差。
+          </p>
           <DistributionChart
             v-if="tool === 'numeric'"
             :values="numericResult.values"

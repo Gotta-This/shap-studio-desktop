@@ -33,12 +33,17 @@ const config = ref<any>(null),
   page = ref(0),
   image = ref(""),
   zoom = ref(false),
-  output = ref(""),
   copyTo = ref(""),
   exports = ref(["data", "figures", "config", "reports"]),
   file = ref<HTMLInputElement>(),
   job = jobFor("shap"),
   previewJob = jobFor("shap-preview");
+const output = computed({
+  get: () => config.value?.plots.output_dir || "",
+  set: (value: string) => {
+    if (config.value) config.value.plots.output_dir = value;
+  },
+});
 const continuous = computed(
     () =>
       config.value?.data.features.filter((f: any) => f.kind === "continuous") ||
@@ -77,6 +82,14 @@ const continuous = computed(
         );
   }),
   allBusy = computed(() => job.busy || previewJob.busy);
+const availableStyles = computed(() =>
+  Object.fromEntries(
+    Object.entries(plotNames).filter(
+      ([key]) =>
+        key === "common" || Object.hasOwn(config.value?.plots.plots || {}, key),
+    ),
+  ),
+);
 watch(
   images,
   (items: any[]) => {
@@ -188,8 +201,13 @@ function restore() {
       defaults.value.plots.plots[style.value],
     );
 }
-async function run(mode: string) {
+function clearErrors() {
   error.value = "";
+  job.error = "";
+  previewJob.error = "";
+}
+async function run(mode: string) {
+  clearErrors();
   if (mode === "redraw" && !result.value?.has_model) {
     error.value = "请先完成一次完整分析，再复用模型重绘。";
     return;
@@ -208,6 +226,7 @@ async function run(mode: string) {
   }
 }
 async function preview() {
+  clearErrors();
   if (!result.value?.has_model) {
     error.value = "请先生成完整分析，之后可使用同一模型预览当前样式。";
     return;
@@ -218,7 +237,7 @@ async function preview() {
     s.enabled = style.value === "common" || key === style.value;
   await startJob(
     "shap",
-    { config: c, previous: result.value.id },
+    { config: c, output: output.value, previous: result.value.id },
     "shap-preview",
   );
 }
@@ -268,10 +287,15 @@ async function load(e: Event) {
     if (c.schema_version !== 1 || !c.data?.features || !c.plots?.common)
       throw Error("不是有效的模拟生图配置。");
     config.value = c;
+    if (style.value !== "common" && !Object.hasOwn(c.plots.plots, style.value))
+      style.value = "common";
+    clearErrors();
     previewJob.result = null;
     notify("已载入参数配置。");
   } catch (e) {
     error.value = (e as Error).message;
+  } finally {
+    (e.target as HTMLInputElement).value = "";
   }
 }
 async function copyTable() {
@@ -559,7 +583,7 @@ async function copyTable() {
         <div class="style-layout">
           <nav class="style-navigation">
             <button
-              v-for="(label, key) in plotNames"
+              v-for="(label, key) in availableStyles"
               :key="key"
               :class="{ active: style === key }"
               @click="style = String(key)"
