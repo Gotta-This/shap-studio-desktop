@@ -139,3 +139,25 @@ def review(p):
         # A bad prose draft must not blank independent table sources.
         base=deepcopy(p);base['prose_active']=False;config=compose(base,False)
         return dict(rows=config['field_rules'],error=str(e),columns=[])
+
+
+def audit(p):
+    """Check every imported rule without silently confirming ambiguous fields."""
+    from clinical_studio.typed_field_rules import validate_edit
+    config=p['config'];issues=[];total=0
+    for key in ('indicators','typed_fields','categoricals'):
+        for field in config.get(key,[]):
+            total+=1
+            kind=field.get('kind') or ('category' if 'labels' in field else 'mean_sd')
+            if kind=='excluded':continue
+            messages=[]
+            if field.get('confirmed') is False:messages.append('待人工确认')
+            try:validate_edit(dict(field,kind=kind))
+            except (ValueError,KeyError,TypeError) as exc:messages.append(str(exc))
+            if messages:issues.append(dict(table=field.get('table'),name=field['name'],group=field['group'],message='；'.join(dict.fromkeys(messages))))
+    global_error=''
+    try:compose(p,True)
+    except (ValueError,KeyError,TypeError) as exc:
+        message=str(exc)
+        if not any(issue['name'] in message for issue in issues):global_error=message
+    return dict(total=total,pending=len(issues),issues=issues,global_error=global_error,valid=not issues and not global_error)

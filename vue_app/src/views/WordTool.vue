@@ -1,5 +1,13 @@
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, watch, nextTick } from "vue";
+import {
+  ref,
+  reactive,
+  computed,
+  onMounted,
+  onUnmounted,
+  watch,
+  nextTick,
+} from "vue";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -64,6 +72,8 @@ const tabs = [
   restoring = ref(false),
   sources = ref<any>(null),
   matches = ref<any>(null),
+  auditResult = ref<any>(null),
+  auditing = ref(false),
   file = ref<HTMLInputElement>(),
   configFile = ref<HTMLInputElement>(),
   confirmImport = ref<File | null>(null),
@@ -150,8 +160,35 @@ async function read(f: File) {
     ungrouped.value = r.scan.has_ungrouped && !names.value.length;
     ungroupedN.value = r.scan.ungrouped_n ?? null;
     matches.value = null;
+    auditResult.value = null;
+    sources.value = null;
+    prose.value = null;
+    proseStale.value = false;
+    job.result = null;
+    config.value = {
+      ...config.value,
+      source: f.name,
+      indicators: [],
+      typed_fields: [],
+      categoricals: [],
+    };
     tab.value = 0;
-    notify("已读取原表与识别草稿，请核对并确认组别。");
+    await nextTick();
+    if (ungrouped.value) {
+      if (ungroupedN.value && ungroupedN.value >= 2) {
+        await applyCurrent();
+        tab.value = 1;
+      } else notify("已读取无分组表，请补充例数后确认。");
+    } else if (names.value.length) {
+      matches.value = await api("tool.word.match", {
+        session: session.value,
+        groups: names.value,
+      });
+      if (matches.value.groups.every((g: any) => g.tables || g.paragraphs)) {
+        await applyCurrent();
+        tab.value = 1;
+      } else notify("已自动核对组别，存在未匹配组别，请调整后重新确认。", true);
+    } else notify("未识别到明确组别，请补充组别后确认。", true);
   });
 }
 async function matchGroups() {
@@ -162,25 +199,109 @@ async function matchGroups() {
     });
   });
 }
+async function applyCurrent() {
+  const r = await api("tool.word.apply", {
+    session: session.value,
+    draft: draft.value,
+    options,
+    groups: names.value,
+    ungrouped: ungrouped.value,
+    n: ungroupedN.value,
+    previous: config.value,
+  });
+  config.value = r.config;
+  prose.value = r.prose_document;
+  proseStale.value = false;
+  groupIndex.value = "0";
+  job.result = null;
+  await nextTick();
+  groupsConfirmed.value = true;
+  await nextTick();
+  clearTimeout(auditTimer);
+  await auditCurrent(++auditVersion);
+  notify(
+    auditResult.value?.pending
+      ? `已自动匹配并核对，${auditResult.value.pending} 项规则待人工确认。`
+      : "已自动匹配并完成参数核对。",
+  );
+}
 async function apply() {
   await guard(async () => {
-    const r = await api("tool.word.apply", {
-      session: session.value,
-      draft: draft.value,
-      options,
-      groups: names.value,
-      ungrouped: ungrouped.value,
-      n: ungroupedN.value,
-      previous: config.value,
-    });
-    config.value = r.config;
-    groupsConfirmed.value = true;
-    prose.value = r.prose_document;
-    proseStale.value = false;
-    groupIndex.value = "0";
-    job.result = null;
-    notify("已应用表格匹配；可继续编辑基础资料和文字。");
+    if (!ungrouped.value && names.value.length)
+      matches.value = await api("tool.word.match", {
+        session: session.value,
+        groups: names.value,
+      });
+    await applyCurrent();
   });
+}
+let auditTimer: ReturnType<typeof setTimeout> | undefined;
+let auditVersion = 0;
+function ruleKey(f: any) {
+  return JSON.stringify([f.table ?? null, f.group, f.name]);
+}
+const auditIssues = computed(
+  () =>
+    new Map(
+      (auditResult.value?.issues || []).map((f: any) => [
+        ruleKey(f),
+        f.message,
+      ]),
+    ),
+);
+function pendingRule(f: any) {
+  return (
+    f.kind !== "excluded" &&
+    (f.confirmed === false ||
+      f.kind === "unknown" ||
+      auditIssues.value.has(ruleKey(f)))
+  );
+}
+async function auditCurrent(version: number) {
+  auditing.value = true;
+  try {
+    const result = await api("tool.word.audit", clone(payload()));
+    if (version === auditVersion) auditResult.value = result;
+  } catch (e) {
+    if (version === auditVersion)
+      auditResult.value = {
+        total: fields.value.length,
+        pending: 0,
+        issues: [],
+        global_error: (e as Error).message,
+        valid: false,
+      };
+  } finally {
+    if (version === auditVersion) auditing.value = false;
+  }
+}
+watch(
+  [config, prose, proseStale, proseActive, studyIndex, groupsConfirmed],
+  () => {
+    clearTimeout(auditTimer);
+    const version = ++auditVersion;
+    if (
+      !config.value ||
+      !groupsConfirmed.value ||
+      (!inventory.value && !fields.value.length && !prose.value)
+    ) {
+      auditing.value = false;
+      auditResult.value = null;
+      return;
+    }
+    auditing.value = true;
+    auditTimer = setTimeout(() => void auditCurrent(version), 150);
+  },
+  { deep: true },
+);
+onUnmounted(() => {
+  clearTimeout(auditTimer);
+  auditVersion++;
+});
+function locatePending() {
+  document
+    .querySelector(".word-fields-table .rule-pending")
+    ?.scrollIntoView({ block: "center", behavior: "smooth" });
 }
 function payload() {
   return {
@@ -268,8 +389,10 @@ function saveField(value: any, sync: boolean, updatedPeers: any[]) {
   };
   replace(old, value);
   peers.forEach((f: any, i: number) => replace(f, updatedPeers[i]));
+  error.value = "";
 }
 function rename(f: any, v: any) {
+  error.value = "";
   const name = f.name;
   for (const a of fields.value)
     if (a.table === f.table && a.name === name) a.name = String(v);
@@ -277,6 +400,7 @@ function rename(f: any, v: any) {
     if (a.from_field === name) a.from_field = String(v);
 }
 function remove(f: any) {
+  error.value = "";
   for (const key of ["indicators", "typed_fields", "categoricals"])
     config.value[key] = (config.value[key] || []).filter(
       (a: any) =>
@@ -451,17 +575,19 @@ function sameN(v: any) {
             ><div v-for="(_, i) in names" :key="i" class="inline-field">
               <Input
                 v-model="names[i]"
+                :disabled="busy || job.busy"
                 :aria-label="'匹配组别 ' + (i + 1)"
               /><Button
                 variant="outline"
                 :aria-label="'删除组别 ' + (i + 1)"
+                :disabled="busy || job.busy"
                 @click="names.splice(i, 1)"
                 >×</Button
               >
             </div>
             <Button
               variant="outline"
-              :disabled="names.length >= 20"
+              :disabled="busy || job.busy || names.length >= 20"
               @click="names.push('新组别')"
               >添加组别</Button
             ></template
@@ -687,6 +813,25 @@ function sameN(v: any) {
             >添加指标（全部组）</Button
           >
         </div>
+        <div v-if="auditing || auditResult" class="rule-audit" role="status">
+          <span v-if="auditing">正在自动核对参数…</span>
+          <span v-else
+            >已自动核对 {{ auditResult.total }} 项规则：{{
+              auditResult.pending
+            }}
+            项待人工确认{{ auditResult.valid ? "，参数核对通过" : "" }}。</span
+          >
+          <Button
+            v-if="auditResult?.pending"
+            variant="outline"
+            size="sm"
+            @click="locatePending"
+            >定位待确认</Button
+          >
+          <p v-if="auditResult?.global_error" class="field-error" role="alert">
+            {{ auditResult.global_error }}
+          </p>
+        </div>
         <div v-for="[table, rows] in blocks" :key="table" class="subsection">
           <div class="section-heading">
             <h3>{{ config.table_titles?.[table] || "手工添加指标" }}</h3>
@@ -715,7 +860,16 @@ function sameN(v: any) {
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="f in rows" :key="f.group + f.name">
+                <tr
+                  v-for="f in rows"
+                  :key="f.group + f.name"
+                  :class="{ 'rule-pending': pendingRule(f) }"
+                  :aria-label="
+                    pendingRule(f)
+                      ? f.name + ' / ' + f.group + '：待人工确认'
+                      : undefined
+                  "
+                >
                   <td>
                     <Input
                       :model-value="f.name"
@@ -728,7 +882,13 @@ function sameN(v: any) {
                     {{
                       fieldTypes.find((x) => x.value === (f.kind || "mean_sd"))
                         ?.label
-                    }}<small v-if="f.confirmed === false">待人工确认</small>
+                    }}<small
+                      v-if="pendingRule(f)"
+                      :title="
+                        String(auditIssues.get(ruleKey(f)) || '待人工确认')
+                      "
+                      >待人工确认</small
+                    >
                   </td>
                   <td>
                     <div class="word-rule-cell">

@@ -34,7 +34,7 @@ print(p)`,
   await page.getByRole("tab", { name: /生成与导出/ }).click();
   await expect(
     page.getByRole("button", { name: "生成模拟数据", exact: true }),
-  ).toBeDisabled();
+  ).toBeEnabled();
   await page.getByRole("tab", { name: /基础资料/ }).click();
   await page.getByRole("button", { name: "匹配并确认组别" }).click();
   await expect(page.getByLabel("当前组生成例数")).toHaveValue("70");

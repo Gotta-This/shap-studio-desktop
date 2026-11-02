@@ -215,6 +215,9 @@ def dispatch(method, p):
     if method=='tool.word.apply':
         from word_workflow import apply
         return apply(profile(),p)
+    if method=='tool.word.audit':
+        from word_workflow import audit
+        return audit(p)
     if method=='tool.word.review':
         from word_workflow import review
         return review(p)

@@ -28,7 +28,14 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { state, feedback, refresh, notify, desktop } from "@/lib/api";
+import {
+  state,
+  feedback,
+  refresh,
+  notify,
+  desktop,
+  dismissFeedback,
+} from "@/lib/api";
 import { updates, checkUpdate } from "@/lib/updates";
 const route = useRoute(),
   router = useRouter(),
@@ -196,7 +203,7 @@ onUnmounted(() => {
         size="icon"
         variant="outline"
         aria-label="关闭提示"
-        @click="feedback.text = ''"
+        @click="dismissFeedback"
         ><X :size="15"
       /></Button>
     </div>

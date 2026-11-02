@@ -2658,3 +2658,88 @@ a.subtle-link,
     padding: 12px;
   }
 }
+
+.word-fields-table tr.rule-pending > td {
+  background: #fff1f2;
+}
+.word-fields-table tr.rule-pending:hover > td {
+  background: #ffe4e6;
+}
+.word-fields-table tr.rule-pending > td:first-child {
+  box-shadow: inset 3px 0 #e49b9f;
+}
+.word-fields-table tr.rule-pending small {
+  color: #a7414b;
+}
+.rule-audit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 10px 12px;
+  background: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 12px;
+}
+.rule-audit > .field-error {
+  flex-basis: 100%;
+}
+.distribution-chart {
+  margin: 12px 20px;
+}
+.distribution-chart figcaption {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  justify-content: space-between;
+  font-size: 12px;
+}
+.distribution-chart figcaption span {
+  color: var(--muted-foreground);
+  font-size: 11px;
+}
+.distribution-scroll {
+  overflow-x: auto;
+  margin-top: 8px;
+}
+.distribution-chart svg {
+  display: block;
+  width: 100%;
+  min-width: 460px;
+}
+.distribution-chart svg text {
+  fill: var(--muted-foreground);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.distribution-chart svg .axis-label {
+  fill: var(--foreground);
+  font-size: 12px;
+}
+.chart-grid {
+  stroke: #dfebe3;
+  stroke-dasharray: 3 3;
+}
+.chart-axis {
+  stroke: #7b9a86;
+  stroke-width: 1;
+}
+.hist-bar {
+  fill: #a2cdb0;
+}
+.hist-bin {
+  outline: none;
+}
+.hist-bin:hover .hist-bar,
+.hist-bin:focus .hist-bar {
+  fill: #65a582;
+  stroke: var(--primary);
+  stroke-width: 1;
+}
+.distribution-readout {
+  min-height: 18px;
+  margin-top: 4px;
+  color: var(--muted-foreground);
+  font-size: 11px;
+}

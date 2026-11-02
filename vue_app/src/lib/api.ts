@@ -96,9 +96,17 @@ export async function api<T = any>(
   if (!response.ok) throw new Error(response.error || "操作失败，请重试。");
   return response.result as T;
 }
+let feedbackTimer: ReturnType<typeof setTimeout> | undefined;
+export function dismissFeedback() {
+  clearTimeout(feedbackTimer);
+  feedbackTimer = undefined;
+  feedback.text = "";
+}
 export function notify(text: string, error = false) {
+  dismissFeedback();
   feedback.text = text;
   feedback.error = error;
+  if (text) feedbackTimer = setTimeout(dismissFeedback, 2000);
 }
 export async function refresh() {
   Object.assign(state, await api<State>("state"));

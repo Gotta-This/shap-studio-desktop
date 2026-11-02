@@ -19,6 +19,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import PageHeading from "@/components/PageHeading.vue";
 import EmptyState from "@/components/EmptyState.vue";
 import SelectField from "@/components/SelectField.vue";
+import DistributionChart from "@/components/DistributionChart.vue";
 import { notify, download } from "@/lib/api";
 import { startJob, cancelJob, jobFor, clone } from "@/lib/scientific";
 const route = useRoute(),
@@ -77,17 +78,6 @@ const categoryCounts = computed(() => {
   for (const n of categoryResult.value?.values || [])
     counts.set(n, (counts.get(n) || 0) + 1);
   return [...counts].map(([value, count]) => ({ value, count }));
-});
-const histogram = computed(() => {
-  if (!numericResult.value) return [];
-  const a = numericResult.value.values as number[];
-  const lo = Math.min(...a),
-    hi = Math.max(...a);
-  const bins = Array(16).fill(0);
-  for (const x of a)
-    bins[Math.min(15, Math.floor(((x - lo) / (hi - lo || 1)) * 16))]++;
-  const max = Math.max(...bins);
-  return bins.map((v) => Math.max(2, (v / max) * 100));
 });
 async function run(method: string, params: any, callback: (r: any) => void) {
   busy.value = true;
@@ -422,17 +412,10 @@ async function copy() {
               </tbody>
             </table>
           </details>
-          <div
+          <DistributionChart
             v-if="tool === 'numeric'"
-            class="histogram"
-            aria-label="模拟数据分布预览"
-          >
-            <span
-              v-for="(h, i) in histogram"
-              :key="i"
-              :style="{ height: h + '%' }"
-            />
-          </div>
+            :values="numericResult.values"
+          />
           <div class="result-toolbar">
             <SelectField
               v-model="format"
