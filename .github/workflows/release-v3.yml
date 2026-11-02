@@ -10,7 +10,13 @@ concurrency:
   group: release-v3
   cancel-in-progress: true
 jobs:
+  preview-only:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    steps:
+      - run: echo 'Preview changes only. Release requires manual dispatch after user testing.'
   verify:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     defaults:
