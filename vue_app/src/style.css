@@ -2426,3 +2426,113 @@ code {
   flex-wrap: wrap;
   justify-content: flex-end;
 }
+
+/* Denser Word workflow: keep context visible above long imported tables. */
+.main-content:has(> .word-page) {
+  padding-top: 18px;
+}
+.word-page {
+  gap: 14px;
+}
+.word-page .page-heading {
+  margin-bottom: 0;
+  align-items: center;
+  gap: 14px;
+}
+.word-page .page-heading h1 {
+  font-size: 22px;
+  line-height: 1.3;
+}
+.word-page .page-heading p {
+  margin-top: 4px;
+  line-height: 1.5;
+}
+.word-page .heading-actions {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.word-page .heading-actions button {
+  height: 32px;
+  min-height: 32px;
+  padding: 5px 12px;
+}
+.word-import-controls,
+.word-matching {
+  padding: 16px;
+}
+.word-import-controls .toolbar {
+  margin: 0;
+  gap: 8px 12px;
+}
+.word-import-controls .import-summary {
+  margin: 12px 0;
+  padding: 12px 0;
+}
+.word-import-controls .import-summary > div {
+  min-width: 0;
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+.word-import-controls .import-summary > button {
+  flex-shrink: 0;
+}
+.word-matching .section-heading {
+  margin-bottom: 12px;
+  gap: 12px;
+}
+.word-matching .subsection {
+  margin-top: 12px;
+  padding-top: 12px;
+}
+.word-fields-table {
+  table-layout: fixed;
+  min-width: 980px;
+}
+.word-fields-table th,
+.word-fields-table td {
+  padding: 8px 10px;
+  line-height: 1.4;
+}
+.word-fields-table td {
+  vertical-align: middle;
+}
+.word-fields-table input {
+  height: 32px;
+  font-size: 12px;
+  min-width: 0 !important;
+}
+.word-rule-cell {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.word-rule-lines {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  gap: 2px;
+  font-variant-numeric: tabular-nums;
+}
+.word-rule-cell > button {
+  flex-shrink: 0;
+}
+.word-fields-table button {
+  height: 30px;
+  font-size: 12px;
+  padding: 4px 10px;
+}
+.word-fields-table .remove-indicator {
+  color: var(--destructive);
+  border-color: color-mix(in srgb, var(--destructive) 25%, var(--border));
+  background: color-mix(in srgb, var(--destructive) 3%, white);
+}
+@media (max-width: 900px) {
+  .word-page .page-heading {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .word-import-controls .import-summary {
+    align-items: flex-start;
+  }
+}

@@ -21,6 +21,7 @@ import {
   clone,
   fieldTypes,
   ruleSummary,
+  ruleLines,
   jobFor,
   startJob,
   cancelJob,
@@ -367,7 +368,7 @@ function sameN(v: any) {
 </script>
 <template>
   <div
-    class="scientific-page"
+    class="scientific-page word-page"
     @dragover.prevent
     @drop.prevent="(e) => requestImport(e.dataTransfer?.files[0])"
   >
@@ -404,7 +405,7 @@ function sameN(v: any) {
       accept=".json"
       @change="load"
     />
-    <section class="surface scientific-section">
+    <section class="surface scientific-section word-import-controls">
       <div class="toolbar">
         <label class="file-check"
           ><Checkbox v-model="options.sizes" />采用 Word 中的例数</label
@@ -673,7 +674,10 @@ function sameN(v: any) {
             </div></div
         ></template>
       </section>
-      <section v-if="tab === 1" class="surface scientific-section">
+      <section
+        v-if="tab === 1"
+        class="surface scientific-section word-matching"
+      >
         <div class="section-heading">
           <div>
             <h2>表格匹配</h2>
@@ -686,10 +690,20 @@ function sameN(v: any) {
         <div v-for="[table, rows] in blocks" :key="table" class="subsection">
           <div class="section-heading">
             <h3>{{ config.table_titles?.[table] || "手工添加指标" }}</h3>
-            <Button variant="ghost" @click="add(table)">本表添加指标</Button>
+            <Button variant="outline" size="sm" @click="add(table)"
+              >本表添加指标</Button
+            >
           </div>
           <div class="table-scroll">
-            <table class="data-table editable-table">
+            <table class="data-table editable-table word-fields-table">
+              <colgroup>
+                <col style="width: 18%" />
+                <col style="width: 10%" />
+                <col style="width: 10%" />
+                <col style="width: 34%" />
+                <col style="width: 14%" />
+                <col style="width: 14%" />
+              </colgroup>
               <thead>
                 <tr>
                   <th>输出列名</th>
@@ -697,7 +711,7 @@ function sameN(v: any) {
                   <th>数据类型</th>
                   <th>生成规则</th>
                   <th>Word 原文</th>
-                  <th />
+                  <th>操作</th>
                 </tr>
               </thead>
               <tbody>
@@ -717,19 +731,38 @@ function sameN(v: any) {
                     }}<small v-if="f.confirmed === false">待人工确认</small>
                   </td>
                   <td>
-                    <button
-                      class="rule-button"
-                      @click="
-                        editing = f;
-                        editingDraft = false;
-                      "
-                    >
-                      {{ ruleSummary(f) }} · 编辑规则
-                    </button>
+                    <div class="word-rule-cell">
+                      <div class="word-rule-lines">
+                        <span v-for="(line, i) in ruleLines(f)" :key="i">{{
+                          line
+                        }}</span>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        :aria-label="
+                          '编辑规则：' +
+                          f.name +
+                          '，' +
+                          f.group +
+                          '，' +
+                          ruleSummary(f)
+                        "
+                        @click="
+                          editing = f;
+                          editingDraft = false;
+                        "
+                        >编辑规则</Button
+                      >
+                    </div>
                   </td>
                   <td class="source-cell">{{ f.raw }}</td>
                   <td>
-                    <Button variant="ghost" @click="remove(f)"
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      class="remove-indicator"
+                      @click="remove(f)"
                       >移除同名指标</Button
                     >
                   </td>

@@ -84,16 +84,28 @@ export const fieldTypes = [
 export function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value));
 }
-export function ruleSummary(f: any) {
+export function ruleLines(f: any): string[] {
   if (f.kind === "mean_sd" || !f.kind)
-    return `${f.mean ?? "待补"} ± ${f.sd ?? "待补"} · ${f.digits ?? 0} 位小数`;
+    return [
+      `${f.mean ?? "待补"} ± ${f.sd ?? "待补"} · ${f.digits ?? 0} 位小数`,
+    ];
   if (f.kind === "quantile")
-    return `${f.median ?? "待补"}（${f.q1 ?? "待补"}，${f.q3 ?? "待补"}）`;
-  if (f.kind === "excluded") return "保留来源，不输出病例列";
-  return (f.labels || [])
-    .map((x: any, i: number) => `${x} ${f.weights?.[i] ?? "待补"}%`)
-    .join("；");
+    return [`${f.median ?? "待补"}（${f.q1 ?? "待补"}，${f.q3 ?? "待补"}）`];
+  if (f.kind === "excluded") return ["保留来源，不输出病例列"];
+  const lines = (f.labels || []).map((label: string, i: number) => {
+    const weight = f.weights?.[i];
+    const percent =
+      typeof weight === "number" && Number.isFinite(weight)
+        ? `${Number(weight.toFixed(2))}%`
+        : "待补";
+    return `${label} ${percent}`;
+  });
+  return lines.length ? lines : ["待设置生成规则"];
 }
+export function ruleSummary(f: any) {
+  return ruleLines(f).join("；");
+}
+
 export const plotNames: Record<string, string> = {
   common: "公共样式",
   summary: "SHAP 摘要图",
