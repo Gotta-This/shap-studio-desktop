@@ -8,6 +8,8 @@ on:
         .github/workflows/release-v3.yml,
         vue_app/package.json,
         vue_app/src/**,
+        vue_app/python/**,
+        vue_app/scripts/**,
         vue_app/src-tauri/src/**,
       ]
 permissions:

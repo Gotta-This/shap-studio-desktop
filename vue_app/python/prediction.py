@@ -15,7 +15,7 @@ def location(profile, token):
     return path
 
 def frame(path, sheet=None):
-    meta=json.loads((path/'source.json').read_text())
+    meta=json.loads((path/'source.json').read_text(encoding='utf8'))
     source=path/meta['file']
     if source.suffix=='.csv':
         try: raw=pd.read_csv(source,header=None,dtype=object,encoding='utf-8-sig')
@@ -40,8 +40,8 @@ def inspect(profile, paths=None, token=None, sheet=None):
         sheets=[]
         if ext=='.xlsx':
             with pd.ExcelFile(source) as workbook:sheets=workbook.sheet_names
-        (path/'source.json').write_text(json.dumps(dict(file='input'+ext,name=source.name,sheets=sheets,sha256=hashlib.sha256(source.read_bytes()).hexdigest()),ensure_ascii=False))
-    path=location(profile,token);meta=json.loads((path/'source.json').read_text());df=frame(path,sheet)
+        (path/'source.json').write_text(json.dumps(dict(file='input'+ext,name=source.name,sheets=sheets,sha256=hashlib.sha256(source.read_bytes()).hexdigest()),ensure_ascii=False),encoding='utf8')
+    path=location(profile,token);meta=json.loads((path/'source.json').read_text(encoding='utf8'));df=frame(path,sheet)
     columns=[]
     for name in df:
         s=df[name];non=s.dropna();numeric=pd.to_numeric(non,errors='coerce').notna().all()
@@ -177,7 +177,7 @@ def run(profile,p,progress):
     (out/'plot-data.json').write_text(json.dumps(plot_data,ensure_ascii=False,allow_nan=False),encoding='utf8')
     images,notes,plot_config=render(out,plot_data,plot_config)
     progress('正在保存结果表、逐例概率与分析记录…')
-    source=json.loads((path/'source.json').read_text());split=np.full(len(df),'验证集',dtype=object);split[tr]='训练集'
+    source=json.loads((path/'source.json').read_text(encoding='utf8'));split=np.full(len(df),'验证集',dtype=object);split[tr]='训练集'
     patients=pd.DataFrame({'编号':df[p.get('id_column','编号')],'结局原值':df[p.get('target','分组')],'阳性编码':y,'数据集':split})
     for model in models:
         prob=np.empty(len(df));prob[tr]=predictions[model]['训练集'];prob[va]=predictions[model]['验证集'];patients[model+'预测概率']=prob

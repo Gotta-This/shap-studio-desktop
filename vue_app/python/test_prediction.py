@@ -16,6 +16,16 @@ class PredictionTests(unittest.TestCase):
     def tearDown(self):self.tmp.cleanup()
     def test_import_sheet_and_preview(self):
         self.assertEqual(self.data['rows'],120);self.assertEqual(len(self.data['preview']),8);self.assertEqual(self.data['columns'][3]['kind'],'categorical')
+    def test_chinese_metadata_uses_utf8_under_windows_locale(self):
+        read,write=Path.read_text,Path.write_text
+        def locale_read(path,encoding=None,errors=None):return read(path,encoding=encoding or 'cp1252',errors=errors)
+        def locale_write(path,data,encoding=None,errors=None):return write(path,data,encoding=encoding or 'cp1252',errors=errors)
+        with patch.object(Path,'read_text',locale_read),patch.object(Path,'write_text',locale_write):
+            imported=inspect(self.root,[self.file])
+            restored=inspect(self.root,token=imported['id'])
+            self.assertEqual(restored['name'],self.file.name)
+            self.assertEqual(restored['columns'][0]['name'],'编号')
+            prepared(self.root,dict(self.p,dataset=imported['id']))
     def test_split_reproducible_and_count(self):
         a=prepared(self.root,self.p);b=prepared(self.root,self.p)
         self.assertEqual(len(a[4]),84);np.testing.assert_array_equal(a[4],b[4]);self.assertFalse(set(a[4]) & set(a[5]))
