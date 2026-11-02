@@ -2,6 +2,8 @@
 from pathlib import Path
 import json,os,re,subprocess,sys,uuid,tempfile,threading
 
+_SHAP_LOCK=threading.Lock()
+
 def write(path,value):
     fd,name=tempfile.mkstemp(dir=path.parent,prefix='.status-')
     try:
@@ -19,6 +21,11 @@ def start(profile,p):
     if p['kind'] not in ('word','shap','numeric','category'):raise ValueError('计算任务类型无效。')
     jid=uuid.uuid4().hex;path=profile/'jobs'/jid;path.mkdir(parents=True)
     write(path/'request.json',p);write(path/'status.json',dict(id=jid,status='running',message='正在准备本机计算…'))
+    if os.environ.get('RESEARCH_V3_ENGINE_SERVICE')=='1':
+        # Reuse loaded modules and the existing extraction. Non-daemon threads
+        # finish accepted jobs after stdin closes, before PyInstaller cleans up.
+        threading.Thread(target=worker,args=(profile,jid),daemon=False,name='v3-job-'+jid[:8]).start()
+        return dict(id=jid)
     args=[sys.executable]+([] if getattr(sys,'frozen',False) else [str(Path(__file__).with_name('bridge.py'))])+['--job-worker',jid]
     env={**os.environ,'RESEARCH_V3_PROFILE':str(profile),'MPLBACKEND':'Agg'}
     # The worker outlives the bridge. A one-file child needs its own extraction
@@ -55,7 +62,11 @@ def worker(profile,jid):
             result=csv_result(values,params.get('digits')) if p['kind']=='numeric' else dispatch('tool.category',params);result['params']=params
         else:
             from analysis_workflow import run
-            result=run(profile,p['params'],progress)
+            # Matplotlib has process-global style state. Keep independent plot
+            # jobs serialized while IPC and other tools remain responsive.
+            with _SHAP_LOCK:
+                progress('正在准备图表分析…')
+                result=run(profile,p['params'],progress)
         if (path/'cancel').exists():raise InterruptedError('已取消本次计算。')
         write(path/'status.json',dict(id=jid,status='done',message='计算完成，结果已保存。',result=result))
     except Exception as e:

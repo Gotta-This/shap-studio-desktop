@@ -11,6 +11,8 @@ import migration
 from clinical_studio.manuscripts import WorkspaceStore
 
 class ReleaseFlowTests(unittest.TestCase):
+    def setUp(self):
+        current=patch('releases.VERSION','3.0.0');current.start();self.addCleanup(current.stop)
     def payload(self, data=b'installer'):
         name='ResearchDataTools-Setup-Windows-x64.exe'
         return dict(tag_name='v3.0.3', assets=[dict(name=name, size=len(data), digest='sha256:'+hashlib.sha256(data).hexdigest(), browser_download_url=releases.PREFIX+'v3.0.3/'+name)])

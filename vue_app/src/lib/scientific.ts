@@ -41,7 +41,6 @@ export async function startJob(
     job.id = started.id;
     if (job.cancelRequested) await api("tool.job.cancel", { id: job.id });
     while (job.busy) {
-      await new Promise((r) => setTimeout(r, 500));
       const status = await api("tool.job.status", { id: job.id });
       job.message = status.message;
       if (status.status === "done") {
@@ -51,6 +50,7 @@ export async function startJob(
         job.error = status.status === "error" ? status.message : "";
         job.busy = false;
       }
+      if (job.busy) await new Promise((r) => setTimeout(r, 200));
     }
   } catch (e) {
     job.error = e instanceof Error ? e.message : String(e);

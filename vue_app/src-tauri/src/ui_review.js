@@ -5,7 +5,7 @@
     const tick=()=>{if(Date.now()>=deadline){removeEventListener('__v3_review_tick',tick);resolve();}};
     addEventListener('__v3_review_tick',tick);
   });
-  const steps = [], errors = [];
+  const steps = [], errors = [], timings = {};
   addEventListener('error', e => errors.push(e.message));
   addEventListener('unhandledrejection', e => errors.push(String(e.reason)));
   const wait = async (fn, label, ms = 60000) => {
@@ -57,12 +57,12 @@
     await route('/inbox');await wait(()=>document.querySelector('h1')?.innerText.includes('收件箱'),'inbox');await snap('08-inbox');
     await route('/tools/category');await click(await wait(()=>button('生成随机数列'),'category action'));
     await wait(()=>labelled('全部生成数值')?.value?.trim().split(/\n/).length===121,'category result');await snap('09-category');
-    await route('/tools/numeric');await click(await wait(()=>button('生成模拟数据'),'numeric action'));
-    await wait(()=>labelled('全部生成数值')?.value?.trim().split(/\n/).length===70,'numeric result');await snap('10-numeric');
+    await route('/tools/numeric');const numericStarted=performance.now();await click(await wait(()=>button('生成模拟数据'),'numeric action'));
+    await wait(()=>labelled('全部生成数值')?.value?.trim().split(/\n/).length===70,'numeric result');timings.numeric_ms=Math.round(performance.now()-numericStarted);await snap('10-numeric');
     await route('/tools/word');await wait(()=>labelled('导入 Word 文档'),'Word input');
-    const bytes=await invoke('review_fixture');upload(labelled('导入 Word 文档'),'原生导入.docx',new Uint8Array(bytes),'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
-    await click(await wait(()=>button('匹配并确认组别'),'Word scan and group confirmation'));
-    await wait(()=>document.body.innerText.includes('已确认组别'),'Word groups applied');await tab('表格匹配');await snap('11-word-import');
+    const bytes=await invoke('review_fixture');const wordStarted=performance.now();upload(labelled('导入 Word 文档'),'原生导入.docx',new Uint8Array(bytes),'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    const confirmGroups=await wait(()=>button('匹配并确认组别'),'Word scan and group confirmation');timings.word_scan_ms=Math.round(performance.now()-wordStarted);const applyStarted=performance.now();await click(confirmGroups);
+    await wait(()=>document.body.innerText.includes('已确认组别'),'Word groups applied');timings.word_apply_ms=Math.round(performance.now()-applyStarted);await tab('表格匹配');await snap('11-word-import');
     await tab('生成与导出');await click(button('生成模拟数据'));await wait(()=>button('导出完整 Excel'),'Word generated Excel',90000);await snap('12-word-result');
     await route('/tools/shap');await wait(()=>labelled('样本量'),'SHAP default initialization');await snap('13-shap-parameters');
     await tab('模型与分类变量');await wait(()=>button('添加分类变量'),'SHAP model fields');await snap('14-shap-model');
@@ -75,7 +75,7 @@
     await wait(()=>labelled('样本量')?.value==='80','SHAP configuration restore');await click(button('生成完整分析'));
     await wait(()=>document.querySelector('img.result-figure')?.naturalWidth>0,'SHAP full analysis image',180000);await wait(()=>document.querySelector('[aria-label="结果图选择"]')?.textContent.trim() === document.querySelector('img.result-figure')?.alt, 'selected plot name is visible');await snap('16-shap-result');
     if(errors.length)throw Error(errors.join('\n'));
-    await invoke('review_finish',{result:{ok:true,steps,errors,mouse_moved:false,system_screen_recording:false,renderer:'actual app WKWebView',limitations:['OS file chooser/save dialogs and system application opening were not clicked; uploads used real in-memory files through the native webview.']}});
+    await invoke('review_finish',{result:{ok:true,steps,errors,timings,mouse_moved:false,system_screen_recording:false,renderer:'actual app WKWebView',limitations:['OS file chooser/save dialogs and system application opening were not clicked; uploads used real in-memory files through the native webview.']}});
   } catch(e) {
     try { await invoke('review_snapshot',{name:'failure'}); } catch(_) {}
     await invoke('review_finish',{result:{ok:false,steps,errors,error:String(e),body:document.body.innerText.slice(-3000),inputs:[...document.querySelectorAll('input')].map(i=>({id:i.id,value:i.value,valid:i.validity.valid}))}});

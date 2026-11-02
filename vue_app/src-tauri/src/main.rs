@@ -2,6 +2,7 @@
 use std::{io::{Read, Write}, path::PathBuf, process::{Command,Stdio}, sync::{Arc,atomic::{AtomicUsize,Ordering}}};
 use tauri::{Manager,Emitter};
 mod ui_review;
+mod engine;
 #[derive(Clone,Default)]
 struct Running(Arc<AtomicUsize>);
 struct CountGuard(Arc<AtomicUsize>);
@@ -31,14 +32,15 @@ fn request_engine(profile: Option<PathBuf>, legacy_profile: Option<PathBuf>, req
     serde_json::from_slice(&output.stdout).map_err(|_|format!("Python 引擎未返回有效结果（{}）：{}",output.status,String::from_utf8_lossy(&output.stderr).chars().rev().take(500).collect::<String>().chars().rev().collect::<String>()))
 }
 #[tauri::command]
-async fn python_request(app:tauri::AppHandle, request:serde_json::Value, running:tauri::State<'_,Running>) -> Result<serde_json::Value,String> {
+async fn python_request(app:tauri::AppHandle, request:serde_json::Value, running:tauri::State<'_,Running>, engine:tauri::State<'_,Arc<engine::Engine>>) -> Result<serde_json::Value,String> {
+    let engine=engine.inner().clone();
     running.0.fetch_add(1,Ordering::SeqCst);
     let count=CountGuard(running.0.clone());
     tauri::async_runtime::spawn_blocking(move || {
         let _guard=count;
         let profile=std::env::var_os("RESEARCH_V3_PROFILE").map(PathBuf::from);
         let legacy=if ui_review::enabled() {None} else {app.path().app_data_dir().ok()};
-        request_engine(profile,legacy,request)
+        engine.request(profile,legacy,request)
     }).await.map_err(|e|e.to_string())?
 }
 fn main() {
@@ -59,11 +61,21 @@ fn main() {
         }
         return;
     }
+    if args.get(1).is_some_and(|arg|arg=="--bridge-service-host") {
+        use std::io::BufRead;
+        let engine=engine::Engine::default();
+        let profile=std::env::var_os("RESEARCH_V3_PROFILE").map(PathBuf::from);
+        for line in std::io::stdin().lock().lines() {
+            let response=line.map_err(|e|e.to_string()).and_then(|line|serde_json::from_str(&line).map_err(|e|e.to_string())).and_then(|request|engine.request(profile.clone(),None,request));
+            println!("{}",response.unwrap_or_else(|error|serde_json::json!({"ok":false,"error":error})));
+        }
+        return;
+    }
     ui_review::initialize(&args);
     let mut context=tauri::generate_context!();
     if ui_review::enabled() { for window in &mut context.config_mut().app.windows { window.visible=false;window.focus=false;window.incognito=true; } }
-    tauri::Builder::default().manage(Running::default()).plugin(tauri_plugin_dialog::init()).plugin(tauri_plugin_opener::init())
-      .setup(|app| { if ui_review::enabled() { #[cfg(target_os="macos")] app.set_activation_policy(tauri::ActivationPolicy::Accessory); ui_review::arm_timeout(app.handle().clone()); } if std::env::var("RESEARCH_V3_DEBUG").as_deref()==Ok("1") { if let Some(window)=app.get_webview_window("main") { eprintln!("V3 URL: {:?}",window.url()); #[cfg(debug_assertions)] window.open_devtools(); } } Ok(()) })
+    tauri::Builder::default().manage(Running::default()).manage(Arc::new(engine::Engine::default())).plugin(tauri_plugin_dialog::init()).plugin(tauri_plugin_opener::init())
+      .setup(|app| { let warm_engine=app.state::<Arc<engine::Engine>>().inner().clone(); let warm_profile=std::env::var_os("RESEARCH_V3_PROFILE").map(PathBuf::from); let warm_legacy=if ui_review::enabled(){None}else{app.path().app_data_dir().ok()}; std::thread::spawn(move ||{let _=warm_engine.request(warm_profile,warm_legacy,serde_json::json!({"method":"runtime.info"}));}); if ui_review::enabled() { #[cfg(target_os="macos")] app.set_activation_policy(tauri::ActivationPolicy::Accessory); ui_review::arm_timeout(app.handle().clone()); } if std::env::var("RESEARCH_V3_DEBUG").as_deref()==Ok("1") { if let Some(window)=app.get_webview_window("main") { eprintln!("V3 URL: {:?}",window.url()); #[cfg(debug_assertions)] window.open_devtools(); } } Ok(()) })
       .on_page_load(|webview,payload| { if payload.event()==tauri::webview::PageLoadEvent::Finished { ui_review::install(webview); } })
       .invoke_handler(tauri::generate_handler![python_request,ui_review::review_fixture,ui_review::review_resize,ui_review::review_snapshot,ui_review::review_finish])
       .on_window_event(|window,event| { if let tauri::WindowEvent::CloseRequested{api,..}=event { if window.state::<Running>().0.load(Ordering::SeqCst)>0 { api.prevent_close();let _=window.emit("close-blocked",()); } } })

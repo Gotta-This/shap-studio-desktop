@@ -53,3 +53,23 @@ with tempfile.TemporaryDirectory(prefix='v3-desktop-bridge-') as tmp:
     config['data']['n_samples']=40
     assert job('shap',dict(config=config,data_only=True))['total']==40
     print('Actual desktop host: category, Word and SHAP background round trips passed',flush=True)
+    # Exercise the same persistent engine used by the GUI, not just one-shot CLI.
+    service=subprocess.Popen([str(host),'--bridge-service-host'],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,encoding='utf-8',env=env)
+    def warm_call(method,params=None):
+        service.stdin.write(json.dumps(dict(method=method,params=params or {}))+'\n');service.stdin.flush()
+        response=json.loads(service.stdout.readline());assert response['ok'],response
+        return response['result']
+    try:
+        before=time.monotonic();pid=warm_call('runtime.info')['engine_pid'];cold=time.monotonic()-before
+        before=time.monotonic();assert warm_call('runtime.info')['engine_pid']==pid;warm=time.monotonic()-before
+        started=warm_call('tool.job.start',dict(kind='numeric',params=dict(n=70,mean=27.92,sd=14.87,digits=0,mode='target',seed=12)))
+        deadline=time.monotonic()+30
+        while time.monotonic()<deadline:
+            completed=warm_call('tool.job.status',dict(id=started['id']))
+            if completed['status']!='running':break
+            time.sleep(.02)
+        assert completed['status']=='done' and len(completed['result']['values'])==70,completed
+        assert warm_call('runtime.info')['engine_pid']==pid
+        print(f'Persistent desktop engine: same process, warm IPC {warm:.3f}s (cold {cold:.3f}s), background numeric passed',flush=True)
+    finally:
+        service.stdin.close();service.wait(timeout=60);service.stdout.close()

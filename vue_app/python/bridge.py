@@ -4,7 +4,7 @@ The V3 profile is separate from Qt; choosing an existing workspace is explicit.
 Filesystem transactions and manuscript validation are the released Python core.
 """
 from pathlib import Path
-import base64, contextlib, csv, io, json, os, sqlite3, sys, tempfile, uuid
+import base64, contextlib, csv, io, json, os, sqlite3, sys, tempfile, uuid, threading
 os.environ.setdefault("MPL_IGNORE_SYSTEM_FONTS", "1")
 from dataclasses import asdict
 from zipfile import ZipFile
@@ -19,6 +19,7 @@ from storage import data_root,initialize
 AUTO_WORKSPACE = not bool(os.environ.get('RESEARCH_V3_PROFILE'))
 DATA_ROOT = data_root() if AUTO_WORKSPACE else Path(os.environ['RESEARCH_V3_PROFILE']).expanduser().resolve()
 PROFILE = DATA_ROOT/'profile' if AUTO_WORKSPACE else DATA_ROOT
+_WORKSPACE_INIT_LOCK=threading.Lock()
 
 def using_default_storage():return AUTO_WORKSPACE and PROFILE==DATA_ROOT/'profile'
 
@@ -29,13 +30,14 @@ def profile():
 
 def workspace(required=True):
     config = profile() / 'workspace.json'
-    if not config.exists() and using_default_storage():
-        store=WorkspaceStore(DATA_ROOT/'workspace')
-        fd,tmp=tempfile.mkstemp(dir=profile(),prefix='.workspace-')
-        try:
-            with os.fdopen(fd,'w',encoding='utf-8') as stream:json.dump(dict(root=str(store.root)),stream);stream.flush();os.fsync(stream.fileno())
-            os.replace(tmp,config)
-        finally:Path(tmp).unlink(missing_ok=True)
+    with _WORKSPACE_INIT_LOCK:
+        if not config.exists() and using_default_storage():
+            store=WorkspaceStore(DATA_ROOT/'workspace')
+            fd,tmp=tempfile.mkstemp(dir=profile(),prefix='.workspace-')
+            try:
+                with os.fdopen(fd,'w',encoding='utf-8') as stream:json.dump(dict(root=str(store.root)),stream);stream.flush();os.fsync(stream.fileno())
+                os.replace(tmp,config)
+            finally:Path(tmp).unlink(missing_ok=True)
     if config.exists():
         return WorkspaceStore(json.loads(config.read_text(encoding='utf-8'))['root'], create=False)
     if required: raise ValueError('请先选择本地工作空间。')
@@ -129,7 +131,7 @@ def dispatch(method, p):
     if method=='state': return state()
     if method=='runtime.info':
         import importlib.metadata
-        return dict(application_version=__import__('releases').VERSION,bundled=bool(getattr(sys,'frozen',False)),versions={name:importlib.metadata.version(name) for name in ['numpy','pandas','scikit-learn','shap','matplotlib','Pillow','openpyxl']})
+        return dict(engine_pid=os.getpid(),application_version=__import__('releases').VERSION,bundled=bool(getattr(sys,'frozen',False)),versions={name:importlib.metadata.version(name) for name in ['numpy','pandas','scikit-learn','shap','matplotlib','Pillow','openpyxl']})
     if method=='workspace.enable':
         s=WorkspaceStore(p['root'])
         config=profile()/'workspace.json'
@@ -273,6 +275,32 @@ def dispatch(method, p):
         return dict(folder=str(result.folder),metrics=result.metrics,columns=list(result.data.columns),rows=json.loads(result.data.head(200).to_json(orient='values')),images=images)
     raise ValueError('不支持的操作：'+method)
 
+def serve():
+    """Multiplex independent IPC requests in one warmed embedded interpreter."""
+    from concurrent.futures import ThreadPoolExecutor
+    import threading
+    output=sys.stdout
+    # Libraries may print from request or background-job threads. Reserve the
+    # original stdout exclusively for framed protocol replies.
+    sys.stdout=sys.stderr
+    os.environ['RESEARCH_V3_ENGINE_SERVICE']='1'
+    profile()  # Finish any legacy copy before concurrent requests arrive.
+    lock=threading.Lock()
+    def execute(envelope):
+        try:
+            request=envelope['request']
+            result=dispatch(request['method'],request.get('params') or {})
+            response=dict(ok=True,result=result)
+            encoded=json.dumps(dict(id=envelope['id'],response=response),ensure_ascii=False,allow_nan=False,default=str)
+        except Exception as exc:
+            encoded=json.dumps(dict(id=envelope.get('id'),response=dict(ok=False,error=str(exc))),ensure_ascii=False)
+        with lock:output.write(encoded+'\n');output.flush()
+    with ThreadPoolExecutor(max_workers=6,thread_name_prefix='v3-ipc') as executor:
+        for line in sys.stdin:
+            try:envelope=json.loads(line)
+            except ValueError:continue
+            executor.submit(execute,envelope)
+
 def main():
     try:
         request=json.loads(sys.stdin.read())
@@ -291,4 +319,5 @@ if __name__=='__main__':
     if len(sys.argv)==3 and sys.argv[1]=='--job-worker':
         from jobs import worker
         worker(profile(),sys.argv[2])
+    elif len(sys.argv)==2 and sys.argv[1]=='--serve':serve()
     else: main()
