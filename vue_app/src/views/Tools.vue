@@ -155,7 +155,7 @@ async function copy() {
                 :aria-label="'类别数量 ' + (index + 1)"
               /><Button
                 size="icon"
-                variant="ghost"
+                variant="outline"
                 :disabled="categories.length < 2"
                 :aria-label="'删除类别 ' + (index + 1)"
                 @click="categories.splice(index, 1)"

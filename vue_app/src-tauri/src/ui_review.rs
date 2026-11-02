@@ -2,11 +2,14 @@
 use std::{path::PathBuf,sync::{OnceLock,atomic::{AtomicBool,Ordering}},time::Duration};
 use tauri::Manager;
 static FOLDER:OnceLock<PathBuf>=OnceLock::new();
+static CLOSING:AtomicBool=AtomicBool::new(false);
 static STARTED:AtomicBool=AtomicBool::new(false);
 static FINISHED:AtomicBool=AtomicBool::new(false);
 pub fn enabled()->bool { FOLDER.get().is_some() }
+pub fn closing_test()->bool { CLOSING.load(Ordering::SeqCst) }
 pub fn initialize(args:&[std::ffi::OsString]) {
-    if args.get(1).is_some_and(|v|v=="--ui-review") {
+    if args.get(1).is_some_and(|v|v=="--ui-review" || v=="--close-review") {
+        CLOSING.store(args[1]=="--close-review",Ordering::SeqCst);
         let path=PathBuf::from(args.get(2).expect("UI review requires an isolated directory"));
         assert!(path.is_absolute(),"UI review directory must be absolute");
         std::fs::create_dir_all(&path).expect("UI review directory unavailable");
@@ -17,7 +20,14 @@ pub fn initialize(args:&[std::ffi::OsString]) {
 }
 pub fn install(webview:&tauri::Webview) {
     if enabled() && !STARTED.swap(true,Ordering::SeqCst) {
-        let _=webview.eval(include_str!("ui_review.js"));
+        let script=if closing_test() { r#"(async()=>{
+            const invoke=(command,args={})=>window.__TAURI_INTERNALS__.invoke(command,args);
+            await invoke('python_request',{request:{method:'todo.save',params:{text:'关闭验收：已保存的待办'}}});
+            void invoke('python_request',{request:{method:'state'}}).catch(()=>{});
+            await new Promise(resolve=>addEventListener('__v3_review_tick',resolve,{once:true}));
+            await invoke('review_close');
+        })().catch(error=>console.error(error));"# } else {include_str!("ui_review.js")};
+        let _=webview.eval(script);
     }
 }
 pub fn arm_timeout(app:tauri::AppHandle) {
@@ -75,4 +85,21 @@ pub async fn review_snapshot(app:tauri::AppHandle,name:String)->Result<String,St
     }
     #[cfg(not(target_os="macos"))]
     {let _=(app,path);Err("App-owned snapshots are currently available on macOS".into())}
+}
+
+#[tauri::command]
+pub fn review_close(app:tauri::AppHandle)->Result<(),String> {
+    if !closing_test(){return Err("Not in close review mode".into());}
+    let active=app.state::<crate::Running>().0.load(Ordering::SeqCst);
+    if active==0{return Err("Close verification requires an active request".into());}
+    let requested_at_ms=std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_err(|e|e.to_string())?.as_millis();
+    std::fs::write(FOLDER.get().unwrap().join("close-request.json"),serde_json::json!({"active_requests":active,"requested_at_ms":requested_at_ms}).to_string()).map_err(|e|e.to_string())?;
+    app.get_webview_window("main").ok_or("Window unavailable")?.close().map_err(|e|e.to_string())
+}
+pub fn record_close(window:&tauri::Window) {
+    if closing_test() {
+        let value=serde_json::json!({"native_close_event":true,"active_requests":window.state::<crate::Running>().0.load(Ordering::SeqCst),"mouse_moved":false});
+        let _=std::fs::write(FOLDER.get().unwrap().join("native-close-report.json"),value.to_string());
+        FINISHED.store(true,Ordering::SeqCst);
+    }
 }

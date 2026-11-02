@@ -300,7 +300,7 @@ function add(k: string) {
             }}</span
             ><Button
               type="button"
-              variant="ghost"
+              variant="outline"
               size="icon"
               :aria-label="'删除 ' + (value.name || key) + ' ' + index"
               @click="remove(key, index)"
@@ -328,7 +328,7 @@ function add(k: string) {
               "
             /><Button
               type="button"
-              variant="ghost"
+              variant="outline"
               size="icon"
               aria-label="删除此项"
               @click="remove(key, index)"

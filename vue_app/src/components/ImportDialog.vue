@@ -216,7 +216,7 @@ async function save() {
               :label="'文件分类 ' + row.name"
             /><Button
               v-if="!archive"
-              variant="ghost"
+              variant="outline"
               size="icon"
               type="button"
               :aria-label="'移除 ' + row.name"

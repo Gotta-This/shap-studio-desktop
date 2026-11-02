@@ -111,6 +111,7 @@ jobs:
           if ($process.ExitCode -ne 0) { throw 'Installer failed' }
           if (-not (Test-Path "$destination/research-studio-v3.exe")) { throw 'Application executable missing' }
           python scripts/test-desktop-bridge.py "$destination/research-studio-v3.exe"
+          python scripts/test-native-close.py "$destination/research-studio-v3.exe" .v3-data/native-close
           if ($LASTEXITCODE -ne 0) { throw 'Installed engine failed' }
       - name: Verify Mac host, default storage and create archive
         if: runner.os == 'macOS'
@@ -120,6 +121,7 @@ jobs:
           codesign --force --deep --sign - "$app"
           codesign --verify --deep --strict "$app"
           python scripts/test-desktop-bridge.py "$app/Contents/MacOS/research-studio-v3"
+          python scripts/test-native-close.py "$app/Contents/MacOS/research-studio-v3" .v3-data/native-close
           python scripts/test-native-ui.py "$app/Contents/MacOS/research-studio-v3" .v3-data/native-ui
           mkdir -p release
           ditto -c -k --sequesterRsrc --keepParent "$app" 'release/ResearchDataTools-${{ matrix.asset }}.zip'

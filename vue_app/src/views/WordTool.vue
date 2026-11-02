@@ -453,7 +453,7 @@ function sameN(v: any) {
                 v-model="names[i]"
                 :aria-label="'匹配组别 ' + (i + 1)"
               /><Button
-                variant="ghost"
+                variant="outline"
                 :aria-label="'删除组别 ' + (i + 1)"
                 @click="names.splice(i, 1)"
                 >×</Button

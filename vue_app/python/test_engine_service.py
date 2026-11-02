@@ -64,3 +64,22 @@ class EngineServiceTests(unittest.TestCase):
             reply=json.loads(self.process.stdout.readline())['response']
             self.assertTrue(reply['ok'],reply)
             self.assertEqual(reply['result']['root'],str((Path(self.temp.name)/'workspace').resolve()))
+
+    def test_saving_analysis_survives_closed_gui_output_pipes(self):
+        self.process.stdin.close();self.process.wait(timeout=20);self.process.stdout.close()
+        env={**os.environ,'RESEARCH_V3_PROFILE':self.temp.name,'MPLCONFIGDIR':self.temp.name+'/mpl'}
+        self.process=subprocess.Popen([sys.executable,str(Path(__file__).with_name('bridge.py')),'--serve'],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,encoding='utf-8',env=env)
+        config=self.call('tool.shap.defaults')['result']
+        config['data']['n_samples']=40
+        config['explanation']['background_max_samples']=10
+        config['plots']['dpi']=72
+        for key,value in config['plots']['plots'].items():value['enabled']=key=='bar'
+        self.process.stdin.write(json.dumps(dict(id=99,request=dict(method='tool.shap.run',params=dict(config=config))))+'\n');self.process.stdin.flush()
+        # A GUI exit closes all inherited pipes, not just the input stream.
+        self.process.stdout.close();self.process.stderr.close();self.process.stdin.close()
+        self.process.wait(timeout=40)
+        self.assertEqual(self.process.returncode,0)
+        exports=Path(self.temp.name)/'exports'
+        self.assertTrue(list(exports.rglob('clinical_prediction_dataset_with_protective.xlsx')))
+        self.assertTrue(list(exports.rglob('*.png')))
+        self.assertFalse(list(exports.rglob('失败说明.txt')))

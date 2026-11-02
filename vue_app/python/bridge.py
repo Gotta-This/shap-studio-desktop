@@ -279,14 +279,19 @@ def serve():
     """Multiplex independent IPC requests in one warmed embedded interpreter."""
     from concurrent.futures import ThreadPoolExecutor
     import threading
-    output=sys.stdout
-    # Libraries may print from request or background-job threads. Reserve the
-    # original stdout exclusively for framed protocol replies.
-    sys.stdout=sys.stderr
+    directory=profile()  # Finish any legacy copy before concurrent requests.
+    logs=directory/'logs';logs.mkdir(exist_ok=True)
+    diagnostics=(logs/f'engine-{os.getpid()}.log').open('a',encoding='utf-8',buffering=1)
+    # Keep the protocol on its own descriptor. Native and Python diagnostics
+    # remain writable after the GUI exits, so accepted saves/jobs can finish.
+    output=os.fdopen(os.dup(sys.stdout.fileno()),'w',encoding='utf-8',buffering=1)
+    os.dup2(diagnostics.fileno(),1);os.dup2(diagnostics.fileno(),2)
+    sys.stdout=sys.stderr=diagnostics
     os.environ['RESEARCH_V3_ENGINE_SERVICE']='1'
-    profile()  # Finish any legacy copy before concurrent requests arrive.
+    connected=True
     lock=threading.Lock()
     def execute(envelope):
+        nonlocal connected
         try:
             request=envelope['request']
             result=dispatch(request['method'],request.get('params') or {})
@@ -294,12 +299,17 @@ def serve():
             encoded=json.dumps(dict(id=envelope['id'],response=response),ensure_ascii=False,allow_nan=False,default=str)
         except Exception as exc:
             encoded=json.dumps(dict(id=envelope.get('id'),response=dict(ok=False,error=str(exc))),ensure_ascii=False)
-        with lock:output.write(encoded+'\n');output.flush()
+        with lock:
+            if connected:
+                try:output.write(encoded+'\n');output.flush()
+                except (OSError,ValueError):connected=False
     with ThreadPoolExecutor(max_workers=6,thread_name_prefix='v3-ipc') as executor:
         for line in sys.stdin:
             try:envelope=json.loads(line)
             except ValueError:continue
             executor.submit(execute,envelope)
+    try:output.close()
+    except OSError:pass
 
 def main():
     try:

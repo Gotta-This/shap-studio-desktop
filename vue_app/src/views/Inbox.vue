@@ -120,7 +120,7 @@ const rows = computed(() =>
               </td>
               <td>
                 <Button
-                  variant="ghost"
+                  variant="outline"
                   size="sm"
                   @click="
                     selected = [file.id];

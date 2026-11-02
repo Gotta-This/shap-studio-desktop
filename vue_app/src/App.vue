@@ -30,7 +30,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { state, feedback, refresh, notify, desktop } from "@/lib/api";
 import { updates, checkUpdate } from "@/lib/updates";
-import { scientificJobs } from "@/lib/scientific";
 const route = useRoute(),
   router = useRouter(),
   collapsed = ref(false),
@@ -81,22 +80,7 @@ function shortcut(e: KeyboardEvent) {
     searchOpen.value = !searchOpen.value;
   }
 }
-let closeUnlisten: (() => void) | undefined;
-let unlisten: (() => void) | undefined;
 onMounted(async () => {
-  if (desktop) {
-    const { getCurrentWindow } = await import("@tauri-apps/api/window");
-    closeUnlisten = await getCurrentWindow().onCloseRequested((event) => {
-      if (Object.values(scientificJobs).some((job) => job.busy)) {
-        event.preventDefault();
-        notify("科学计算尚未结束，请完成或取消计算后再关闭应用。");
-      }
-    });
-    const { listen } = await import("@tauri-apps/api/event");
-    unlisten = await listen("close-blocked", () =>
-      notify("本机计算尚未结束，请完成后再关闭应用。"),
-    );
-  }
   window.addEventListener("keydown", shortcut);
   try {
     await refresh();
@@ -106,8 +90,6 @@ onMounted(async () => {
   }
 });
 onUnmounted(() => {
-  closeUnlisten?.();
-  unlisten?.();
   window.removeEventListener("keydown", shortcut);
 });
 </script>
@@ -181,7 +163,7 @@ onUnmounted(() => {
     <div class="shell-body">
       <header class="topbar">
         <Button
-          variant="ghost"
+          variant="outline"
           size="icon"
           class="sidebar-toggle"
           aria-controls="main-navigation-sidebar"
@@ -212,7 +194,7 @@ onUnmounted(() => {
       /><span>{{ feedback.text }}</span
       ><Button
         size="icon"
-        variant="ghost"
+        variant="outline"
         aria-label="关闭提示"
         @click="feedback.text = ''"
         ><X :size="15"

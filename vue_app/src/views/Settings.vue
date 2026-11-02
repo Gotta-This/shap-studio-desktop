@@ -75,7 +75,7 @@ async function connect() {
             </div>
             <Button
               size="icon"
-              variant="ghost"
+              variant="outline"
               aria-label="打开当前工作空间"
               @click="openPath(state.root)"
               ><ArrowUpRight :size="17"
@@ -121,7 +121,7 @@ async function connect() {
             </div>
             <Button
               size="icon"
-              variant="ghost"
+              variant="outline"
               aria-label="打开应用数据目录"
               @click="openPath(dataDirectory)"
               ><ArrowUpRight :size="17"

@@ -304,7 +304,7 @@ async function undo(eventId: number) {
                   v-model="pendingOnly"
                 />仅显示有未完成工作的任务</label
               ><Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
                 class="mt-3"
                 @click="
@@ -450,14 +450,14 @@ async function undo(eventId: number) {
               <span>每页 20 项</span
               ><Button
                 size="sm"
-                variant="ghost"
+                variant="outline"
                 :disabled="page <= 1"
                 @click="page--"
                 >上一页</Button
               ><span>{{ page }} / {{ pages }}</span
               ><Button
                 size="sm"
-                variant="ghost"
+                variant="outline"
                 :disabled="page >= pages"
                 @click="page++"
                 >下一页</Button
@@ -491,7 +491,10 @@ async function undo(eventId: number) {
         ><Button @click="importOpen = true"><Plus :size="16" />导入材料</Button
         ><template #meta
           ><div class="task-meta">
-            <Button size="sm" variant="ghost" @click="router.push('/workspace')"
+            <Button
+              size="sm"
+              variant="outline"
+              @click="router.push('/workspace')"
               ><ArrowLeft :size="13" />全部任务</Button
             ><StatusBadge :value="detail.task.status" /><Badge
               v-for="tag in detail.task.tags"
@@ -500,7 +503,7 @@ async function undo(eventId: number) {
               >{{ tag }}</Badge
             ><span>截止日期 {{ dateText(detail.task.due_date) }}</span
             ><Button
-              variant="link"
+              variant="outline"
               size="sm"
               class="ml-auto"
               @click="
@@ -573,7 +576,7 @@ async function undo(eventId: number) {
             ><DropdownMenu
               ><DropdownMenuTrigger as-child
                 ><Button
-                  variant="ghost"
+                  variant="outline"
                   size="icon"
                   :aria-label="'操作 ' + file.original_name"
                   ><MoreHorizontal :size="18" /></Button></DropdownMenuTrigger
@@ -607,7 +610,7 @@ async function undo(eventId: number) {
             <div class="panel-heading">
               <h2>下一步工作</h2>
               <Button
-                variant="ghost"
+                variant="outline"
                 size="icon"
                 aria-label="新增下一步工作"
                 @click="newTodo()"
@@ -620,6 +623,7 @@ async function undo(eventId: number) {
                 :aria-label="'完成 ' + todo.text"
                 @update:model-value="(v) => complete(todo, !!v)"
               /><button
+                class="todo-edit-action"
                 :class="{ 'is-complete': todo.completed }"
                 @click="newTodo(todo)"
               >

@@ -1,6 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 use std::{io::{Read, Write}, path::PathBuf, process::{Command,Stdio}, sync::{Arc,atomic::{AtomicUsize,Ordering}}};
-use tauri::{Manager,Emitter};
+use tauri::Manager;
 mod ui_review;
 mod engine;
 #[derive(Clone,Default)]
@@ -40,7 +40,10 @@ async fn python_request(app:tauri::AppHandle, request:serde_json::Value, running
         let _guard=count;
         let profile=std::env::var_os("RESEARCH_V3_PROFILE").map(PathBuf::from);
         let legacy=if ui_review::enabled() {None} else {app.path().app_data_dir().ok()};
-        engine.request(profile,legacy,request)
+        let result=engine.request(profile,legacy,request);
+        // Isolated close verification emulates a slow IPC response.
+        if ui_review::closing_test() { std::thread::sleep(std::time::Duration::from_secs(3)); }
+        result
     }).await.map_err(|e|e.to_string())?
 }
 fn main() {
@@ -77,7 +80,12 @@ fn main() {
     tauri::Builder::default().manage(Running::default()).manage(Arc::new(engine::Engine::default())).plugin(tauri_plugin_dialog::init()).plugin(tauri_plugin_opener::init())
       .setup(|app| { let warm_engine=app.state::<Arc<engine::Engine>>().inner().clone(); let warm_profile=std::env::var_os("RESEARCH_V3_PROFILE").map(PathBuf::from); let warm_legacy=if ui_review::enabled(){None}else{app.path().app_data_dir().ok()}; std::thread::spawn(move ||{let _=warm_engine.request(warm_profile,warm_legacy,serde_json::json!({"method":"runtime.info"}));}); if ui_review::enabled() { #[cfg(target_os="macos")] app.set_activation_policy(tauri::ActivationPolicy::Accessory); ui_review::arm_timeout(app.handle().clone()); } if std::env::var("RESEARCH_V3_DEBUG").as_deref()==Ok("1") { if let Some(window)=app.get_webview_window("main") { eprintln!("V3 URL: {:?}",window.url()); #[cfg(debug_assertions)] window.open_devtools(); } } Ok(()) })
       .on_page_load(|webview,payload| { if payload.event()==tauri::webview::PageLoadEvent::Finished { ui_review::install(webview); } })
-      .invoke_handler(tauri::generate_handler![python_request,ui_review::review_fixture,ui_review::review_resize,ui_review::review_snapshot,ui_review::review_finish])
-      .on_window_event(|window,event| { if let tauri::WindowEvent::CloseRequested{api,..}=event { if window.state::<Running>().0.load(Ordering::SeqCst)>0 { api.prevent_close();let _=window.emit("close-blocked",()); } } })
+      .invoke_handler(tauri::generate_handler![python_request,ui_review::review_fixture,ui_review::review_resize,ui_review::review_snapshot,ui_review::review_finish,ui_review::review_close])
+      .on_window_event(|window,event| {
+          if let tauri::WindowEvent::CloseRequested{..}=event {
+              ui_review::record_close(window);
+              window.app_handle().exit(0);
+          }
+      })
       .run(context).expect("启动科研数据工具集失败");
 }

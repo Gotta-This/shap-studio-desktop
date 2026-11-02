@@ -77,10 +77,14 @@ const continuous = computed(
         );
   }),
   allBusy = computed(() => job.busy || previewJob.busy);
-watch(images, (items: any[]) => {
-  if (!items.some((item) => item.name === image.value))
-    image.value = items[0]?.name || "";
-}, { immediate: true });
+watch(
+  images,
+  (items: any[]) => {
+    if (!items.some((item) => item.name === image.value))
+      image.value = items[0]?.name || "";
+  },
+  { immediate: true },
+);
 const mainStyleKeys = [
     "font_size",
     "title_size",
@@ -443,9 +447,9 @@ async function copyTable() {
                   />
                 </td>
                 <td class="row-actions">
-                  <Button variant="ghost" @click="move(f, -1)">↑</Button
-                  ><Button variant="ghost" @click="move(f, 1)">↓</Button
-                  ><Button variant="ghost" @click="remove(f)">删除</Button>
+                  <Button variant="outline" @click="move(f, -1)">↑</Button
+                  ><Button variant="outline" @click="move(f, 1)">↓</Button
+                  ><Button variant="outline" @click="remove(f)">删除</Button>
                 </td>
               </tr>
             </tbody>
@@ -535,9 +539,9 @@ async function copyTable() {
                   />
                 </td>
                 <td class="row-actions">
-                  <Button variant="ghost" @click="move(f, -1)">↑</Button
-                  ><Button variant="ghost" @click="move(f, 1)">↓</Button
-                  ><Button variant="ghost" @click="remove(f)">删除</Button>
+                  <Button variant="outline" @click="move(f, -1)">↑</Button
+                  ><Button variant="outline" @click="move(f, 1)">↓</Button
+                  ><Button variant="outline" @click="remove(f)">删除</Button>
                 </td>
               </tr>
             </tbody>

@@ -398,7 +398,7 @@ const activeCell = computed(
                 </td>
                 <td>
                   <Button
-                    variant="ghost"
+                    variant="outline"
                     @click="edit((s) => s.variables.splice(vi, 1))"
                     >移除变量</Button
                   >

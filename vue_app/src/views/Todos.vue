@@ -118,7 +118,7 @@ async function undo() {
     </div>
     <div v-if="deleted" class="undo-banner">
       <span>已删除「{{ deleted.text }}」</span
-      ><Button size="sm" variant="ghost" @click="undo"
+      ><Button size="sm" variant="outline" @click="undo"
         ><RotateCcw :size="13" />撤销</Button
       >
     </div>
@@ -146,7 +146,10 @@ async function undo() {
               </td>
               <td>
                 <button
-                  :class="['text-left', { 'is-complete': todo.completed }]"
+                  :class="[
+                    'text-left todo-title-action',
+                    { 'is-complete': todo.completed },
+                  ]"
                   @click="edit(todo)"
                 >
                   <strong>{{ todo.text }}</strong>
@@ -200,7 +203,7 @@ async function undo() {
                 <DropdownMenu
                   ><DropdownMenuTrigger as-child
                     ><Button
-                      variant="ghost"
+                      variant="outline"
                       size="icon"
                       :aria-label="'待办操作 ' + todo.text"
                       ><MoreHorizontal

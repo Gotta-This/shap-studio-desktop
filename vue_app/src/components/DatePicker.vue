@@ -87,19 +87,23 @@ function choose(value: unknown) {
       <div class="calendar-footer">
         <Button
           size="sm"
-          variant="ghost"
+          variant="outline"
           @click="commit(calendarToday(getLocalTimeZone()).toString())"
           >今天</Button
         ><Button
           size="sm"
-          variant="ghost"
+          variant="outline"
           @click="
             commit(
               calendarToday(getLocalTimeZone()).add({ days: 1 }).toString(),
             )
           "
           >明天</Button
-        ><Button size="sm" variant="ghost" class="ml-auto" @click="commit(null)"
+        ><Button
+          size="sm"
+          variant="outline"
+          class="ml-auto"
+          @click="commit(null)"
           ><X :size="13" />清除</Button
         >
       </div></PopoverContent

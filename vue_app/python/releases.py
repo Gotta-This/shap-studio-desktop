@@ -9,7 +9,7 @@ from pathlib import Path
 from urllib.request import Request, urlopen
 import certifi
 
-VERSION = "3.0.4"
+VERSION = "3.0.5"
 REPO = "Gotta-This/shap-studio-desktop"
 PREFIX = f"https://github.com/{REPO}/releases/download/"
 

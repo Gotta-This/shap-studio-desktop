@@ -47,7 +47,7 @@ function add() {
             </td>
             <td>
               <Button
-                variant="ghost"
+                variant="outline"
                 size="icon"
                 :aria-label="'删除第 ' + (i + 1) + ' 行'"
                 @click="
