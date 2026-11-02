@@ -3,14 +3,8 @@ import { computed, onMounted, onUnmounted, ref } from "vue";
 import appIcon from "../src-tauri/icons/icon.png";
 import { useRoute, useRouter } from "vue-router";
 import {
-  Grid2X2,
   Folder,
-  Check,
-  Inbox,
-  SlidersHorizontal,
-  ChartNoAxesCombined,
-  FileSpreadsheet,
-  Settings2,
+  Settings,
   Search,
   PanelLeftClose,
   PanelLeftOpen,
@@ -37,27 +31,15 @@ import {
   dismissFeedback,
 } from "@/lib/api";
 import { updates, checkUpdate } from "@/lib/updates";
+import {
+  mainNavigation as main,
+  scientificTools as tools,
+} from "@/lib/navigation";
 const route = useRoute(),
   router = useRouter(),
   collapsed = ref(false),
   searchOpen = ref(false),
   query = ref("");
-const main = [
-  { path: "/", name: "工作台", icon: Grid2X2 },
-  { path: "/workspace", name: "稿件工作空间", icon: Folder },
-  { path: "/todos", name: "待办事项", icon: Check },
-  { path: "/inbox", name: "未分类收件箱", icon: Inbox },
-];
-const tools = [
-  { path: "/tools/category", name: "自定义类别数列", icon: SlidersHorizontal },
-  {
-    path: "/tools/numeric",
-    name: "均数 / 标准差模拟",
-    icon: ChartNoAxesCombined,
-  },
-  { path: "/tools/word", name: "Word 转 Excel", icon: FileSpreadsheet },
-  { path: "/tools/shap", name: "模拟数据生图", icon: ChartNoAxesCombined },
-];
 const pending = computed(() => state.todos.filter((t) => !t.completed).length);
 const activeName = computed(
   () =>
@@ -156,7 +138,9 @@ onUnmounted(() => {
         ><RouterLink
           to="/settings"
           :class="['nav-item', { active: active('/settings') }]"
-          ><Settings2 :size="17" /><span>设置</span></RouterLink
+          ><Settings :size="17" :stroke-width="1.7" /><span
+            >设置</span
+          ></RouterLink
         >
         <div class="version">
           <span>V{{ updates.current }}</span

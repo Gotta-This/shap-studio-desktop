@@ -1,6 +1,6 @@
 # 科研数据工具集
 
-当前主线为 **Vue 3 + shadcn-vue + Tauri 2 + Python** 的 V3 版本，提供自定义类别数列、均数/标准差模拟数据、Word 转 Excel、模拟数据生图，以及稿件工作空间和待办。
+当前主线为 **Vue 3 + shadcn-vue + Tauri 2 + Python** 的 V3 版本，提供自定义类别数列、均数/标准差模拟数据、Word 转 Excel、模拟数据生图、临床二分类预测模型分析，以及稿件工作空间和待办。
 
 ## 分支与目录
 
@@ -20,8 +20,8 @@ git branch -vv
 
 本地 `master` 跟踪 `origin/master`。需要查看旧版时可读取 `origin/master-qt`，或另外创建工作树；不在当前工作区覆盖未提交的文件。
 
-运行、依赖安装、四个工具和用户数据位置见 [Vue V3 使用说明](vue_app/README.md)。当前功能验收记录见 [V3 当前验收](vue_app/QA_CURRENT_VUE.md)。
+运行、依赖安装、五个工具和用户数据位置见 [Vue V3 使用说明](vue_app/README.md)。当前功能验收记录见 [V3 当前验收](vue_app/QA_CURRENT_VUE.md)。
 
 ## 验证与发布
 
-推送源码只运行验证，不生成安装包或发布 Release。用户完成本地试用并确认后，才在 `master` 手动运行 `Build test and release Vue V3`，通过各平台检查后发布。历史 Release 保留，已有版本不可覆盖。
+普通源码推送只运行验证。用户完成本地试用并确认发布后，在 `master` 手动运行 `Build test and release Vue V3`，或使用以 `release: v` 开头的明确发布提交触发；通过各平台检查后才发布安装包。历史 Release 保留，已有版本不可覆盖。

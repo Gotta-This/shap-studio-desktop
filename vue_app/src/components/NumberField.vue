@@ -3,6 +3,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 defineProps<{
   label: string;
+  ariaLabel?: string;
   disabled?: boolean;
   modelValue?: number | null;
   integer?: boolean;
@@ -17,7 +18,7 @@ const emit = defineEmits<{ "update:modelValue": [number | null] }>();
     <Label>{{ label }}</Label
     ><Input
       :model-value="modelValue ?? ''"
-      :aria-label="label"
+      :aria-label="ariaLabel || label"
       type="number"
       :disabled="disabled"
       :step="integer ? 1 : 'any'"

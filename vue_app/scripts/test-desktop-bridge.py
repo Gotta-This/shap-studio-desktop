@@ -82,3 +82,7 @@ with tempfile.TemporaryDirectory(prefix='v3-desktop-bridge-') as tmp:
         print('Persistent desktop engine: crash recovery passed',flush=True)
     finally:
         service.stdin.close();service.wait(timeout=60);service.stdout.close()
+
+    import runpy
+    smoke=runpy.run_path(str(Path(__file__).with_name('prediction-smoke.py')))
+    smoke['verify_prediction'](call,job,tmp)

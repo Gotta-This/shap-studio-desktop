@@ -8,9 +8,12 @@ import Todos from "./views/Todos.vue";
 import Inbox from "./views/Inbox.vue";
 import WordTool from "./views/WordTool.vue";
 import ShapTool from "./views/ShapTool.vue";
+import PredictionTool from "./views/PredictionTool.vue";
 import Tools from "./views/Tools.vue";
 import Settings from "./views/Settings.vue";
 import "./style.css";
+import { initializeDisplay } from "./lib/display";
+void initializeDisplay();
 const router = createRouter({
   history: createWebHashHistory(),
   routes: [
@@ -20,6 +23,7 @@ const router = createRouter({
     { path: "/inbox", component: Inbox },
     { path: "/tools/word", component: WordTool },
     { path: "/tools/shap", component: ShapTool },
+    { path: "/tools/prediction", component: PredictionTool },
     { path: "/tools/:tool", component: Tools },
     { path: "/settings", component: Settings },
   ],

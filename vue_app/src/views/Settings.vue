@@ -7,6 +7,7 @@ import {
   installUpdate,
 } from "@/lib/updates";
 import {
+  Monitor,
   FolderOpen,
   ShieldCheck,
   RefreshCw,
@@ -20,6 +21,8 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import PageHeading from "@/components/PageHeading.vue";
 import { state, api, refresh, notify, desktop, openPath } from "@/lib/api";
+import SelectField from "@/components/SelectField.vue";
+import { display, scaleOptions, applyScale } from "@/lib/display";
 const path = ref(""),
   busy = ref(false),
   error = ref("");
@@ -55,6 +58,44 @@ async function connect() {
 <template>
   <section class="settings-page">
     <PageHeading title="设置与关于" subtitle="本地存储、工作空间与版本信息。" />
+    <div class="panel display-settings">
+      <div class="settings-heading">
+        <div class="setting-icon"><Monitor :size="21" /></div>
+        <div>
+          <h2>界面显示</h2>
+          <p>调整文字、按钮和页面的整体大小。</p>
+        </div>
+      </div>
+      <div class="settings-content">
+        <div class="display-scale-controls">
+          <div class="form-field">
+            <Label>界面缩放</Label>
+            <SelectField
+              :model-value="String(display.scale)"
+              :options="
+                scaleOptions.map((value) => ({
+                  value: String(value),
+                  label: value + '%' + (value === 100 ? '（默认）' : ''),
+                }))
+              "
+              label="界面缩放"
+              :disabled="display.applying"
+              @update:model-value="applyScale(Number($event))"
+            />
+          </div>
+          <Button
+            variant="outline"
+            :disabled="display.applying || display.scale === 100"
+            @click="applyScale(100)"
+            >恢复 100%</Button
+          >
+        </div>
+        <p class="muted">
+          立即生效并自动保存到本机。界面偏大时可选择 80% 或
+          90%；此设置不影响导出图表的尺寸和 DPI。
+        </p>
+      </div>
+    </div>
     <div class="settings-grid">
       <div class="panel">
         <div class="settings-heading">

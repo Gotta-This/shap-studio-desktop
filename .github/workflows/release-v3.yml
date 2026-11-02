@@ -17,12 +17,14 @@ concurrency:
   cancel-in-progress: true
 jobs:
   preview-only:
-    if: github.event_name == 'push'
+    if: >-
+      github.event_name == 'push' && !startsWith(github.event.head_commit.message, 'release: v')
     runs-on: ubuntu-24.04
     steps:
-      - run: echo 'Preview changes only. Release requires manual dispatch after user testing.'
+      - run: echo 'Preview changes only. Release requires manual dispatch or an explicit release commit after user testing.'
   verify:
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master'
+    if: >-
+      github.ref == 'refs/heads/master' && (github.event_name == 'workflow_dispatch' || startsWith(github.event.head_commit.message, 'release: v'))
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     defaults:
@@ -42,6 +44,7 @@ jobs:
           python-version: "3.12"
       - run: npm ci
       - run: npm run build
+      - run: sudo apt-get update && sudo apt-get install -y fonts-noto-cjk
       - run: |
           python -m venv .venv
           .venv/bin/python -m pip install -r requirements.txt
@@ -113,7 +116,7 @@ jobs:
           if [ "$RUNNER_OS" = Windows ]; then suffix='.exe'; fi
           python scripts/test-packaged-engine.py "src-tauri/binaries/research-python-${{ matrix.target }}$suffix"
       - run: npm run tauri -- build --features custom-protocol --target ${{ matrix.target }} --bundles ${{ matrix.bundle }}
-      - name: Verify installed Windows host, default storage and all four tools
+      - name: Verify installed Windows host, default storage and all five tools
         if: runner.os == 'Windows'
         shell: pwsh
         run: |

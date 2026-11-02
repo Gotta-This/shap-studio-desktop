@@ -9,8 +9,8 @@ body {
   overflow: hidden;
 }
 #app {
-  height: 100vh;
-  height: 100dvh;
+  height: calc(100vh / var(--ui-scale, 1));
+  height: calc(100dvh / var(--ui-scale, 1));
   overflow-y: auto;
   scrollbar-gutter: stable;
 }
@@ -97,7 +97,7 @@ body {
 }
 /* V3 Penpot tokens: 224 px navigation, 36 px controls, quiet mint surfaces. */
 .app-shell {
-  min-height: 100vh;
+  min-height: calc(100vh / var(--ui-scale, 1));
   --nav-width: 224px;
 }
 .sidebar {
@@ -110,6 +110,14 @@ body {
   display: flex;
   flex-direction: column;
   z-index: 30;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior-y: contain;
+  scrollbar-width: thin;
+  height: calc(100dvh / var(--ui-scale, 1));
+}
+.sidebar > * {
+  flex-shrink: 0;
 }
 .brand {
   display: flex;
@@ -2742,4 +2750,38 @@ a.subtle-link,
   margin-top: 4px;
   color: var(--muted-foreground);
   font-size: 11px;
+}
+
+.display-settings {
+  margin-bottom: 20px;
+}
+.display-scale-controls {
+  display: flex;
+  align-items: end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.display-scale-controls .form-field {
+  width: 220px;
+  max-width: 100%;
+}
+@media (max-height: 720px) {
+  .sidebar {
+    padding-top: 16px;
+  }
+  .sidebar-bottom {
+    padding-top: 16px;
+  }
+  .tools-label {
+    margin-top: 18px;
+  }
+}
+/* Floating UI reports physical CSS coordinates. Cancel root zoom on its
+   positioning wrapper, then scale the content to keep popups anchored. */
+[data-reka-popper-content-wrapper] {
+  zoom: calc(1 / var(--ui-scale, 1));
+}
+[data-reka-popper-content-wrapper] > [data-slot] {
+  zoom: var(--ui-scale, 1);
+  max-height: calc(var(--reka-popper-available-height) / var(--ui-scale, 1));
 }

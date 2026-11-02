@@ -18,13 +18,19 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import DocumentDrop from "@/components/DocumentDrop.vue";
+import {
+  documentError,
+  documentPayload,
+  type ImportDocument,
+} from "@/lib/documentImport";
 import PageHeading from "@/components/PageHeading.vue";
 import SelectField from "@/components/SelectField.vue";
 import NumberField from "@/components/NumberField.vue";
 import RowsEditor from "@/components/RowsEditor.vue";
 import FieldRuleDialog from "@/components/FieldRuleDialog.vue";
 import ProseMatching from "@/components/ProseMatching.vue";
-import { api, upload, download, notify } from "@/lib/api";
+import { api, download, notify } from "@/lib/api";
 import {
   clone,
   fieldTypes,
@@ -76,7 +82,7 @@ const tabs = [
   auditing = ref(false),
   file = ref<HTMLInputElement>(),
   configFile = ref<HTMLInputElement>(),
-  confirmImport = ref<File | null>(null),
+  confirmImport = ref<ImportDocument | null>(null),
   job = jobFor("word");
 const importDefaults = () => ({
   sizes: false,
@@ -137,8 +143,13 @@ async function guard(fn: () => Promise<void>) {
     busy.value = false;
   }
 }
-function requestImport(f?: File) {
+function requestImport(f?: ImportDocument) {
   if (!f) return;
+  const problem = documentError([f], ["doc", "docx"]);
+  if (problem) {
+    notify(problem, true);
+    return;
+  }
   if (busy.value || job.busy) {
     notify("请等待当前任务完成后再导入。", true);
     return;
@@ -146,11 +157,11 @@ function requestImport(f?: File) {
   if (session.value || job.result) confirmImport.value = f;
   else read(f);
 }
-async function read(f: File) {
+async function read(f: ImportDocument) {
   confirmImport.value = null;
   await guard(async () => {
     const r = await api("tool.word.scan", {
-      uploads: await upload([f]),
+      ...(await documentPayload(f)),
       decimal_mode: options.decimal_mode,
     });
     groupsConfirmed.value = false;
@@ -520,14 +531,17 @@ function sameN(v: any) {
 }
 </script>
 <template>
-  <div
+  <DocumentDrop
     class="scientific-page word-page"
-    @dragover.prevent
-    @drop.prevent="(e) => requestImport(e.dataTransfer?.files[0])"
+    route="/tools/word"
+    :extensions="['doc', 'docx']"
+    label="Word 文档"
+    :disabled="busy || job.busy || !!confirmImport"
+    @import="requestImport"
   >
     <PageHeading
       title="Word 一键生成 Excel"
-      subtitle="核对原文与生成规则，导出带有来源记录的模拟病例表"
+      subtitle="核对原文与生成规则，导出带有来源记录的模拟病例表 · 可拖入 DOC / DOCX"
       ><Button variant="outline" @click="tab = 2">正文转竖表</Button
       ><Button
         variant="outline"
@@ -1186,5 +1200,5 @@ function sameN(v: any) {
       @close="editing = null"
       @save="saveField"
     />
-  </div>
+  </DocumentDrop>
 </template>

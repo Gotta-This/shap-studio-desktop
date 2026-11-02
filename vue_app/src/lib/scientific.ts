@@ -25,7 +25,8 @@ export function jobFor(kind: string) {
   return scientificJobs[kind];
 }
 export async function startJob(
-  kind: "word" | "shap" | "numeric" | "category",
+  kind:
+    "word" | "shap" | "numeric" | "category" | "prediction" | "prediction_plot",
   params: any,
   slot: string = kind,
 ) {

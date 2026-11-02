@@ -84,3 +84,7 @@ with tempfile.TemporaryDirectory(prefix='dbq-v3-packaged-') as tmp:
     redraw = job('shap', {'config': config, 'previous': result['id']})
     assert redraw['images'] and redraw['metrics']['auc'] == result['metrics']['auc']
     print('Frozen full SHAP analysis, real image and model reuse: OK', flush=True)
+
+    import runpy
+    smoke=runpy.run_path(str(Path(__file__).with_name('prediction-smoke.py')))
+    smoke['verify_prediction'](call,job,tmp)

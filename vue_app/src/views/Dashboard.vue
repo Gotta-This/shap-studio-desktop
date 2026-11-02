@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, onMounted, onUnmounted, onActivated } from "vue";
 import { homeMessage } from "@/lib/home";
+import { scientificTools as tools } from "@/lib/navigation";
 import { useRouter } from "vue-router";
 import {
   ArrowRight,
@@ -8,9 +9,6 @@ import {
   Check,
   Inbox,
   Plus,
-  SlidersHorizontal,
-  ChartNoAxesCombined,
-  FileSpreadsheet,
   ArrowUpRight,
 } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
@@ -28,32 +26,6 @@ const router = useRouter(),
       )
       .slice(0, 5),
   );
-const tools = [
-  {
-    path: "category",
-    name: "自定义类别数列",
-    desc: "按类别与数量生成随机数列",
-    icon: SlidersHorizontal,
-  },
-  {
-    path: "numeric",
-    name: "均数 / 标准差模拟",
-    desc: "从汇总统计生成模拟数值",
-    icon: ChartNoAxesCombined,
-  },
-  {
-    path: "word",
-    name: "Word 转 Excel",
-    desc: "导入表格，核对指标与分组",
-    icon: FileSpreadsheet,
-  },
-  {
-    path: "shap",
-    name: "模拟数据生图",
-    desc: "数据、模型与 SHAP 图表",
-    icon: ChartNoAxesCombined,
-  },
-];
 const clock = ref(new Date());
 const greeting = computed(() => homeMessage(clock.value));
 let clockTimer: ReturnType<typeof setInterval> | undefined;
@@ -176,11 +148,10 @@ const dayLabel = computed(() =>
       <span>独立参数，随时切换</span>
     </div>
     <div class="tool-cards">
-      <RouterLink
-        v-for="tool in tools"
-        :key="tool.path"
-        :to="'/tools/' + tool.path"
-        ><div class="tool-icon"><component :is="tool.icon" :size="21" /></div>
+      <RouterLink v-for="tool in tools" :key="tool.path" :to="tool.path"
+        ><div class="tool-icon">
+          <component :is="tool.icon" :size="21" :stroke-width="1.7" />
+        </div>
         <ArrowUpRight class="tool-arrow" :size="16" />
         <h3>{{ tool.name }}</h3>
         <p>{{ tool.desc }}</p></RouterLink

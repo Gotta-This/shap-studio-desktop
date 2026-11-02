@@ -10,6 +10,7 @@ for values in [['项目','对照组(n=10)','中药组(n=12)'],['评分','50±5',
  row=ET.SubElement(table,w+'tr')
  for text in values:ET.SubElement(ET.SubElement(ET.SubElement(ET.SubElement(row,w+'tc'),w+'p'),w+'r'),w+'t').text=text
 with ZipFile(folder/'fixture.docx','w') as archive:archive.writestr('word/document.xml',ET.tostring(node))
+(folder/'fixture.csv').write_text('编号,分组,年龄\n'+'\n'.join(f'P{i},{i%2},{30+i}' for i in range(40)),encoding='utf-8-sig')
 report=folder/'native-ui-report.json';report.unlink(missing_ok=True)
 with (folder/'app.log').open('w') as log:
  result=subprocess.run([str(host),'--ui-review',str(folder)],stdout=log,stderr=log,env={**os.environ,'PYTHONUTF8':'1','RESEARCH_V3_DEBUG':'0'},timeout=500)

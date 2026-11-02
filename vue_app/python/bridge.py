@@ -247,6 +247,24 @@ def dispatch(method, p):
     if method=='tool.word.prose.validate':
         from clinical_studio.prose_table_engine import validate_study
         return validate_study(p['study'])
+    if method=='tool.prediction.plot.defaults':
+        from prediction_plots import defaults,validated
+        path=profile()/'prediction-style.json'
+        return dict(config=validated(json.loads(path.read_text(encoding='utf8'))) if path.exists() else defaults(),factory=defaults())
+    if method in ('tool.prediction.plot.validate','tool.prediction.plot.save'):
+        from prediction_plots import validated
+        config=validated(p['config'])
+        if method.endswith('.save'):
+            from jobs import write
+            write(profile()/'prediction-style.json',config)
+        return config
+    if method=='tool.prediction.inspect':
+        from prediction import inspect
+        if p.get('dataset'):return inspect(profile(),token=p['dataset'],sheet=p.get('sheet'))
+        with sources(p) as paths:return inspect(profile(),paths=paths,sheet=p.get('sheet'))
+    if method=='tool.prediction.export':
+        from prediction import export
+        return export(profile(),p)
     if method=='tool.shap.table':
         from analysis_workflow import table
         return table(profile(),p)

@@ -18,7 +18,7 @@ def location(profile,jid):
     return path
 
 def start(profile,p):
-    if p['kind'] not in ('word','shap','numeric','category'):raise ValueError('计算任务类型无效。')
+    if p['kind'] not in ('word','shap','numeric','category','prediction','prediction_plot'):raise ValueError('计算任务类型无效。')
     jid=uuid.uuid4().hex;path=profile/'jobs'/jid;path.mkdir(parents=True)
     write(path/'request.json',p);write(path/'status.json',dict(id=jid,status='running',message='正在准备本机计算…'))
     if os.environ.get('RESEARCH_V3_ENGINE_SERVICE')=='1':
@@ -60,6 +60,14 @@ def worker(profile,jid):
             params=numeric_parameters(p['params']) if p['kind']=='numeric' else p['params'];progress('正在生成模拟数值…')
             values=numeric_numbers(**params,cancelled=lambda:(path/'cancel').exists()) if p['kind']=='numeric' else None
             result=csv_result(values,params.get('digits')) if p['kind']=='numeric' else dispatch('tool.category',params);result['params']=params
+        elif p['kind']=='prediction_plot':
+            from prediction_plots import redraw
+            with _SHAP_LOCK:
+                result=redraw(profile,p['params'],progress)
+        elif p['kind']=='prediction':
+            from prediction import run
+            with _SHAP_LOCK:
+                result=run(profile,p['params'],progress)
         else:
             from analysis_workflow import run
             # Matplotlib has process-global style state. Keep independent plot
