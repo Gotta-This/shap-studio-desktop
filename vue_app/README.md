@@ -1,6 +1,6 @@
 # 科研数据工具集 · Vue V3
 
-当前开发主线为 `master`，早期开发分支 `codex/vue3-v3-ui` 保留。Qt v1.1.2 源码位于 `master-qt`。V3 使用 Vue 3、TypeScript、shadcn-vue / Reka UI、Tailwind CSS 4 和 Tauri 2，继续复用 Python 科学计算模块，安装包使用独立发布流程。
+当前开发主线为 `master`，Qt v1.1.2 源码位于 `master-qt`，原有临时开发分支已迁移到主线。V3 使用 Vue 3、TypeScript、shadcn-vue / Reka UI、Tailwind CSS 4 和 Tauri 2，继续复用 Python 科学计算模块，安装包使用独立发布流程。
 
 ## 运行
 

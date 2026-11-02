@@ -2,7 +2,7 @@ name: Vue V3 branch verification
 on:
   workflow_dispatch:
   push:
-    branches: [master, codex/vue3-v3-ui]
+    branches: [master]
     paths:
       [
         "vue_app/**",

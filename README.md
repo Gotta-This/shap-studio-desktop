@@ -6,7 +6,7 @@
 
 - [`master`](https://github.com/Gotta-This/shap-studio-desktop/tree/master)：Vue V3 开发主线，应用入口为 `vue_app/`。
 - [`master-qt`](https://github.com/Gotta-This/shap-studio-desktop/tree/master-qt)：保留 Qt v1.1.2 源码及历史，用于查阅和维护旧版本。
-- `main` 和 `codex/vue3-v3-ui` 保留为原有分支，不删除旧历史。
+- 原 `main` 和 `codex/vue3-v3-ui` 分支在迁移后删除；其提交历史仍由上述两个分支保留。
 
 V3 仍复用 `desktop_app/clinical_studio/` 中的 Python 科学计算、Word 解析和数据存储模块；主线保留这个目录是为了让 V3 自包含运行。Qt 旧应用以 `master-qt` 为准。
 

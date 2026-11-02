@@ -1,0 +1,48 @@
+name: Retire migrated source branches
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths: [.github/workflows/retire-migrated-branches.yml]
+permissions:
+  contents: read
+jobs:
+  retire:
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+      - name: Verify preserved commits and delete only the migrated refs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(gh api "repos/$GITHUB_REPOSITORY" --jq .default_branch)" = master
+          test "$(git rev-parse origin/master)" = "$GITHUB_SHA"
+          qt=4629f0458e6ccdba53c6f7cd26bcd16f24ca7be7
+          vue=f31f6274d21012ca3738d4bc8acbd09bb51f0632
+          test "$(git rev-parse origin/master-qt)" = "$qt"
+          git merge-base --is-ancestor "$vue" "$GITHUB_SHA"
+          deletions=()
+          leases=()
+          for branch in main codex/vue3-v3-ui; do
+            actual=$(git ls-remote --heads origin "refs/heads/$branch" | cut -f1)
+            if [ -z "$actual" ]; then
+              echo "$branch is already absent."
+              continue
+            fi
+            expected=$qt
+            if [ "$branch" = codex/vue3-v3-ui ]; then expected=$vue; fi
+            test "$actual" = "$expected"
+            leases+=("--force-with-lease=refs/heads/$branch:$expected")
+            deletions+=(":refs/heads/$branch")
+          done
+          if [ "${#deletions[@]}" -gt 0 ]; then
+            git push --atomic "${leases[@]}" origin "${deletions[@]}"
+          fi
