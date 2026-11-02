@@ -1,6 +1,6 @@
 """Test the shipped Rust host and its real engine path without creating windows."""
 from pathlib import Path
-import json,os,subprocess,sys,tempfile,time
+import json,os,subprocess,sys,tempfile,time,signal
 from zipfile import ZipFile
 from xml.etree import ElementTree as ET
 
@@ -71,5 +71,14 @@ with tempfile.TemporaryDirectory(prefix='v3-desktop-bridge-') as tmp:
         assert completed['status']=='done' and len(completed['result']['values'])==70,completed
         assert warm_call('runtime.info')['engine_pid']==pid
         print(f'Persistent desktop engine: same process, warm IPC {warm:.3f}s (cold {cold:.3f}s), background numeric passed',flush=True)
+        os.kill(pid,signal.SIGTERM)
+        recovered=None
+        for _ in range(3):
+            time.sleep(.1)
+            try:recovered=warm_call('runtime.info')['engine_pid'];break
+            except AssertionError:pass
+        assert recovered and recovered!=pid,'Engine did not recover after termination'
+        assert warm_call('runtime.info')['engine_pid']==recovered
+        print('Persistent desktop engine: crash recovery passed',flush=True)
     finally:
         service.stdin.close();service.wait(timeout=60);service.stdout.close()

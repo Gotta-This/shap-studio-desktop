@@ -1,11 +1,11 @@
 //! Keep one embedded Python runtime per app instead of extracting it per IPC.
-use std::{collections::HashMap, io::{BufRead, BufReader, Write}, path::PathBuf, process::{Child, ChildStdin, Command, Stdio}, sync::{mpsc, Arc, Mutex}, thread};
+use std::{collections::HashMap, io::{BufRead, BufReader, Write}, path::PathBuf, process::{Child, ChildStdin, Command, Stdio}, sync::{mpsc, Arc, Mutex, atomic::{AtomicBool, Ordering}}, thread};
 use serde_json::{json, Value};
 type Reply = Result<Value, String>;
 type Pending = Arc<Mutex<HashMap<u64, mpsc::Sender<Reply>>>>;
 #[derive(Default)]
 pub struct Engine(Mutex<Option<Session>>);
-struct Session { child: Option<Child>, input: Option<ChildStdin>, pending: Pending, next: u64 }
+struct Session { child: Option<Child>, input: Option<ChildStdin>, pending: Pending, next: u64, alive: Arc<AtomicBool> }
 impl Drop for Session {
     fn drop(&mut self) {
         // EOF asks Python to finish accepted requests/jobs, then clean up its
@@ -19,12 +19,16 @@ impl Engine {
         let (send, receive) = mpsc::channel();
         {
             let mut engine = self.0.lock().map_err(|_| "Python 引擎锁不可用")?;
-            let dead = engine.as_mut().map(|s| s.child.as_mut().unwrap().try_wait().map(|s| s.is_some()).unwrap_or(true)).unwrap_or(true);
+            let dead = engine.as_mut().map(|s| !s.alive.load(Ordering::SeqCst) || s.child.as_mut().unwrap().try_wait().map(|s| s.is_some()).unwrap_or(true)).unwrap_or(true);
             if dead { *engine = Some(Session::start(profile, legacy)?); }
             let session = engine.as_mut().unwrap();
             session.next += 1;
             let id = session.next;
-            session.pending.lock().map_err(|_| "Python 请求队列不可用")?.insert(id, send);
+            {
+                let mut pending=session.pending.lock().map_err(|_| "Python 请求队列不可用")?;
+                if !session.alive.load(Ordering::SeqCst) { return Err("Python 引擎连接已关闭，请重试。".into()); }
+                pending.insert(id, send);
+            }
             let encoded = json!({"id":id,"request":request}).to_string() + "\n";
             if let Err(error) = session.input.as_mut().unwrap().write_all(encoded.as_bytes()) {
                 session.pending.lock().unwrap().remove(&id);
@@ -56,6 +60,8 @@ impl Session {
         if let Some(mut error) = child.stderr.take() { thread::spawn(move || { let _ = std::io::copy(&mut error, &mut std::io::sink()); }); }
         let pending: Pending = Arc::new(Mutex::new(HashMap::new()));
         let replies = pending.clone();
+        let alive=Arc::new(AtomicBool::new(true));
+        let connected=alive.clone();
         thread::spawn(move || {
             for line in BufReader::new(output).lines() {
                 let message = match line.ok().and_then(|line|serde_json::from_str::<Value>(&line).ok()) { Some(value)=>value, None=>break };
@@ -63,8 +69,10 @@ impl Session {
                     if let Some(send) = replies.lock().unwrap().remove(&id) { let _ = send.send(Ok(message["response"].clone())); }
                 }
             }
-            for (_,send) in replies.lock().unwrap().drain() { let _ = send.send(Err("Python 引擎意外退出，请重试。".into())); }
+            let mut pending=replies.lock().unwrap();
+            connected.store(false,Ordering::SeqCst);
+            for (_,send) in pending.drain() { let _ = send.send(Err("Python 引擎意外退出，请重试。".into())); }
         });
-        Ok(Self { child:Some(child), input:Some(input), pending, next:0 })
+        Ok(Self { child:Some(child), input:Some(input), pending, next:0, alive })
     }
 }
