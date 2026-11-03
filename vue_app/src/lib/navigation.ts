@@ -8,6 +8,7 @@ import {
   FileSpreadsheet,
   ChartScatter,
   BrainCircuit,
+  MonitorCog,
 } from "lucide-vue-next";
 
 export const mainNavigation = [
@@ -47,5 +48,11 @@ export const scientificTools = [
     name: "预测模型分析",
     desc: "导入病例，训练二分类模型并生成论文图表",
     icon: BrainCircuit,
+  },
+  {
+    path: "/tools/desktop-layout",
+    name: "桌面布局备份",
+    desc: "备份 Windows 图标排列，保留历史并一键恢复",
+    icon: MonitorCog,
   },
 ];

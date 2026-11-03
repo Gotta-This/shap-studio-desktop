@@ -30,6 +30,7 @@ import {
   desktop,
   dismissFeedback,
 } from "@/lib/api";
+import { startDesktopSchedule, stopDesktopSchedule } from "@/lib/desktopLayoutSchedule";
 import { updates, checkUpdate } from "@/lib/updates";
 import {
   mainNavigation as main,
@@ -71,6 +72,7 @@ function shortcut(e: KeyboardEvent) {
 }
 onMounted(async () => {
   window.addEventListener("keydown", shortcut);
+  void startDesktopSchedule();
   try {
     await refresh();
     if (desktop) void checkUpdate();
@@ -80,6 +82,7 @@ onMounted(async () => {
 });
 onUnmounted(() => {
   window.removeEventListener("keydown", shortcut);
+  stopDesktopSchedule();
 });
 </script>
 <template>
