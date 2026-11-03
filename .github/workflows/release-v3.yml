@@ -117,8 +117,11 @@ jobs:
           suffix=''
           if [ "$RUNNER_OS" = Windows ]; then suffix='.exe'; fi
           python scripts/test-packaged-engine.py "src-tauri/binaries/research-python-${{ matrix.target }}$suffix"
+          if [ "$RUNNER_OS" = Windows ]; then
+            python scripts/test-desktop-layout-package.py "src-tauri/binaries/research-python-${{ matrix.target }}$suffix"
+          fi
       - run: npm run tauri -- build --features custom-protocol --target ${{ matrix.target }} --bundles ${{ matrix.bundle }}
-      - name: Verify installed Windows host, default storage and all five tools
+      - name: Verify installed Windows host and application workflows
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
@@ -128,9 +131,10 @@ jobs:
           if ($process.ExitCode -ne 0) { throw 'Installer failed' }
           if (-not (Test-Path "$destination/research-studio-v3.exe")) { throw 'Application executable missing' }
           python scripts/test-desktop-bridge.py "$destination/research-studio-v3.exe"
+          if ($LASTEXITCODE -ne 0) { throw 'Installed engine failed' }
           python scripts/test-native-close.py "$destination/research-studio-v3.exe" .v3-data/native-close
           if ($LASTEXITCODE -ne 0) { throw 'Installed engine failed' }
-      - name: Verify Mac host, default storage and create archive
+      - name: Verify Mac host and default storage
         if: runner.os == 'macOS'
         run: |
           app='src-tauri/target/${{ matrix.target }}/release/bundle/macos/科研数据工具集 V3.app'
@@ -140,17 +144,8 @@ jobs:
           python scripts/test-desktop-bridge.py "$app/Contents/MacOS/research-studio-v3"
           python scripts/test-native-close.py "$app/Contents/MacOS/research-studio-v3" .v3-data/native-close
           python scripts/test-native-ui.py "$app/Contents/MacOS/research-studio-v3" .v3-data/native-ui
-          mkdir -p release
-          ditto -c -k --sequesterRsrc --keepParent "$app" 'release/ResearchDataTools-${{ matrix.asset }}.zip'
-      - name: Collect Windows installer
-        if: runner.os == 'Windows'
-        run: |
-          mkdir -p release
-          cp src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*-setup.exe release/ResearchDataTools-Setup-Windows-x64.exe
-          mkdir -p portable/ResearchDataTools-V3
-          cp src-tauri/target/${{ matrix.target }}/release/research-studio-v3.exe portable/ResearchDataTools-V3/
-          cp src-tauri/binaries/research-python-${{ matrix.target }}.exe portable/ResearchDataTools-V3/research-python.exe
-          python -c "import shutil; shutil.make_archive('release/ResearchDataTools-Portable-Windows-x64', 'zip', 'portable')"
+      - name: Collect version-labelled downloads and legacy updater aliases
+        run: python scripts/collect-release.py
       - uses: actions/upload-artifact@v7
         if: runner.os == 'macOS' && always()
         with:

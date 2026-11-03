@@ -8,8 +8,9 @@ import sys
 from pathlib import Path
 from urllib.request import Request, urlopen
 import certifi
+from release_assets import versioned_name
 
-VERSION = "3.1.1-beta.1"
+VERSION = "3.2.0"
 REPO = "Gotta-This/shap-studio-desktop"
 PREFIX = f"https://github.com/{REPO}/releases/download/"
 
@@ -36,7 +37,9 @@ def select(payload, name=None):
     if payload.get("draft") or payload.get("prerelease") or v < (3, 0, 0):
         raise ValueError("暂未发布 V3 正式版")
     name = name or asset_name()
-    asset = next((a for a in payload.get("assets", []) if a["name"] == name), None)
+    # Prefer the version-labelled download, while accepting older releases.
+    candidates = [versioned_name(name,payload['tag_name']),name] if name else []
+    asset = next((a for candidate in candidates for a in payload.get("assets", []) if a["name"] == candidate), None)
     return dict(current=VERSION, version=payload["tag_name"].lstrip("v"), newer=v > version(VERSION),
                 asset=asset, assets=payload.get("assets", []), name=payload.get("name", ""),
                 url=f"https://github.com/{REPO}/releases/tag/{payload['tag_name']}")
@@ -55,7 +58,7 @@ def download(profile):
     release = check()
     if not release["newer"] or not release["asset"]: raise ValueError("没有适合当前系统的新版安装包")
     asset = release["asset"]
-    name = asset_name()
+    name = asset['name']
     directory = profile / "updates" / release["version"]
     directory.mkdir(parents=True, exist_ok=True)
     def open_asset(item):

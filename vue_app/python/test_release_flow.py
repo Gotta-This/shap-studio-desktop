@@ -8,6 +8,7 @@ import unittest
 from unittest.mock import patch
 import releases
 import migration
+from release_assets import versioned_name
 from clinical_studio.manuscripts import WorkspaceStore
 
 class ReleaseFlowTests(unittest.TestCase):
@@ -43,6 +44,32 @@ class ReleaseFlowTests(unittest.TestCase):
             asset['digest']='sha256:'+digest
             with patch('releases.check',return_value=releases.select(payload)):
                 with self.assertRaises(ValueError):releases.download(Path(tmp))
+    def test_versioned_download_is_preferred_and_saved_with_version(self):
+        legacy='ResearchDataTools-Setup-Windows-x64.exe'
+        labelled=versioned_name(legacy,'v3.0.3')
+        self.assertEqual(labelled,'ResearchDataTools-Setup-Windows-x64-v3.0.3.exe')
+        payload=self.payload();asset=dict(payload['assets'][0],name=labelled,browser_download_url=releases.PREFIX+'v3.0.3/'+labelled)
+        payload['assets'].append(asset)
+        with patch('releases.asset_name',return_value=legacy):
+            selected=releases.select(payload)
+            self.assertEqual(selected['asset']['name'],labelled)
+            # Verify checksum-file fallback matches the labelled filename too.
+            digest=asset.pop('digest')[7:]
+            payload['assets'].append(dict(name='SHA256SUMS.txt',browser_download_url=releases.PREFIX+'v3.0.3/SHA256SUMS.txt'))
+            with tempfile.TemporaryDirectory() as tmp,patch('releases.check',return_value=selected),patch('releases.read_url',side_effect=[io.BytesIO((digest+'  '+labelled).encode()),io.BytesIO(b'installer')]):
+                result=releases.download(Path(tmp))
+                self.assertEqual(Path(result['path']).name,labelled)
+                self.assertEqual(Path(result['path']).read_bytes(),b'installer')
+        # Exact legacy aliases remain selectable by pre-3.2 clients.
+        self.assertTrue(any(a['name']==legacy for a in payload['assets']))
+    def test_mac_architecture_filenames_and_invalid_versions(self):
+        for machine,arch in [('arm64','arm64'),('x86_64','x86_64')]:
+            legacy=releases.asset_name('darwin',machine)
+            labelled=versioned_name(legacy,'3.2.0')
+            self.assertEqual(labelled,'ResearchDataTools-macOS-'+arch+'-v3.2.0.zip')
+            payload=dict(tag_name='v3.2.0',assets=[dict(name=labelled)])
+            self.assertEqual(releases.select(payload,legacy)['asset']['name'],labelled)
+        with self.assertRaises(ValueError):versioned_name('ResearchDataTools-a.zip','../bad')
 
 class MigrationTests(unittest.TestCase):
     def test_repeat_import_preserves_v3_changes_and_qt_sources(self):
