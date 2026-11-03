@@ -11,7 +11,8 @@ with tempfile.TemporaryDirectory() as tmp:
         return value['result']
     initial=call('desktop.layout.info')
     assert initial['supported'] and initial['backups']==[],initial
-    assert initial['settings']['interval_minutes']==15
+    assert initial['settings']['interval_minutes']==10
+    assert initial['settings']['keep_recent']==144
     call('desktop.layout.settings',dict(enabled=False,interval_minutes=1,keep_recent=3))
     # Separate frozen processes prove settings survive application restarts.
     saved=call('desktop.layout.info')['settings']

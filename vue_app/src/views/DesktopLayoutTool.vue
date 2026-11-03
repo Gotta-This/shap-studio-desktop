@@ -67,8 +67,8 @@ const data = ref<LayoutInfo | null>(null),
 const label = ref(""),
   permanent = ref(false);
 const autoEnabled = ref(true),
-  intervalMinutes = ref(15),
-  keepRecent = ref(20),
+  intervalMinutes = ref(10),
+  keepRecent = ref(144),
   settingsConfirm = ref(false);
 const pending = ref<{
   kind: "restore" | "delete" | "unprotect";
@@ -276,6 +276,9 @@ async function confirm() {
         </form>
         <p class="muted layout-retention">
           永久保留的备份不占普通份数。自动备份、手动备份和恢复前备份共用普通份数限制。
+        </p>
+        <p class="muted layout-retention">
+          默认每 10 分钟备份一次、保留 144 份，连续运行约覆盖 24 小时；按份数清理，不按时间删除。
         </p>
         <p
           v-if="data.settings?.last_automatic_at"

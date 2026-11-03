@@ -5,7 +5,7 @@ from contextlib import contextmanager
 import hashlib,json,math,os,platform,re,sys,tempfile,threading,time,uuid
 
 UNSUPPORTED='非windows电脑无法使用'
-KEEP_RECENT=20
+KEEP_RECENT=144
 _LOCK=threading.RLock()
 
 def _native():
@@ -74,7 +74,7 @@ def history(profile):
 
 def _settings(profile):
     path=Path(profile)/'desktop-layout-settings.json'
-    config=dict(enabled=True,interval_minutes=15,keep_recent=KEEP_RECENT,next_due_at=None,last_automatic_at=None,last_automatic_epoch=None,last_error='')
+    config=dict(enabled=True,interval_minutes=10,keep_recent=KEEP_RECENT,next_due_at=None,last_automatic_at=None,last_automatic_epoch=None,last_error='')
     if path.exists():
         saved=json.loads(path.read_text(encoding='utf8'))
         if not isinstance(saved,dict):raise ValueError('桌面备份设置文件无效。')

@@ -86,6 +86,20 @@ class StorageTests(DesktopFixture,unittest.TestCase):
             with self.assertRaisesRegex(ValueError,layout.UNSUPPORTED):layout.protect(self.root,dict(id='x',protected=True))
 
 class ScheduleTests(DesktopFixture,unittest.TestCase):
+    def test_factory_defaults_use_ten_minutes_and_144_snapshots(self):
+        config=layout.info(self.root)['settings']
+        self.assertTrue(config['enabled'])
+        self.assertEqual((config['interval_minutes'],config['keep_recent']),(10,144))
+        with patch.object(layout.time,'time',return_value=1000):
+            self.assertEqual(layout.tick(self.root)['next_due_at'],1600)
+        with patch.object(layout.time,'time',return_value=1599):self.assertFalse(layout.tick(self.root)['created'])
+        with patch.object(layout.time,'time',return_value=1600):self.assertTrue(layout.tick(self.root)['created'])
+    def test_saved_settings_are_preserved_after_default_change(self):
+        path=self.root/'desktop-layout-settings.json'
+        path.write_text(json.dumps(dict(enabled=False,interval_minutes=15,keep_recent=20)),encoding='utf8')
+        config=layout.info(self.root)['settings']
+        self.assertEqual((config['enabled'],config['interval_minutes'],config['keep_recent']),(False,15,20))
+        self.assertFalse(layout.tick(self.root)['created'])
     def test_frequency_survives_restart_and_automatic_expiry_skips_pinned(self):
         pinned=layout.backup(self.root,dict(label='固定桌面',protected=True))
         with patch.object(layout.time,'time',return_value=1000):
