@@ -52,6 +52,53 @@ class DesktopFixture:
     def tearDown(self):self.native.stop();self.windows.stop();self.tmp.cleanup()
 
 class StorageTests(DesktopFixture,unittest.TestCase):
+    def test_diagnostics_distinguish_no_op_from_real_restore_and_hide_paths(self):
+        saved=layout.backup(self.root,dict(label='私人备份名称'))
+        preview=layout.preview(self.root,dict(id=saved['id']))
+        self.assertEqual(preview['needs_move_count'],0)
+        value=layout.restore(self.root,dict(id=saved['id'],fingerprint=preview['fingerprint']))
+        self.assertEqual(value['needs_move_count'],0)
+        report=layout.diagnostics(self.root)
+        self.assertNotIn('私人备份名称',report['content']);self.assertNotIn('原稿.lnk',report['content']);self.assertNotIn('C:\\\\',report['content'])
+        events=json.loads(report['content'])['events']
+        complete=next(e for e in events if e['event']=='restore.complete')
+        self.assertEqual(complete['operation'],value['diagnostic_id'])
+        self.assertEqual((complete['needs_move_count'],complete['moved_count'],complete['unmatched_positions']),(0,0,0))
+    def test_ignored_shell_movement_is_logged_as_failed_verification(self):
+        saved=layout.backup(self.root,{})
+        self.fake.current['icons'][0].update(x=400,y=200)
+        preview=layout.preview(self.root,dict(id=saved['id']))
+        self.assertEqual(preview['needs_move_count'],1)
+        def ignored(items):self.fake.trace('native.position.result',hresult='0x00000000',succeeded=True)
+        with patch.object(self.fake,'position',side_effect=ignored),patch.object(layout.time,'sleep'):
+            value=layout.restore(self.root,dict(id=saved['id'],fingerprint=preview['fingerprint']))
+        self.assertEqual(value['unmatched_positions'],1)
+        events=json.loads(layout.diagnostics(self.root)['content'])['events']
+        verify=[e for e in events if e['event']=='restore.verify'][-1]
+        self.assertEqual((verify['moved_count'],verify['unmatched_positions']),(0,1))
+        self.assertEqual(verify['sample'][0]['actual'],[400,200]);self.assertEqual(verify['sample'][0]['target'],[0,0])
+        self.assertTrue(any(e.get('hresult')=='0x00000000' for e in events))
+    def test_native_failure_is_logged_and_safety_backup_is_preserved(self):
+        saved=layout.backup(self.root,{})
+        preview=layout.preview(self.root,dict(id=saved['id']))
+        with patch.object(self.fake,'position',side_effect=OSError('Windows 桌面接口调用失败（0x80004005）。')):
+            with self.assertRaises(OSError):layout.restore(self.root,dict(id=saved['id'],fingerprint=preview['fingerprint']))
+        events=json.loads(layout.diagnostics(self.root)['content'])['events']
+        self.assertEqual(events[-1]['event'],'restore.error')
+        self.assertIn('0x80004005',events[-1]['error']['message'])
+        self.assertEqual(len(layout.info(self.root)['backups']),2)
+    def test_unwritable_diagnostic_log_does_not_break_restore(self):
+        saved=layout.backup(self.root,{})
+        preview=layout.preview(self.root,dict(id=saved['id']))
+        with patch.object(layout.diagnostic,'record',return_value=False):
+            value=layout.restore(self.root,dict(id=saved['id'],fingerprint=preview['fingerprint']))
+        self.assertFalse(value['diagnostic_saved']);self.assertEqual(value['unmatched_positions'],0)
+    def test_diagnostic_rotation_keeps_three_files(self):
+        with patch.object(layout.diagnostic,'MAX_BYTES',10):
+            for i in range(5):layout.diagnostic.record(self.root,'event',str(i))
+        files=list(self.root.glob('desktop-layout-diagnostics.jsonl*'))
+        self.assertEqual(len(files),3)
+        self.assertEqual(layout.diagnostics(self.root)['event_count'],3)
     def test_pinned_backups_never_expire_and_cannot_be_deleted(self):
         with patch.object(layout,'KEEP_RECENT',2):
             pinned=layout.backup(self.root,dict(label='永久排列',protected=True))

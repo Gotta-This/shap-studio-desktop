@@ -1,0 +1,88 @@
+name: Windows desktop layout diagnostic package
+on:
+  push:
+    branches: [desktop-layout-diagnostics]
+permissions:
+  contents: read
+concurrency:
+  group: desktop-layout-diagnostics
+  cancel-in-progress: true
+jobs:
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+        working-directory: vue_app
+    env:
+      PYTHONUTF8: '1'
+      MPLBACKEND: Agg
+      TAURI_ENV_TARGET_TRIPLE: x86_64-pc-windows-msvc
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: vue_app/package-lock.json
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: vue_app/src-tauri -> target
+      - run: npm ci
+      - run: npm run build
+      - run: python -m unittest discover -s python -p test_desktop_layout.py -v
+      - run: python -m pip install -r requirements.txt
+      - run: python scripts/build-sidecar.py
+      - name: Frozen backend checks
+        run: |
+          python scripts/test-packaged-engine.py src-tauri/binaries/research-python-x86_64-pc-windows-msvc.exe
+          python scripts/test-desktop-layout-package.py src-tauri/binaries/research-python-x86_64-pc-windows-msvc.exe
+      - run: npm run tauri -- build --features custom-protocol --target x86_64-pc-windows-msvc --bundles nsis
+      - name: Verify installer and installed host
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*-setup.exe | Select-Object -First 1
+          $destination = Join-Path $env:RUNNER_TEMP 'ResearchStudioDesktopLayoutTest'
+          $process = Start-Process $setup.FullName -ArgumentList @('/S', "/D=$destination") -PassThru -Wait
+          if ($process.ExitCode -ne 0) { throw 'Installer failed' }
+          python scripts/test-desktop-bridge.py "$destination/research-studio-v3.exe"
+          if ($LASTEXITCODE -ne 0) { throw 'Installed host failed' }
+          python scripts/test-native-close.py "$destination/research-studio-v3.exe" .v3-data/native-close
+          if ($LASTEXITCODE -ne 0) { throw 'Native close failed' }
+      - name: Collect version-labelled downloads
+        run: |
+          python scripts/collect-release.py
+          (cd release && sha256sum *.exe *.zip > SHA256SUMS.txt)
+      - uses: actions/upload-artifact@v7
+        with:
+          name: desktop-layout-windows-test
+          path: vue_app/release/*
+          if-no-files-found: error
+          compression-level: 0
+  publish:
+    needs: windows
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v7
+        with:
+          name: desktop-layout-windows-test
+          path: release
+      - name: Publish Windows prerelease without changing latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version=$(node -p "require('./vue_app/package.json').version")
+          gh release create "v$version" release/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease --latest=false --title "桌面布局恢复 Windows 诊断版 v$version" --notes-file vue_app/DESKTOP_LAYOUT_DIAGNOSTICS_NOTES.md

@@ -13,6 +13,9 @@ class VariantValue(C.Union):_fields_=[('integer',I32),('wide',C.c_int64),('recor
 class Variant(C.Structure):_fields_=[('vt',C.c_uint16),('reserved',C.c_uint16*3),('value',VariantValue)]
 
 class DesktopView:
+    def _trace(self,event,**fields):
+        callback=getattr(self,'trace',None)
+        if callback:callback(event,**fields)
     def _check(self,hr):
         if hr<0:raise OSError('Windows 桌面接口调用失败（0x%08X）。请确认资源管理器正在运行。'%(hr&0xffffffff))
     def _call(self,ptr,index,types,*args):
@@ -107,6 +110,10 @@ class DesktopView:
                     if not copy:raise MemoryError('无法复制桌面图标标识。')
                     held.append(copy);points.append(Point(item['x'],item['y']))
             if len(held)!=len(wanted):raise ValueError('桌面图标已经变化，请重新预览恢复。')
-            if held:self._check(self._call(self.folder,16,[U32,C.POINTER(PTR),C.POINTER(Point),U32],len(held),(PTR*len(held))(*held),(Point*len(points))(*points),0x80))
+            if held:
+                self._trace('native.position.begin',method='IFolderView.SelectAndPositionItems',count=len(held),flags='0x00000080')
+                hr=self._call(self.folder,16,[U32,C.POINTER(PTR),C.POINTER(Point),U32],len(held),(PTR*len(held))(*held),(Point*len(points))(*points),0x80)
+                self._trace('native.position.result',hresult='0x%08X'%(hr&0xffffffff),succeeded=hr>=0)
+                self._check(hr)
         finally:
             for ptr in held:self.ole.CoTaskMemFree(ptr)

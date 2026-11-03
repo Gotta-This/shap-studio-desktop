@@ -10,7 +10,7 @@ from urllib.request import Request, urlopen
 import certifi
 from release_assets import versioned_name
 
-VERSION = "3.2.1"
+VERSION = "3.2.2-beta.1"
 REPO = "Gotta-This/shap-studio-desktop"
 PREFIX = f"https://github.com/{REPO}/releases/download/"
 
@@ -40,7 +40,8 @@ def select(payload, name=None):
     # Prefer the version-labelled download, while accepting older releases.
     candidates = [versioned_name(name,payload['tag_name']),name] if name else []
     asset = next((a for candidate in candidates for a in payload.get("assets", []) if a["name"] == candidate), None)
-    return dict(current=VERSION, version=payload["tag_name"].lstrip("v"), newer=v > version(VERSION),
+    current=version(VERSION.split('-',1)[0])
+    return dict(current=VERSION, version=payload["tag_name"].lstrip("v"), newer=v > current or (v==current and '-' in VERSION),
                 asset=asset, assets=payload.get("assets", []), name=payload.get("name", ""),
                 url=f"https://github.com/{REPO}/releases/tag/{payload['tag_name']}")
 

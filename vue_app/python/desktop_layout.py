@@ -3,6 +3,7 @@ from pathlib import Path
 from datetime import datetime
 from contextlib import contextmanager
 import hashlib,json,math,os,platform,re,sys,tempfile,threading,time,uuid
+import desktop_layout_diagnostics as diagnostic
 
 UNSUPPORTED='非windows电脑无法使用'
 KEEP_RECENT=144
@@ -185,20 +186,50 @@ def plan(saved,current):
     return dict(items=matched+placed,restored_count=len(matched),new_count=len(placed),missing_count=len(previous.keys()-present.keys()),fingerprint=fingerprint(current),display_changed=saved['display']!=display)
 
 def preview(profile,p):
-    with _LOCK,_file_lock(profile),_native() as view:
-        saved=_read(_path(profile,p.get('id')));result=plan(saved,view.capture())
-        return {k:v for k,v in result.items() if k!='items'}
+    with _LOCK,_file_lock(profile):
+        operation=uuid.uuid4().hex
+        diagnostic.record(profile,'preview.begin',operation,environment=diagnostic.environment())
+        try:
+            with _native() as view:
+                saved=_read(_path(profile,p.get('id')));current=view.capture();result=plan(saved,current)
+                actual=_icons(current['icons'])
+                changed=sum((actual[i['key'].casefold()]['x'],actual[i['key'].casefold()]['y'])!=(i['x'],i['y']) for i in result['items'])
+                diagnostic.record(profile,'preview.complete',operation,backup_id=saved['id'],backup_reason=saved['reason'],backup_created_at=saved['created_at'],source_count=len(saved['icons']),current_count=len(current['icons']),restored_count=result['restored_count'],new_count=result['new_count'],missing_count=result['missing_count'],needs_move_count=changed,display=current['display'],source_display=saved['display'],auto_arrange=current.get('auto_arrange'))
+                return {**{k:v for k,v in result.items() if k!='items'},'needs_move_count':changed}
+        except Exception as error:
+            diagnostic.record(profile,'preview.error',operation,error=diagnostic.failure(error));raise
+
+def diagnostics(profile,p=None):
+    with _LOCK,_file_lock(profile):return diagnostic.export(profile)
 
 def restore(profile,p):
-    with _LOCK,_file_lock(profile),_native() as view:
-        saved=_read(_path(profile,p.get('id')));current=view.capture();result=plan(saved,current)
-        if p.get('fingerprint')!=result['fingerprint']:raise ValueError('桌面已发生变化，请重新预览并确认恢复。')
-        safety=_save(profile,current,'恢复前自动备份',False,'before_restore')
-        view.position(result['items'])
-        mismatches=len(result['items'])
-        for attempt in range(8):
-            actual=_icons(view.capture()['icons'])
-            mismatches=sum(i['key'].casefold() not in actual or (actual[i['key'].casefold()]['x'],actual[i['key'].casefold()]['y'])!=(i['x'],i['y']) for i in result['items'])
-            if not mismatches:break
-            time.sleep(.1)
-        return {**{k:v for k,v in result.items() if k!='items'},'safety_backup':safety,'unmatched_positions':mismatches}
+    with _LOCK,_file_lock(profile):
+        operation=uuid.uuid4().hex
+        diagnostic.record(profile,'restore.begin',operation,environment=diagnostic.environment())
+        try:
+            with _native() as view:
+                view.trace=lambda event,**fields:diagnostic.record(profile,event,operation,**fields)
+                saved=_read(_path(profile,p.get('id')));current=view.capture();result=plan(saved,current)
+                if p.get('fingerprint')!=result['fingerprint']:raise ValueError('桌面已发生变化，请重新预览并确认恢复。')
+                before=_icons(current['icons'])
+                changed=sum((before[i['key'].casefold()]['x'],before[i['key'].casefold()]['y'])!=(i['x'],i['y']) for i in result['items'])
+                positions=[dict(icon=diagnostic.token(i['key']),before=[before[i['key'].casefold()]['x'],before[i['key'].casefold()]['y']],target=[i['x'],i['y']]) for i in result['items']]
+                diagnostic.record(profile,'restore.plan',operation,backup_id=saved['id'],backup_reason=saved['reason'],backup_created_at=saved['created_at'],source_count=len(saved['icons']),current_count=len(current['icons']),restored_count=result['restored_count'],new_count=result['new_count'],missing_count=result['missing_count'],needs_move_count=changed,positions=positions,display=current['display'],source_display=saved['display'],auto_arrange=current.get('auto_arrange'))
+                safety=_save(profile,current,'恢复前自动备份',False,'before_restore')
+                diagnostic.record(profile,'restore.safety_saved',operation,backup_id=safety['id'])
+                view.position(result['items'])
+                mismatches=len(result['items'])
+                for attempt in range(8):
+                    actual=_icons(view.capture()['icons']);wrong=[];moved=0
+                    for i in result['items']:
+                        key=i['key'].casefold();position=[actual[key]['x'],actual[key]['y']] if key in actual else None
+                        if position!=[i['x'],i['y']]:wrong.append(dict(icon=diagnostic.token(i['key']),target=[i['x'],i['y']],actual=position))
+                        if position is not None and position!=[before[key]['x'],before[key]['y']]:moved+=1
+                    mismatches=len(wrong)
+                    diagnostic.record(profile,'restore.verify',operation,attempt=attempt+1,unmatched_positions=mismatches,moved_count=moved,sample=wrong[:12])
+                    if not mismatches:break
+                    time.sleep(.1)
+                logged=diagnostic.record(profile,'restore.complete',operation,unmatched_positions=mismatches,needs_move_count=changed,moved_count=moved)
+                return {**{k:v for k,v in result.items() if k!='items'},'safety_backup':safety,'unmatched_positions':mismatches,'needs_move_count':changed,'diagnostic_id':operation,'diagnostic_saved':logged}
+        except Exception as error:
+            diagnostic.record(profile,'restore.error',operation,error=diagnostic.failure(error));raise

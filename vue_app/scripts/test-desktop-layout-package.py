@@ -18,4 +18,10 @@ with tempfile.TemporaryDirectory() as tmp:
     saved=call('desktop.layout.info')['settings']
     assert not saved['enabled'] and saved['interval_minutes']==1 and saved['keep_recent']==3,saved
     assert not call('desktop.layout.tick')['created']
+    exported=call('desktop.layout.diagnostics')
+    report=json.loads(exported['content'])
+    assert report['schema']==1 and isinstance(report['events'],list)
+    assert report['environment']['windows'].get('CurrentBuildNumber'),report['environment']
+    assert 'beta' in report['environment']['application_version'],report['environment']
+    print('Frozen diagnostic export: Windows edition/build and JSON report passed')
     print('Frozen sixth tool: platform detection, persisted settings and disabled timer passed')

@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { readFile } from "node:fs/promises";
 
 const id = (n: number) => String(n).padStart(32, "0");
 const record = (n: number, pinned = false, label = `备份 ${n}`) => ({
@@ -24,6 +25,8 @@ async function windows(page: Page, dueNow = false) {
     automatic: 0,
     restoreCalls: 0,
     failPreview: false,
+    unmatched: 0,
+    needsMove: 2,
     lastBackup: null as any,
   };
   await page.route("**/api/bridge", async (route) => {
@@ -86,6 +89,7 @@ async function windows(page: Page, dueNow = false) {
           restored_count: 2,
           new_count: 1,
           missing_count: 1,
+          needs_move_count: store.needsMove,
           display_changed: false,
           fingerprint: "confirmed-layout",
         };
@@ -93,7 +97,26 @@ async function windows(page: Page, dueNow = false) {
       case "restore":
         expect(p.fingerprint).toBe("confirmed-layout");
         store.restoreCalls++;
-        result = { unmatched_positions: 0 };
+        result = {
+          unmatched_positions: store.unmatched,
+          restored_count: 2,
+          new_count: 1,
+          missing_count: 1,
+          needs_move_count: store.needsMove,
+          diagnostic_id: "diagnostic-operation-123",
+          diagnostic_saved: true,
+        };
+        break;
+      case "diagnostics":
+        result = {
+          name: "desktop-layout-diagnostics-test.json",
+          content: JSON.stringify({
+            schema: 1,
+            events: [
+              { event: "native.position.result", hresult: "0x00000000" },
+            ],
+          }),
+        };
         break;
       case "settings": {
         Object.assign(store.settings, p);
@@ -233,4 +256,41 @@ test("temporary startup failure retries the automatic backup", async ({
   expect(store.automatic).toBe(0);
   await page.clock.fastForward(31000);
   await expect.poll(() => store.automatic).toBe(1);
+});
+
+test("restore failure stays visible and diagnostics can be downloaded", async ({
+  page,
+}) => {
+  const store = await windows(page);
+  store.unmatched = 2;
+  await page.goto("/#/tools/desktop-layout");
+  await page
+    .getByRole("button", { name: "恢复备份 备份 1", exact: true })
+    .click();
+  await page.getByRole("button", { name: "确认恢复排列", exact: true }).click();
+  const status = page.locator(".layout-backup-page [role=status]");
+  await expect(status).toContainText("2 个图标未按预期落位");
+  await expect(status).toContainText("诊断编号");
+  const pending = page.waitForEvent("download");
+  await page.getByRole("button", { name: "导出诊断日志", exact: true }).click();
+  const exported = await pending;
+  const value = JSON.parse(await readFile((await exported.path())!, "utf8"));
+  expect(value.events[0].hresult).toBe("0x00000000");
+  await expect(status).toContainText("未按预期落位");
+});
+
+test("unchanged layout is explained before and after restore", async ({
+  page,
+}) => {
+  const store = await windows(page);
+  store.needsMove = 0;
+  await page.goto("/#/tools/desktop-layout");
+  await page
+    .getByRole("button", { name: "恢复备份 备份 1", exact: true })
+    .click();
+  await expect(page.getByRole("dialog")).toContainText("没有需要移动的图标");
+  await page.getByRole("button", { name: "确认恢复排列", exact: true }).click();
+  await expect(page.locator(".layout-backup-page [role=status]")).toContainText(
+    "所选备份与当前排列一致",
+  );
 });

@@ -8,6 +8,7 @@ import {
   ShieldCheck,
   Trash2,
   LockKeyhole,
+  Download,
 } from "lucide-vue-next";
 import PageHeading from "@/components/PageHeading.vue";
 import EmptyState from "@/components/EmptyState.vue";
@@ -27,7 +28,7 @@ import {
   desktopSchedule,
   refreshDesktopSchedule,
 } from "@/lib/desktopLayoutSchedule";
-import { api, notify, openPath } from "@/lib/api";
+import { api, notify, openPath, download } from "@/lib/api";
 interface Backup {
   id: string;
   label: string;
@@ -57,8 +58,24 @@ interface Plan {
   restored_count: number;
   new_count: number;
   missing_count: number;
+  needs_move_count?: number;
   display_changed: boolean;
   fingerprint: string;
+}
+const restoreSummary = ref("");
+const restoreFailed = ref(false);
+async function exportDiagnostics() {
+  busy.value = true;
+  try {
+    const value = await api<{ name: string; content: string }>(
+      "desktop.layout.diagnostics",
+    );
+    await download(value.name, value.content, "application/json");
+  } catch (e) {
+    error.value = (e as Error).message;
+  } finally {
+    busy.value = false;
+  }
 }
 const data = ref<LayoutInfo | null>(null),
   loading = ref(false),
@@ -173,6 +190,7 @@ async function protect(backup: Backup) {
 async function prepare(backup: Backup) {
   busy.value = true;
   error.value = "";
+  restoreSummary.value = "";
   try {
     const plan = await api<Plan>("desktop.layout.preview", { id: backup.id });
     pending.value = { kind: "restore", backup, plan };
@@ -189,16 +207,29 @@ async function confirm() {
   error.value = "";
   try {
     if (action.kind === "restore") {
-      const result = await api<{ unmatched_positions: number }>(
-        "desktop.layout.restore",
-        { id: action.backup.id, fingerprint: action.plan?.fingerprint },
-      );
-      notify(
-        result.unmatched_positions
-          ? `Windows 有 ${result.unmatched_positions} 个图标未按预期落位，恢复前的排列已自动备份。`
-          : "桌面排列已恢复，新增图标已安置到空位置。",
-        !!result.unmatched_positions,
-      );
+      const result = await api<
+        Plan & {
+          unmatched_positions: number;
+          diagnostic_id?: string;
+          diagnostic_saved?: boolean;
+        }
+      >("desktop.layout.restore", {
+        id: action.backup.id,
+        fingerprint: action.plan?.fingerprint,
+      });
+      const restored = result.restored_count ?? action.plan!.restored_count;
+      const missing = result.missing_count ?? action.plan!.missing_count;
+      restoreFailed.value = !!result.unmatched_positions;
+      restoreSummary.value = result.unmatched_positions
+        ? `Windows 有 ${result.unmatched_positions} 个图标未按预期落位。恢复前排列已自动备份，请导出诊断日志。`
+        : result.needs_move_count === 0
+          ? "所选备份与当前排列一致，没有需要移动的图标。请确认选择的是打乱排列之前的备份。"
+          : `已恢复 ${restored} / ${restored + missing} 个备份图标；${missing} 个未匹配并跳过；${result.new_count ?? action.plan!.new_count} 个新增图标已放入空网格。`;
+      if (result.diagnostic_id)
+        restoreSummary.value += ` 诊断编号：${result.diagnostic_id.slice(0, 12)}。`;
+      if (result.diagnostic_saved === false)
+        restoreSummary.value += " 诊断日志未能写入，请检查数据目录写入权限。";
+      notify(restoreSummary.value, restoreFailed.value);
     } else if (action.kind === "delete") {
       await api("desktop.layout.delete", { id: action.backup.id });
       notify("备份已删除。");
@@ -228,6 +259,13 @@ async function confirm() {
       <Badge variant="secondary"><MonitorCog :size="14" />Windows 专用</Badge>
     </PageHeading>
     <p v-if="error" class="field-error" role="alert">{{ error }}</p>
+    <p
+      v-if="restoreSummary"
+      :class="restoreFailed ? 'field-error' : 'muted'"
+      role="status"
+    >
+      {{ restoreSummary }}
+    </p>
     <div v-if="loading && !data" class="panel">
       <EmptyState title="正在检测系统…" />
     </div>
@@ -240,6 +278,18 @@ async function confirm() {
       </EmptyState>
     </div>
     <template v-else-if="data?.supported">
+      <div class="layout-diagnostics muted">
+        <span
+          >恢复异常时，可导出诊断日志；日志不包含桌面文件名、完整路径或文件内容。</span
+        >
+        <Button
+          variant="outline"
+          size="sm"
+          :disabled="busy"
+          @click="exportDiagnostics"
+          ><Download :size="14" />导出诊断日志</Button
+        >
+      </div>
       <div class="panel layout-save-panel">
         <h2>自动备份设置</h2>
         <p class="muted">
@@ -278,7 +328,8 @@ async function confirm() {
           永久保留的备份不占普通份数。自动备份、手动备份和恢复前备份共用普通份数限制。
         </p>
         <p class="muted layout-retention">
-          默认每 10 分钟备份一次、保留 144 份，连续运行约覆盖 24 小时；按份数清理，不按时间删除。
+          默认每 10 分钟备份一次、保留 144 份，连续运行约覆盖 24
+          小时；按份数清理，不按时间删除。
         </p>
         <p
           v-if="data.settings?.last_automatic_at"
@@ -321,9 +372,7 @@ async function confirm() {
         </form>
         <p class="muted layout-retention">
           普通备份保留最近
-          {{
-            data.keep_recent
-          }}
+          {{ data.keep_recent }}
           份；永久备份不参与自动清理。每次恢复前会自动备份当前排列。
         </p>
       </div>
@@ -501,6 +550,9 @@ async function confirm() {
           <p v-if="pending.plan.missing_count" class="muted">
             {{ pending.plan.missing_count }} 个图标已不在当前桌面，会跳过。
           </p>
+          <p v-if="pending.plan.needs_move_count === 0" class="field-error">
+            这份备份与当前排列一致，没有需要移动的图标。请确认没有选到刚生成的“恢复前自动备份”。
+          </p>
           <p v-if="pending.plan.display_changed" class="muted">
             当前显示设置与备份不同，将按保存的坐标恢复。
           </p>
@@ -588,5 +640,14 @@ async function confirm() {
 .layout-confirm {
   display: grid;
   gap: 10px;
+}
+.layout-diagnostics {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+  font-size: 12px;
 }
 </style>

@@ -12,6 +12,10 @@ from release_assets import versioned_name
 from clinical_studio.manuscripts import WorkspaceStore
 
 class ReleaseFlowTests(unittest.TestCase):
+    def test_beta_client_can_check_stable_releases(self):
+        with patch('releases.VERSION','3.2.2-beta.1'):
+            self.assertFalse(releases.select(dict(tag_name='v3.2.1',assets=[]))['newer'])
+            self.assertTrue(releases.select(dict(tag_name='v3.2.2',assets=[]))['newer'])
     def setUp(self):
         current=patch('releases.VERSION','3.0.0');current.start();self.addCleanup(current.stop)
     def payload(self, data=b'installer'):
