@@ -191,6 +191,7 @@ def preview(profile,p):
         diagnostic.record(profile,'preview.begin',operation,environment=diagnostic.environment())
         try:
             with _native() as view:
+                view.trace=lambda event,**fields:diagnostic.record(profile,event,operation,**fields)
                 saved=_read(_path(profile,p.get('id')));current=view.capture();result=plan(saved,current)
                 actual=_icons(current['icons'])
                 changed=sum((actual[i['key'].casefold()]['x'],actual[i['key'].casefold()]['y'])!=(i['x'],i['y']) for i in result['items'])

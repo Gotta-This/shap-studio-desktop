@@ -16,6 +16,16 @@ class DesktopView:
     def _trace(self,event,**fields):
         callback=getattr(self,'trace',None)
         if callback:callback(event,**fields)
+    def _window_info(self):
+        try:
+            self.user.GetClassNameW.argtypes=[PTR,C.c_wchar_p,I32];self.user.GetClassNameW.restype=I32
+            self.user.IsWindowVisible.argtypes=[PTR];self.user.IsWindowVisible.restype=I32
+            self.user.GetWindowThreadProcessId.argtypes=[PTR,C.POINTER(U32)];self.user.GetWindowThreadProcessId.restype=U32
+            self.user.GetShellWindow.argtypes=[];self.user.GetShellWindow.restype=PTR
+            name=C.create_unicode_buffer(256);pid=U32()
+            self.user.GetClassNameW(self.hwnd,name,len(name));self.user.GetWindowThreadProcessId(self.hwnd,C.byref(pid))
+            return dict(handle=hex(self.hwnd.value or 0),window_class=name.value,visible=bool(self.user.IsWindowVisible(self.hwnd)),process_id=pid.value,shell_handle=hex(self.user.GetShellWindow() or 0))
+        except Exception as error:return dict(unavailable=type(error).__name__)
     def _check(self,hr):
         if hr<0:raise OSError('Windows 桌面接口调用失败（0x%08X）。请确认资源管理器正在运行。'%(hr&0xffffffff))
     def _call(self,ptr,index,types,*args):
@@ -97,7 +107,9 @@ class DesktopView:
         dpi=96
         if hasattr(self.user,'GetDpiForWindow'):
             self.user.GetDpiForWindow.argtypes=[PTR];self.user.GetDpiForWindow.restype=U32;dpi=self.user.GetDpiForWindow(self.hwnd) or 96
-        return dict(icons=icons,display=dict(width=rect.right,height=rect.bottom,dpi=dpi,spacing=[max(1,spacing.x),max(1,spacing.y)],workareas=sorted(workareas,key=lambda a:(a['left'],a['top']))),auto_arrange=hr==0)
+        value=dict(icons=icons,display=dict(width=rect.right,height=rect.bottom,dpi=dpi,spacing=[max(1,spacing.x),max(1,spacing.y)],workareas=sorted(workareas,key=lambda a:(a['left'],a['top']))),auto_arrange=hr==0)
+        if getattr(self,'trace',None):self._trace('native.capture',count=len(icons),window=self._window_info(),auto_arrange_hresult='0x%08X'%(hr&0xffffffff),display=value['display'])
+        return value
     def position(self,items):
         wanted={i['key'].casefold():i for i in items};held=[];points=[]
         # Clone current PIDLs: never deserialize arbitrary PIDL data from disk.
@@ -111,7 +123,7 @@ class DesktopView:
                     held.append(copy);points.append(Point(item['x'],item['y']))
             if len(held)!=len(wanted):raise ValueError('桌面图标已经变化，请重新预览恢复。')
             if held:
-                self._trace('native.position.begin',method='IFolderView.SelectAndPositionItems',count=len(held),flags='0x00000080')
+                self._trace('native.position.begin',method='IFolderView.SelectAndPositionItems',count=len(held),flags='0x00000080',window=self._window_info())
                 hr=self._call(self.folder,16,[U32,C.POINTER(PTR),C.POINTER(Point),U32],len(held),(PTR*len(held))(*held),(Point*len(points))(*points),0x80)
                 self._trace('native.position.result',hresult='0x%08X'%(hr&0xffffffff),succeeded=hr>=0)
                 self._check(hr)
