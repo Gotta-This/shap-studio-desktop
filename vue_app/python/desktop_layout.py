@@ -194,15 +194,15 @@ def plan(saved,current):
         else:raise ValueError('当前桌面没有足够的空位置放置新增图标，未移动任何图标。请扩大可用桌面或整理图标后重试。')
     return dict(items=matched+placed,restored_count=len(matched),new_count=len(placed),missing_count=len(previous.keys()-present.keys()),fingerprint=fingerprint(current),display_changed=saved['display']!=display)
 
-def _require_native_restore():
+def _native_warning():
     state=assistant.probe()
-    if not state['checked']:raise ValueError('无法检测 360 运行状态，请重新检测后再恢复 Windows 布局。')
-    if state['running']:raise ValueError('360 正在管理桌面，不能使用 Windows 原生恢复。360 数据副本已单独保存；请退出 360 后恢复原生布局。')
+    if not state['checked']:return '无法检测 360 状态；本次仅操作 Windows 原生桌面，不保证第三方桌面显示。'
+    return '360 正在运行：仅恢复 Windows 原生布局，不会修改 360 布局；屏幕上仍可能显示 360 管理的排列。' if state['running'] else ''
 
 def preview(profile,p):
     with _LOCK,_file_lock(profile):
         _require_enabled(profile)
-        _require_native_restore()
+        warning=_native_warning()
         operation=uuid.uuid4().hex
         diagnostic.record(profile,'preview.begin',operation,environment=diagnostic.environment())
         try:
@@ -212,7 +212,7 @@ def preview(profile,p):
                 actual=_icons(current['icons'])
                 changed=sum((actual[i['key'].casefold()]['x'],actual[i['key'].casefold()]['y'])!=(i['x'],i['y']) for i in result['items'])
                 diagnostic.record(profile,'preview.complete',operation,backup_id=saved['id'],backup_reason=saved['reason'],backup_created_at=saved['created_at'],source_count=len(saved['icons']),current_count=len(current['icons']),restored_count=result['restored_count'],new_count=result['new_count'],missing_count=result['missing_count'],needs_move_count=changed,display=current['display'],source_display=saved['display'],auto_arrange=current.get('auto_arrange'))
-                return {**{k:v for k,v in result.items() if k!='items'},'needs_move_count':changed}
+                return {**{k:v for k,v in result.items() if k!='items'},'needs_move_count':changed,'assistant_warning':warning}
         except Exception as error:
             diagnostic.record(profile,'preview.error',operation,error=diagnostic.failure(error));raise
 
@@ -222,7 +222,7 @@ def diagnostics(profile,p=None):
 def restore(profile,p):
     with _LOCK,_file_lock(profile):
         _require_enabled(profile)
-        _require_native_restore()
+        warning=_native_warning()
         operation=uuid.uuid4().hex
         diagnostic.record(profile,'restore.begin',operation,environment=diagnostic.environment())
         try:
@@ -248,8 +248,17 @@ def restore(profile,p):
                     diagnostic.record(profile,'restore.verify',operation,attempt=attempt+1,unmatched_positions=mismatches,moved_count=moved,sample=wrong[:12])
                     if not mismatches:break
                     time.sleep(.1)
+                if warning and not mismatches:
+                    # A desktop assistant can move Shell icons back after the
+                    # API returns. Check delayed positions before reporting.
+                    for delay in (.4,.8):
+                        time.sleep(delay);actual=_icons(view.capture()['icons'])
+                        mismatches=sum(i['key'].casefold() not in actual or (actual[i['key'].casefold()]['x'],actual[i['key'].casefold()]['y'])!=(i['x'],i['y']) for i in result['items'])
+                        moved=sum(i['key'].casefold() in actual and (actual[i['key'].casefold()]['x'],actual[i['key'].casefold()]['y'])!=(before[i['key'].casefold()]['x'],before[i['key'].casefold()]['y']) for i in result['items'])
+                        diagnostic.record(profile,'restore.settle',operation,unmatched_positions=mismatches,moved_count=moved)
+                        if mismatches:break
                 logged=diagnostic.record(profile,'restore.complete',operation,unmatched_positions=mismatches,needs_move_count=changed,moved_count=moved)
-                return {**{k:v for k,v in result.items() if k!='items'},'safety_backup':safety,'unmatched_positions':mismatches,'needs_move_count':changed,'diagnostic_id':operation,'diagnostic_saved':logged}
+                return {**{k:v for k,v in result.items() if k!='items'},'safety_backup':safety,'unmatched_positions':mismatches,'needs_move_count':changed,'diagnostic_id':operation,'diagnostic_saved':logged,'assistant_warning':warning}
         except Exception as error:
             diagnostic.record(profile,'restore.error',operation,error=diagnostic.failure(error));raise
 

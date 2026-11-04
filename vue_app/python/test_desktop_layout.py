@@ -1,5 +1,6 @@
 import ctypes,json,tempfile,unittest,zipfile
 import desktop_layout_assistant as assistant
+import desktop_layout_assistant_control as control
 from copy import deepcopy
 from pathlib import Path
 from unittest.mock import patch
@@ -213,12 +214,16 @@ class AssistantTests(DesktopFixture,unittest.TestCase):
         with patch.object(assistant,'_inventory',side_effect=changing):value=layout.backup(self.root,{})
         self.assertEqual(value['assistant']['status'],'failed')
         self.assertEqual(list((layout._folder(self.root)/'360-data').iterdir()),[])
-    def test_running_assistant_blocks_native_restore_before_moving(self):
+    def test_running_assistant_allows_native_restore_with_scope_warning(self):
         saved=layout.backup(self.root,{})
-        preview=layout.preview(self.root,dict(id=saved['id']))
+        self.fake.current['icons'][0].update(x=400,y=200)
         self.start_assistant()
-        with self.assertRaisesRegex(ValueError,'360 正在管理'):layout.restore(self.root,dict(id=saved['id'],fingerprint=preview['fingerprint']))
-        self.assertEqual(self.fake.calls,[])
+        preview=layout.preview(self.root,dict(id=saved['id']))
+        self.assertIn('仅恢复 Windows',preview['assistant_warning'])
+        with patch.object(control,'ProcessCycle',side_effect=AssertionError('must not close 360 for native restore')):
+            result=layout.restore(self.root,dict(id=saved['id'],fingerprint=preview['fingerprint']))
+        self.assertEqual(result['unmatched_positions'],0);self.assertEqual(len(self.fake.calls),1)
+        self.assertIn('360',result['assistant_warning'])
     def test_feature_switch_survives_reload_and_stops_all_layout_operations(self):
         saved=layout.backup(self.root,{})
         layout.settings(self.root,dict(feature_enabled=False,enabled=True,interval_minutes=10,keep_recent=144))
@@ -283,7 +288,7 @@ class AssistantRestoreTests(DesktopFixture,unittest.TestCase):
     def test_restarted_assistant_blocks_overwrite(self):
         root,saved=self.setup_backup();preview=layout.assistant_preview(self.root,dict(id=saved['id']))
         self.assistant_mock.return_value['running']=True
-        with self.assertRaisesRegex(ValueError,'退出桌面助手'):layout.assistant_restore(self.root,dict(id=saved['id'],fingerprint=preview['fingerprint']))
+        with patch.object(control,'process_snapshot',return_value=[]),self.assertRaisesRegex(ValueError,'重新预览'):layout.assistant_restore(self.root,dict(id=saved['id'],fingerprint=preview['fingerprint']))
         self.assertEqual((root/'layout.ini').read_text(),'current layout before restore')
     def test_commit_failure_rolls_back_without_losing_configuration(self):
         import desktop_layout_assistant_restore as restore
@@ -325,7 +330,7 @@ class AssistantRestoreTests(DesktopFixture,unittest.TestCase):
         current=restore._current;calls=[]
         def corrupt_after_commit(path):
             calls.append(1)
-            if len(calls)==3:(path/'layout.ini').write_text('simulated corruption')
+            if (path/'layout.ini').read_text()=='synthetic layout 1':(path/'layout.ini').write_text('simulated corruption')
             return current(path)
         with patch.object(restore,'_current',side_effect=corrupt_after_commit):
             with self.assertRaisesRegex(ValueError,'写入后内容校验失败'):layout.assistant_restore(self.root,dict(id=saved['id'],fingerprint=preview['fingerprint']))
@@ -350,3 +355,128 @@ class AssistantRestoreTests(DesktopFixture,unittest.TestCase):
         entry=zipfile.ZipInfo('link');entry.create_system=3;entry.external_attr=0o120777<<16
         with zipfile.ZipFile(path,'w') as archive:archive.writestr(entry,'outside')
         with self.assertRaisesRegex(ValueError,'链接或特殊文件'):layout.assistant_preview(self.root,dict(id=saved['id']))
+
+
+class AutomaticAssistantRestoreTests(DesktopFixture,unittest.TestCase):
+    start_assistant=AssistantTests.start_assistant
+    def setup_auto(self):
+        root=self.start_assistant();saved=layout.backup(self.root,{})
+        (root/'layout.ini').write_text('live data')
+        snapshot=patch.object(control,'process_snapshot',return_value=[dict(pid=123,low=456,high=0,path='360Desktop.exe',size=1,modified=1)])
+        snapshot.start();self.addCleanup(snapshot.stop)
+        return root,saved
+    def test_graceful_close_flush_restore_and_restart(self):
+        root,saved=self.setup_auto()
+        preview=layout.assistant_preview(self.root,dict(id=saved['id']))
+        self.assertTrue(preview['auto_restart'])
+        with patch.object(control,'ProcessCycle') as cycle:
+            def shutdown():
+                (root/'layout.ini').write_text('final flushed configuration')
+                self.assistant_mock.return_value['running']=False
+            cycle.return_value.shutdown.side_effect=shutdown
+            cycle.return_value.resume.return_value=True
+            result=layout.assistant_restore(self.root,dict(id=saved['id'],fingerprint=preview['fingerprint']))
+            cycle.return_value.shutdown.assert_called_once();cycle.return_value.resume.assert_called_once();cycle.return_value.close.assert_called_once()
+        self.assertTrue(result['restarted']);self.assertEqual((root/'layout.ini').read_text(),'synthetic layout 1')
+        self.assertEqual((Path(result['rollback_directory'])/'layout.ini').read_text(),'final flushed configuration')
+    def test_shutdown_refusal_does_not_overwrite(self):
+        root,saved=self.setup_auto();preview=layout.assistant_preview(self.root,dict(id=saved['id']))
+        with patch.object(control,'ProcessCycle') as cycle:
+            cycle.return_value.shutdown.side_effect=ValueError('refused normal exit')
+            with self.assertRaisesRegex(ValueError,'refused normal exit'):layout.assistant_restore(self.root,dict(id=saved['id'],fingerprint=preview['fingerprint']))
+            cycle.return_value.resume.assert_called_once();cycle.return_value.close.assert_called_once()
+        self.assertEqual((root/'layout.ini').read_text(),'live data')
+    def test_restart_failure_does_not_hide_successful_file_restore(self):
+        root,saved=self.setup_auto();preview=layout.assistant_preview(self.root,dict(id=saved['id']))
+        with patch.object(control,'ProcessCycle') as cycle:
+            cycle.return_value.shutdown.side_effect=lambda:self.assistant_mock.return_value.update(running=False)
+            cycle.return_value.resume.return_value=False
+            result=layout.assistant_restore(self.root,dict(id=saved['id'],fingerprint=preview['fingerprint']))
+        self.assertFalse(result['restarted']);self.assertIn('手动打开',result['message']);self.assertEqual((root/'layout.ini').read_text(),'synthetic layout 1')
+    def test_changed_process_generation_requires_new_confirmation(self):
+        root,saved=self.setup_auto();preview=layout.assistant_preview(self.root,dict(id=saved['id']))
+        with patch.object(control,'process_snapshot',return_value=[dict(pid=123,low=999,high=0)]),patch.object(control,'ProcessCycle') as cycle:
+            with self.assertRaisesRegex(ValueError,'重新预览'):layout.assistant_restore(self.root,dict(id=saved['id'],fingerprint=preview['fingerprint']))
+            cycle.assert_not_called()
+        self.assertEqual((root/'layout.ini').read_text(),'live data')
+    def test_write_failure_restarts_after_rollback(self):
+        import desktop_layout_assistant_restore as restore
+        root,saved=self.setup_auto();preview=layout.assistant_preview(self.root,dict(id=saved['id']))
+        with patch.object(control,'ProcessCycle') as cycle,patch.object(restore,'_restore_stopped',side_effect=ValueError('write failed and rolled back')):
+            cycle.return_value.shutdown.side_effect=lambda:self.assistant_mock.return_value.update(running=False)
+            with self.assertRaisesRegex(ValueError,'write failed'):layout.assistant_restore(self.root,dict(id=saved['id'],fingerprint=preview['fingerprint']))
+            cycle.return_value.resume.assert_called_once()
+        self.assertEqual((root/'layout.ini').read_text(),'live data')
+    def test_unsafe_recovery_failure_does_not_restart_into_missing_profile(self):
+        import desktop_layout_assistant_restore as restore
+        root,saved=self.setup_auto();preview=layout.assistant_preview(self.root,dict(id=saved['id']))
+        with patch.object(control,'ProcessCycle') as cycle,patch.object(restore,'_restore_stopped',side_effect=restore.RecoveryRequired('manual recovery needed')):
+            cycle.return_value.shutdown.side_effect=lambda:self.assistant_mock.return_value.update(running=False)
+            with self.assertRaisesRegex(ValueError,'manual recovery'):layout.assistant_restore(self.root,dict(id=saved['id'],fingerprint=preview['fingerprint']))
+            cycle.return_value.resume.assert_not_called();cycle.return_value.close.assert_called_once()
+
+
+class RestartManagerTests(unittest.TestCase):
+    def test_windows_struct_layout_and_graceful_flags(self):
+        from unittest.mock import MagicMock
+        self.assertEqual(ctypes.sizeof(control.FileTime),8);self.assertEqual(ctypes.sizeof(control.UniqueProcess),12)
+        api=MagicMock()
+        def start(handle,flags,key):handle._obj.value=42;return 0
+        api.RmStartSession.side_effect=start;api.RmRegisterResources.return_value=0;api.RmShutdown.return_value=0
+        process=dict(pid=123,low=456,high=0,path='C:/360/360Desktop.exe')
+        with patch.object(control.C,'WinDLL',return_value=api,create=True),patch.object(control,'_wait_running',return_value=True):
+            cycle=control.ProcessCycle([process]);cycle.shutdown();self.assertTrue(cycle.resume());cycle.close()
+        args=api.RmRegisterResources.call_args.args
+        self.assertEqual((args[1],args[3],args[5]),(0,1,0));self.assertEqual(args[4][0].pid,123)
+        api.RmShutdown.assert_called_once_with(42,0,None);api.RmRestart.assert_called_once_with(42,0,None);api.RmEndSession.assert_called_once_with(42)
+    def test_non_desktop_process_is_never_registered_for_shutdown(self):
+        from unittest.mock import MagicMock
+        api=MagicMock()
+        with patch.object(control.C,'WinDLL',return_value=api,create=True):
+            cycle=control.ProcessCycle([dict(path='C:/Windows/explorer.exe')])
+            with self.assertRaisesRegex(ValueError,'非 360'):cycle.shutdown()
+        api.RmStartSession.assert_not_called()
+
+
+class NativeRestoreAssistantTests(DesktopFixture,unittest.TestCase):
+    def test_late_assistant_reversion_is_not_reported_as_success(self):
+        saved=layout.backup(self.root,{})
+        self.fake.current['icons'][0].update(x=400,y=200)
+        self.assistant_mock.return_value['running']=True
+        preview=layout.preview(self.root,dict(id=saved['id']))
+        def revert(delay):self.fake.current['icons'][0].update(x=400,y=200)
+        with patch.object(layout.time,'sleep',side_effect=revert):
+            result=layout.restore(self.root,dict(id=saved['id'],fingerprint=preview['fingerprint']))
+        self.assertEqual(result['unmatched_positions'],1);self.assertIn('仅恢复 Windows',result['assistant_warning'])
+
+
+class AutomaticRestartFallbackTests(unittest.TestCase):
+    def api(self):
+        from unittest.mock import MagicMock
+        return MagicMock()
+    def test_fallback_launches_only_observed_executable_without_shell(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path=Path(temporary)/'360Desktop.exe';path.write_bytes(b'synthetic exe')
+            item=dict(pid=123,low=456,high=0,path=str(path),size=path.stat().st_size,modified=path.stat().st_mtime_ns)
+            api=self.api()
+            with patch.object(control.C,'WinDLL',return_value=api,create=True),patch.object(control,'_wait_running',side_effect=[False,True]),patch.object(control.subprocess,'Popen') as popen:
+                cycle=control.ProcessCycle([item]);cycle.session=42;cycle.attempted=True
+                self.assertTrue(cycle.resume())
+                self.assertEqual(popen.call_args.args[0],[str(path)])
+                self.assertFalse(popen.call_args.kwargs['shell'])
+    def test_changed_executable_is_not_launched(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path=Path(temporary)/'360Desktop.exe';path.write_bytes(b'changed exe')
+            item=dict(pid=123,low=456,high=0,path=str(path),size=1,modified=0)
+            with patch.object(control.C,'WinDLL',return_value=self.api(),create=True),patch.object(control,'_wait_running',return_value=False),patch.object(control.subprocess,'Popen') as popen:
+                cycle=control.ProcessCycle([item]);cycle.session=42;cycle.attempted=True
+                self.assertFalse(cycle.resume());popen.assert_not_called()
+    def test_denied_shutdown_never_requests_force(self):
+        api=self.api()
+        def start(handle,flags,key):handle._obj.value=42;return 0
+        api.RmStartSession.side_effect=start;api.RmRegisterResources.return_value=0;api.RmShutdown.return_value=351
+        with patch.object(control.C,'WinDLL',return_value=api,create=True):
+            cycle=control.ProcessCycle([dict(pid=123,low=456,high=0,path='C:/360/360Desktop.exe')])
+            with self.assertRaisesRegex(ValueError,'未覆盖配置'):cycle.shutdown()
+            cycle.close()
+        api.RmShutdown.assert_called_once_with(42,0,None)

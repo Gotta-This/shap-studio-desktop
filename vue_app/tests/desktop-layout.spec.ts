@@ -35,6 +35,7 @@ async function windows(page: Page, dueNow = false) {
     restoreCalls: 0,
     assistantRestoreCalls: 0,
     assistantRestoreError: "",
+    assistantRestartSucceeded: true,
     failPreview: false,
     unmatched: 0,
     needsMove: 2,
@@ -114,6 +115,9 @@ async function windows(page: Page, dueNow = false) {
           needs_move_count: store.needsMove,
           display_changed: false,
           fingerprint: "confirmed-layout",
+          assistant_warning: store.assistant.running
+            ? "360 正在运行：仅恢复 Windows 原生布局，不会修改 360 布局。"
+            : "",
         };
         break;
       case "restore":
@@ -127,6 +131,9 @@ async function windows(page: Page, dueNow = false) {
           needs_move_count: store.needsMove,
           diagnostic_id: "diagnostic-operation-123",
           diagnostic_saved: true,
+          assistant_warning: store.assistant.running
+            ? "360 正在运行：仅恢复 Windows 原生布局，不会修改 360 布局。"
+            : "",
         };
         break;
       case "assistant_preview":
@@ -135,8 +142,10 @@ async function windows(page: Page, dueNow = false) {
           bytes: 1024,
           fingerprint: "vendor-config-confirmed",
           current_exists: true,
-          message:
-            "当前目录将完整保留为回退副本；恢复后请手动启动 360 检查布局。",
+          auto_restart: store.assistant.running,
+          message: store.assistant.running
+            ? "确认后将正常退出并重新启动 360；无法正常退出则停止恢复。"
+            : "当前目录将完整保留为回退副本；恢复后请手动启动 360 检查布局。",
         };
         break;
       case "assistant_restore":
@@ -153,8 +162,15 @@ async function windows(page: Page, dueNow = false) {
           bytes: 1024,
           rollback_directory:
             "C:/Users/test/AppData/Roaming/.360DesktopLite-before-restore-test",
-          message:
-            "360 数据文件已恢复并校验。请手动启动 360 确认布局是否生效。",
+          auto_restart: store.assistant.running,
+          restarted: store.assistant.running
+            ? store.assistantRestartSucceeded
+            : null,
+          message: store.assistant.running
+            ? store.assistantRestartSucceeded
+              ? "360 数据文件已恢复并校验。已检测到 360 重新运行，请核对屏幕上的布局。"
+              : "360 数据文件已恢复并校验。自动启动未成功，请手动打开 360 检查布局。"
+            : "360 数据文件已恢复并校验。请手动启动 360 确认布局是否生效。",
         };
         break;
       case "diagnostics":
@@ -378,7 +394,7 @@ test("feature switch disables capture and restore but retains history after relo
   ).toBeEnabled();
 });
 
-test("running 360 displays dual backup and blocks misleading native restore", async ({
+test("running 360 allows native restore and explains its scope", async ({
   page,
 }) => {
   const store = await windows(page);
@@ -398,7 +414,7 @@ test("running 360 displays dual backup and blocks misleading native restore", as
   ).toBeVisible();
   await expect(
     page.getByRole("button", { name: "恢复备份 备份 1", exact: true }),
-  ).toBeDisabled();
+  ).toBeEnabled();
   await expect(
     page.getByRole("button", { name: "备份当前排列", exact: true }),
   ).toBeEnabled();
@@ -406,6 +422,11 @@ test("running 360 displays dual backup and blocks misleading native restore", as
   await expect(
     page.getByText("360 数据被占用，本次未同步", { exact: true }),
   ).toBeVisible();
+  await page
+    .getByRole("button", { name: "恢复备份 备份 1", exact: true })
+    .click();
+  await expect(page.getByRole("dialog")).toContainText("不会修改 360 布局");
+  await page.getByRole("button", { name: "取消", exact: true }).click();
   expect(store.restoreCalls).toBe(0);
 });
 
@@ -454,4 +475,124 @@ test("360 restore errors remain visible instead of claiming success", async ({
     .click();
   await expect(page.getByRole("alert")).toContainText("已保留或回退原配置");
   await expect(page.locator(".layout-restore-summary")).toHaveCount(0);
+});
+
+test("running 360 can be restored with automatic normal exit and restart", async ({
+  page,
+}) => {
+  const store = await windows(page);
+  store.assistant.running = true;
+  store.rows[0].assistant = { status: "saved", message: "已保存 360 数据副本" };
+  await page.goto("/#/tools/desktop-layout");
+  await page
+    .getByRole("button", { name: "恢复360备份 备份 1", exact: true })
+    .click();
+  await expect(page.getByRole("dialog")).toContainText("正常退出");
+  await expect(page.getByRole("dialog")).toContainText("自动重新启动");
+  expect(store.assistantRestoreCalls).toBe(0);
+  await page
+    .getByRole("button", { name: "确认恢复360配置", exact: true })
+    .click();
+  await expect(page.locator(".layout-restore-summary")).toContainText(
+    "已检测到 360 重新运行",
+  );
+  expect(store.assistantRestoreCalls).toBe(1);
+});
+
+test("restart failure visibly distinguishes restored files from a stopped app", async ({
+  page,
+}) => {
+  const store = await windows(page);
+  store.assistant.running = true;
+  store.assistantRestartSucceeded = false;
+  store.rows[0].assistant = { status: "saved", message: "已保存 360 数据副本" };
+  await page.goto("/#/tools/desktop-layout");
+  await page
+    .getByRole("button", { name: "恢复360备份 备份 1", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "确认恢复360配置", exact: true })
+    .click();
+  await expect(page.locator(".layout-restore-summary")).toContainText(
+    "自动启动未成功",
+  );
+  await expect(page.locator(".layout-restore-summary")).toHaveClass(
+    /field-error/,
+  );
+});
+
+test("backup pagination supports all pages and clamps after deleting the last page", async ({
+  page,
+}) => {
+  const store = await windows(page);
+  store.rows = Array.from({ length: 45 }, (_, i) => record(100 + i));
+  await page.goto("/#/tools/desktop-layout");
+  const rows = page.locator(".layout-history tbody tr"),
+    nav = page.getByRole("navigation", { name: "备份列表分页" });
+  await expect(rows).toHaveCount(20);
+  await expect(nav).toContainText("第 1 / 3 页");
+  await expect(
+    nav.getByRole("button", { name: "上一页", exact: true }),
+  ).toBeDisabled();
+  await nav.getByRole("button", { name: "下一页", exact: true }).click();
+  await expect(rows.first()).toContainText("备份 120");
+  await nav.getByRole("button", { name: "末页", exact: true }).click();
+  await expect(rows).toHaveCount(5);
+  await expect(
+    nav.getByRole("button", { name: "下一页", exact: true }),
+  ).toBeDisabled();
+  for (let i = 140; i < 145; i++) {
+    const remove = page.getByRole("button", {
+      name: `删除备份 备份 ${i}`,
+      exact: true,
+    });
+    await remove.click();
+    await page
+      .getByRole("button", { name: "确认删除备份", exact: true })
+      .click();
+    await expect(remove).toHaveCount(0);
+  }
+  await expect(nav).toContainText("第 2 / 2 页");
+  await expect(rows).toHaveCount(20);
+});
+
+test("changing page size resets to first page and includes all matching records", async ({
+  page,
+}) => {
+  const store = await windows(page);
+  store.rows = Array.from({ length: 45 }, (_, i) => record(100 + i));
+  await page.goto("/#/tools/desktop-layout");
+  const nav = page.getByRole("navigation", { name: "备份列表分页" });
+  await nav.getByRole("button", { name: "末页", exact: true }).click();
+  await page
+    .getByRole("combobox", { name: "每页备份条数", exact: true })
+    .click();
+  await page.getByRole("option", { name: "50 条/页", exact: true }).click();
+  await expect(page.locator(".layout-history tbody tr")).toHaveCount(45);
+  await expect(nav).toContainText("第 1 / 1 页");
+});
+
+test("new backup returns to first page and background refresh never leaves an empty page", async ({
+  page,
+}) => {
+  const store = await windows(page);
+  store.rows = Array.from({ length: 45 }, (_, i) => record(100 + i));
+  await page.goto("/#/tools/desktop-layout");
+  const nav = page.getByRole("navigation", { name: "备份列表分页" });
+  await nav.getByRole("button", { name: "末页", exact: true }).click();
+  await page
+    .getByRole("textbox", { name: "备份名称", exact: true })
+    .fill("新备份");
+  await page.getByRole("button", { name: "备份当前排列", exact: true }).click();
+  await expect(nav).toContainText("第 1 / 3 页");
+  await expect(page.locator(".layout-history tbody tr").first()).toContainText(
+    "新备份",
+  );
+  await nav.getByRole("button", { name: "末页", exact: true }).click();
+  store.rows = [record(100)];
+  await page.evaluate(() =>
+    window.dispatchEvent(new Event("desktop-layout-updated")),
+  );
+  await expect(nav).toContainText("第 1 / 1 页");
+  await expect(page.locator(".layout-history tbody tr")).toHaveCount(1);
 });

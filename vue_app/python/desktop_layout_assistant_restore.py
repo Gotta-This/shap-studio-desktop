@@ -2,6 +2,9 @@
 import hashlib,json,os,re,shutil,stat,tempfile,uuid,zipfile
 from pathlib import Path,PureWindowsPath
 import desktop_layout_assistant as assistant
+import desktop_layout_assistant_control as control
+
+class RecoveryRequired(ValueError):pass
 
 
 def stopped():
@@ -78,14 +81,17 @@ def _contents(path):
 
 
 def preview(profile,metadata):
-    stopped();root=_root()
+    if assistant.sys.platform!='win32':raise ValueError('非windows电脑无法使用')
+    running=control._running();root=_root()
     if Path(profile).resolve().is_relative_to(root.resolve()):raise ValueError('应用数据目录位于 360 目录内，不能整体替换。')
     path=_archive(profile,metadata);files,total=_contents(path)
-    current=_current(root)
-    return dict(file_count=len(files),bytes=total,fingerprint=hashlib.sha256((path.stem+'|'+current).encode()).hexdigest(),current_exists=root.exists(),message='将替换 360 数据目录（包括副本内设置及历史数据）。当前目录将完整保留为回退副本；Windows 原生图标排列不会改变。恢复后请手动启动 360 检查布局。')
+    processes=control.process_snapshot() if running else []
+    current='running:'+json.dumps(processes,sort_keys=True) if running else _current(root)
+    return dict(file_count=len(files),bytes=total,fingerprint=hashlib.sha256((path.stem+'|'+current).encode()).hexdigest(),current_exists=root.exists(),auto_restart=running,message='将替换 360 数据目录（包括副本内设置及历史数据）。当前目录会保留为回退副本。'+('确认后将正常退出并重新启动 360；无法正常退出则停止恢复。' if running else '360 当前未运行，恢复后保持关闭。'))
 
 
-def restore(profile,metadata,fingerprint):
+def _restore_stopped(profile,metadata,fingerprint):
+    stopped()
     plan=preview(profile,metadata)
     if not isinstance(fingerprint,str) or fingerprint!=plan['fingerprint']:raise ValueError('360 当前配置或备份已变化，请重新预览并确认。')
     root=_root();path=_archive(profile,metadata);files,total=_contents(path)
@@ -114,7 +120,36 @@ def restore(profile,metadata,fingerprint):
                 os.replace(root,failed)
             if moved:os.replace(rollback,root)
         except OSError as rollback_error:
-            raise ValueError('360 恢复中断，自动回退失败。原配置仍保留在：'+str(rollback)+'；请退出 360 后手动检查。') from rollback_error
+            raise RecoveryRequired('360 恢复中断，自动回退失败。原配置仍保留在：'+str(rollback)+'；请退出 360 后手动检查。') from rollback_error
         raise ValueError('360 恢复未完成，已保留或回退原配置。'+str(error)) from error
     finally:
         if stage.exists():shutil.rmtree(stage,ignore_errors=True)
+
+
+def restore(profile,metadata,fingerprint):
+    plan=preview(profile,metadata)
+    if not isinstance(fingerprint,str) or plan['fingerprint']!=fingerprint:raise ValueError('360 当前状态或备份已变化，请重新预览并确认。')
+    if not plan['auto_restart']:
+        result=_restore_stopped(profile,metadata,fingerprint)
+        return dict(result,auto_restart=False,restarted=None)
+    # Validate the exact same process generation before sending exit requests.
+    processes=control.process_snapshot();path=_archive(profile,metadata)
+    expected=hashlib.sha256((path.stem+'|running:'+json.dumps(processes,sort_keys=True)).encode()).hexdigest()
+    if expected!=fingerprint:raise ValueError('360 进程已变化，请重新预览并确认。')
+    cycle=control.ProcessCycle(processes);safe_to_restart=True
+    try:
+        cycle.shutdown()
+        stopped()
+        # Normal exit may flush 360's in-memory state. Preserve that final
+        # on-disk state, rather than treating its legitimate flush as a conflict.
+        closed_plan=preview(profile,metadata)
+        result=_restore_stopped(profile,metadata,closed_plan['fingerprint'])
+        resumed=cycle.resume()
+        return dict(result,auto_restart=True,restarted=resumed,message='360 数据文件已恢复并校验。'+('已检测到 360 重新运行，请核对屏幕上的布局。' if resumed else '自动启动未成功，请手动打开 360 检查布局。'))
+    except RecoveryRequired:
+        safe_to_restart=False
+        raise
+    except Exception as error:
+        resumed=cycle.resume() if safe_to_restart else False
+        raise ValueError(str(error)+(' 已尝试重新打开 360。' if resumed else ' 如 360 已退出，请手动打开。')) from error
+    finally:cycle.close()

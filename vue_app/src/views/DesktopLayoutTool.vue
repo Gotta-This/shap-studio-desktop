@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import {
   ArchiveRestore,
   MonitorCog,
@@ -11,6 +11,7 @@ import {
   Download,
 } from "lucide-vue-next";
 import PageHeading from "@/components/PageHeading.vue";
+import SelectField from "@/components/SelectField.vue";
 import EmptyState from "@/components/EmptyState.vue";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -76,12 +77,14 @@ interface Plan {
   needs_move_count?: number;
   display_changed: boolean;
   fingerprint: string;
+  assistant_warning?: string;
 }
 interface AssistantPlan {
   file_count: number;
   bytes: number;
   fingerprint: string;
   current_exists: boolean;
+  auto_restart?: boolean;
   message: string;
 }
 const rollbackDirectory = ref("");
@@ -104,6 +107,33 @@ const data = ref<LayoutInfo | null>(null),
   loading = ref(false),
   busy = ref(false),
   error = ref("");
+const page = ref(1),
+  pageSize = ref("20");
+const pageCount = computed(() =>
+  Math.max(
+    1,
+    Math.ceil((data.value?.backups.length || 0) / Number(pageSize.value)),
+  ),
+);
+const pagedBackups = computed(() => {
+  const start =
+    (Math.min(page.value, pageCount.value) - 1) * Number(pageSize.value);
+  return data.value?.backups.slice(start, start + Number(pageSize.value)) || [];
+});
+watch(
+  pageCount,
+  (count) => {
+    page.value = Math.min(page.value, count);
+  },
+  { flush: "sync" },
+);
+watch(
+  pageSize,
+  () => {
+    page.value = 1;
+  },
+  { flush: "sync" },
+);
 const label = ref(""),
   permanent = ref(false);
 const featureEnabled = ref(true);
@@ -189,6 +219,7 @@ async function save() {
     });
     label.value = "";
     permanent.value = false;
+    page.value = 1;
     await load();
     if (result.assistant?.status === "failed")
       error.value = result.assistant.message;
@@ -257,17 +288,20 @@ async function confirm() {
   error.value = "";
   try {
     if (action.kind === "assistant_restore") {
-      const result = await api<{ message: string; rollback_directory: string }>(
-        "desktop.layout.assistant_restore",
-        {
-          id: action.backup.id,
-          fingerprint: action.assistantPlan?.fingerprint,
-        },
-      );
-      restoreFailed.value = false;
+      const result = await api<{
+        message: string;
+        rollback_directory: string;
+        auto_restart?: boolean;
+        restarted?: boolean | null;
+      }>("desktop.layout.assistant_restore", {
+        id: action.backup.id,
+        fingerprint: action.assistantPlan?.fingerprint,
+      });
+      restoreFailed.value =
+        result.auto_restart === true && result.restarted === false;
       restoreSummary.value = result.message;
       rollbackDirectory.value = result.rollback_directory;
-      notify("360 配置文件已恢复，请启动 360 检查布局。");
+      notify(result.message, restoreFailed.value);
     } else if (action.kind === "restore") {
       const result = await api<
         Plan & {
@@ -287,6 +321,8 @@ async function confirm() {
         : result.needs_move_count === 0
           ? "所选备份与当前排列一致，没有需要移动的图标。请确认选择的是打乱排列之前的备份。"
           : `已恢复 ${restored} / ${restored + missing} 个备份图标；${missing} 个未匹配并跳过；${result.new_count ?? action.plan!.new_count} 个新增图标已放入空网格。`;
+      if (result.assistant_warning)
+        restoreSummary.value += " " + result.assistant_warning;
       if (result.diagnostic_id)
         restoreSummary.value += ` 诊断编号：${result.diagnostic_id.slice(0, 12)}。`;
       if (result.diagnostic_saved === false)
@@ -440,12 +476,13 @@ async function confirm() {
         <p class="muted">
           360 副本按原文件压缩保存于备份目录的 360-data
           文件夹，相同内容共用副本。运行中复制尚未经 360
-          恢复验证，恢复时须先退出 360，通过校验和确认后才会替换配置。
+          恢复验证。恢复时会正常退出并重新打开原本运行的
+          360；无法正常退出则停止，不强制结束。
         </p>
         <p class="muted">
           Windows 原生备份记录当时系统接口可读取的排列，无法还原未曾备份的“启动
-          360 前布局”。360 运行期间暂停两种恢复。退出 360
-          后点击“刷新备份”，再选择对应恢复按钮。
+          360 前布局”。360 运行时仍可恢复 Windows 原生布局，但不会改变 360
+          自己管理的排列；恢复 360 时会短暂关闭并重开它。
         </p>
       </div>
       <div class="panel layout-save-panel">
@@ -511,7 +548,7 @@ async function confirm() {
               </tr>
             </thead>
             <tbody>
-              <tr v-for="backup in data.backups" :key="backup.id">
+              <tr v-for="backup in pagedBackups" :key="backup.id">
                 <td>
                   <strong>{{ backup.label }}</strong
                   ><small
@@ -567,9 +604,7 @@ async function confirm() {
                       variant="outline"
                       size="sm"
                       :disabled="
-                        busy ||
-                        data.settings?.feature_enabled === false ||
-                        data.assistant?.running
+                        busy || data.settings?.feature_enabled === false
                       "
                       :aria-label="'恢复备份 ' + backup.label"
                       @click="prepare(backup)"
@@ -580,9 +615,7 @@ async function confirm() {
                       variant="outline"
                       size="sm"
                       :disabled="
-                        busy ||
-                        data.settings?.feature_enabled === false ||
-                        data.assistant?.running
+                        busy || data.settings?.feature_enabled === false
                       "
                       :aria-label="'恢复360备份 ' + backup.label"
                       @click="prepareAssistant(backup)"
@@ -627,6 +660,56 @@ async function confirm() {
           ><template #icon><ArchiveRestore :size="26" /></template
         ></EmptyState>
       </div>
+      <nav
+        v-if="data.backups.length"
+        class="layout-pagination"
+        aria-label="备份列表分页"
+      >
+        <span class="muted" aria-live="polite"
+          >共 {{ data.backups.length }} 条 · 第 {{ page }} /
+          {{ pageCount }} 页</span
+        >
+        <div class="layout-page-size">
+          <SelectField
+            v-model="pageSize"
+            label="每页备份条数"
+            :disabled="busy || loading"
+            :options="[
+              { value: '20', label: '20 条/页' },
+              { value: '50', label: '50 条/页' },
+              { value: '100', label: '100 条/页' },
+            ]"
+          />
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          :disabled="page === 1 || busy || loading"
+          @click="page = 1"
+          >首页</Button
+        >
+        <Button
+          variant="outline"
+          size="sm"
+          :disabled="page === 1 || busy || loading"
+          @click="page--"
+          >上一页</Button
+        >
+        <Button
+          variant="outline"
+          size="sm"
+          :disabled="page >= pageCount || busy || loading"
+          @click="page++"
+          >下一页</Button
+        >
+        <Button
+          variant="outline"
+          size="sm"
+          :disabled="page >= pageCount || busy || loading"
+          @click="page = pageCount"
+          >末页</Button
+        >
+      </nav>
       <div class="layout-location muted">
         备份保存在应用数据目录，更新软件会保留。<Button
           variant="outline"
@@ -703,6 +786,9 @@ async function confirm() {
           <p v-if="pending.plan.display_changed" class="muted">
             当前显示设置与备份不同，将按保存的坐标恢复。
           </p>
+          <p v-if="pending.plan.assistant_warning" class="field-error">
+            {{ pending.plan.assistant_warning }}
+          </p>
           <p class="muted">确认后会先自动备份当前排列，再执行恢复。</p>
         </div>
         <div
@@ -719,8 +805,12 @@ async function confirm() {
           </p>
           <p>{{ pending.assistantPlan.message }}</p>
           <p class="field-error">
-            将整体替换 360 数据目录，包括副本中的设置和历史数据。360
-            必须保持退出；运行中复制的副本仍需启动后人工确认兼容性。
+            将整体替换 360
+            数据目录，包括副本中的设置和历史数据。运行中复制的副本仍需启动后人工确认兼容性。
+          </p>
+          <p v-if="pending.assistantPlan.auto_restart" class="muted">
+            确认后将正常退出
+            360，保存退出后的当前配置作为回退副本，再恢复并自动重新启动。无法正常退出时不会覆盖配置。
           </p>
           <p v-if="pending.assistantPlan.current_exists" class="muted">
             当前配置会先整体移至同级回退目录，写入失败会尝试自动回退。
@@ -738,7 +828,9 @@ async function confirm() {
             >取消</Button
           ><Button :disabled="busy" @click="confirm">{{
             busy
-              ? "正在处理…"
+              ? pending?.kind === "assistant_restore"
+                ? "正在退出、恢复并重开360…"
+                : "正在处理…"
               : pending?.kind === "assistant_restore"
                 ? "确认恢复360配置"
                 : pending?.kind === "restore"
@@ -753,6 +845,18 @@ async function confirm() {
   </section>
 </template>
 <style scoped>
+.layout-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+.layout-page-size {
+  width: 130px;
+  margin-left: auto;
+}
+
 .layout-save-panel {
   padding: 20px;
   margin-bottom: 24px;
