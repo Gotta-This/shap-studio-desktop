@@ -1,14 +1,25 @@
 """Background scientific operations with atomic status and cooperative cancellation."""
 from pathlib import Path
-import json,os,re,subprocess,sys,uuid,tempfile,threading
+import json,os,re,subprocess,sys,uuid,tempfile,threading,time
 
 _SHAP_LOCK=threading.Lock()
+
+# Windows readers/antivirus may briefly deny opening or replacing a status
+# file. Keep atomic replacement and retry only access/sharing errors; never
+# manufacture a 'running' response when the file cannot actually be read.
+def _retry_status_io(operation):
+    delays=(.01,.02,.04,.08,.12,.2,.25,.3)
+    for attempt in range(len(delays)+1):
+        try:return operation()
+        except PermissionError:
+            if attempt==len(delays):raise
+            time.sleep(delays[attempt])
 
 def write(path,value):
     fd,name=tempfile.mkstemp(dir=path.parent,prefix='.status-')
     try:
         with os.fdopen(fd,'w',encoding='utf8') as f:json.dump(value,f,ensure_ascii=False,allow_nan=False,default=str)
-        os.replace(name,path)
+        _retry_status_io(lambda:os.replace(name,path))
     finally:Path(name).unlink(missing_ok=True)
 
 def location(profile,jid):
@@ -36,7 +47,9 @@ def start(profile,p):
     threading.Thread(target=process.wait,daemon=True).start()
     return dict(id=jid)
 
-def status(profile,jid):return json.loads((location(profile,jid)/'status.json').read_text(encoding='utf-8'))
+def status(profile,jid):
+    path=location(profile,jid)/'status.json'
+    return json.loads(_retry_status_io(lambda:path.read_text(encoding='utf-8')))
 def cancel(profile,jid):
     path=location(profile,jid);(path/'cancel').touch();return dict(id=jid,message='正在取消；当前计算步骤结束后停止。')
 
