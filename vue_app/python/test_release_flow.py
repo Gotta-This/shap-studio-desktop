@@ -60,8 +60,9 @@ class ReleaseFlowTests(unittest.TestCase):
                 result=releases.download(Path(tmp))
                 self.assertEqual(Path(result['path']).name,labelled)
                 self.assertEqual(Path(result['path']).read_bytes(),b'installer')
-        # Exact legacy aliases remain selectable by pre-3.2 clients.
-        self.assertTrue(any(a['name']==legacy for a in payload['assets']))
+        # Current clients also work when the release contains no legacy alias.
+        payload['assets']=[a for a in payload['assets'] if a['name']!=legacy]
+        self.assertEqual(releases.select(payload,legacy)['asset']['name'],labelled)
     def test_mac_architecture_filenames_and_invalid_versions(self):
         for machine,arch in [('arm64','arm64'),('x86_64','x86_64')]:
             legacy=releases.asset_name('darwin',machine)

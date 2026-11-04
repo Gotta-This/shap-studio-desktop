@@ -1,0 +1,35 @@
+name: Clean duplicate release downloads
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/cleanup-release-assets.yml
+      - vue_app/scripts/cleanup-release-assets.py
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Published release tag to clean
+        required: true
+        default: v3.2.2
+permissions:
+  contents: read
+concurrency:
+  group: clean-release-assets
+  cancel-in-progress: false
+jobs:
+  cleanup:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: ${{ inputs.tag || 'v3.2.2' }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Verify copies, remove aliases and refresh checksums
+        run: python vue_app/scripts/cleanup-release-assets.py

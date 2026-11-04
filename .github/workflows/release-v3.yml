@@ -144,7 +144,7 @@ jobs:
           python scripts/test-desktop-bridge.py "$app/Contents/MacOS/research-studio-v3"
           python scripts/test-native-close.py "$app/Contents/MacOS/research-studio-v3" .v3-data/native-close
           python scripts/test-native-ui.py "$app/Contents/MacOS/research-studio-v3" .v3-data/native-ui
-      - name: Collect version-labelled downloads and legacy updater aliases
+      - name: Collect version-labelled downloads
         run: python scripts/collect-release.py
       - uses: actions/upload-artifact@v7
         if: runner.os == 'macOS' && always()
