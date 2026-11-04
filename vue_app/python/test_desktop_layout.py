@@ -1,4 +1,5 @@
-import ctypes,json,tempfile,unittest
+import ctypes,json,tempfile,unittest,zipfile
+import desktop_layout_assistant as assistant
 from copy import deepcopy
 from pathlib import Path
 from unittest.mock import patch
@@ -47,11 +48,59 @@ class DesktopFixture:
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory();self.root=Path(self.tmp.name)
         self.fake=FakeDesktop(screen([icon('C:\\桌面\\原稿.lnk',0,0)]))
+        self.assistant=patch.object(assistant,'probe',return_value=dict(checked=True,running=False,installed=False,data_found=False,message=''));self.assistant_mock=self.assistant.start()
         self.windows=patch.object(layout.sys,'platform','win32');self.windows.start()
         self.native=patch.object(layout,'_native',return_value=self.fake);self.native.start()
-    def tearDown(self):self.native.stop();self.windows.stop();self.tmp.cleanup()
+    def tearDown(self):self.native.stop();self.windows.stop();self.assistant.stop();self.tmp.cleanup()
 
 class StorageTests(DesktopFixture,unittest.TestCase):
+    def test_diagnostics_distinguish_no_op_from_real_restore_and_hide_paths(self):
+        saved=layout.backup(self.root,dict(label='私人备份名称'))
+        preview=layout.preview(self.root,dict(id=saved['id']))
+        self.assertEqual(preview['needs_move_count'],0)
+        value=layout.restore(self.root,dict(id=saved['id'],fingerprint=preview['fingerprint']))
+        self.assertEqual(value['needs_move_count'],0)
+        report=layout.diagnostics(self.root)
+        self.assertNotIn('私人备份名称',report['content']);self.assertNotIn('原稿.lnk',report['content']);self.assertNotIn('C:\\\\',report['content'])
+        events=json.loads(report['content'])['events']
+        complete=next(e for e in events if e['event']=='restore.complete')
+        self.assertEqual(complete['operation'],value['diagnostic_id'])
+        self.assertEqual((complete['needs_move_count'],complete['moved_count'],complete['unmatched_positions']),(0,0,0))
+    def test_ignored_shell_movement_is_logged_as_failed_verification(self):
+        saved=layout.backup(self.root,{})
+        self.fake.current['icons'][0].update(x=400,y=200)
+        preview=layout.preview(self.root,dict(id=saved['id']))
+        self.assertEqual(preview['needs_move_count'],1)
+        def ignored(items):self.fake.trace('native.position.result',hresult='0x00000000',succeeded=True)
+        with patch.object(self.fake,'position',side_effect=ignored),patch.object(layout.time,'sleep'):
+            value=layout.restore(self.root,dict(id=saved['id'],fingerprint=preview['fingerprint']))
+        self.assertEqual(value['unmatched_positions'],1)
+        events=json.loads(layout.diagnostics(self.root)['content'])['events']
+        verify=[e for e in events if e['event']=='restore.verify'][-1]
+        self.assertEqual((verify['moved_count'],verify['unmatched_positions']),(0,1))
+        self.assertEqual(verify['sample'][0]['actual'],[400,200]);self.assertEqual(verify['sample'][0]['target'],[0,0])
+        self.assertTrue(any(e.get('hresult')=='0x00000000' for e in events))
+    def test_native_failure_is_logged_and_safety_backup_is_preserved(self):
+        saved=layout.backup(self.root,{})
+        preview=layout.preview(self.root,dict(id=saved['id']))
+        with patch.object(self.fake,'position',side_effect=OSError('Windows 桌面接口调用失败（0x80004005）。')):
+            with self.assertRaises(OSError):layout.restore(self.root,dict(id=saved['id'],fingerprint=preview['fingerprint']))
+        events=json.loads(layout.diagnostics(self.root)['content'])['events']
+        self.assertEqual(events[-1]['event'],'restore.error')
+        self.assertIn('0x80004005',events[-1]['error']['message'])
+        self.assertEqual(len(layout.info(self.root)['backups']),2)
+    def test_unwritable_diagnostic_log_does_not_break_restore(self):
+        saved=layout.backup(self.root,{})
+        preview=layout.preview(self.root,dict(id=saved['id']))
+        with patch.object(layout.diagnostic,'record',return_value=False):
+            value=layout.restore(self.root,dict(id=saved['id'],fingerprint=preview['fingerprint']))
+        self.assertFalse(value['diagnostic_saved']);self.assertEqual(value['unmatched_positions'],0)
+    def test_diagnostic_rotation_keeps_three_files(self):
+        with patch.object(layout.diagnostic,'MAX_BYTES',10):
+            for i in range(5):layout.diagnostic.record(self.root,'event',str(i))
+        files=list(self.root.glob('desktop-layout-diagnostics.jsonl*'))
+        self.assertEqual(len(files),3)
+        self.assertEqual(layout.diagnostics(self.root)['event_count'],3)
     def test_pinned_backups_never_expire_and_cannot_be_deleted(self):
         with patch.object(layout,'KEEP_RECENT',2):
             pinned=layout.backup(self.root,dict(label='永久排列',protected=True))
@@ -122,3 +171,182 @@ class ScheduleTests(DesktopFixture,unittest.TestCase):
         self.assertEqual(layout.info(self.root)['backups'],[])
         with patch.object(layout.time,'time',return_value=1060):self.assertTrue(layout.tick(self.root)['created'])
         self.assertEqual(layout.info(self.root)['settings']['last_error'],'')
+
+
+class AssistantTests(DesktopFixture,unittest.TestCase):
+    def start_assistant(self):
+        root=self.root/'vendor';root.mkdir();(root/'layout.ini').write_text('synthetic layout 1')
+        self.assistant_mock.return_value.update(running=True,installed=True,data_found=True)
+        mock=patch.object(assistant,'data_root',return_value=root);mock.start();self.addCleanup(mock.stop)
+        return root
+    def test_dual_backup_deduplicates_and_reads_back_vendor_bytes(self):
+        root=self.start_assistant()
+        one=layout.backup(self.root,{})
+        two=layout.backup(self.root,{})
+        self.assertEqual(one['assistant']['status'],'saved')
+        self.assertEqual(one['assistant']['archive'],two['assistant']['archive'])
+        archives=list((layout._folder(self.root)/'360-data').glob('*.zip'));self.assertEqual(len(archives),1)
+        with zipfile.ZipFile(archives[0]) as archive:self.assertEqual(archive.read('layout.ini'),(root/'layout.ini').read_bytes())
+        self.assertEqual(layout._read(layout._path(self.root,one['id']))['icons'],self.fake.current['icons'])
+    def test_pin_and_delete_keep_shared_archive_until_last_reference(self):
+        self.start_assistant()
+        one=layout.backup(self.root,dict(protected=True));two=layout.backup(self.root,{})
+        archive=layout._folder(self.root)/'360-data'/one['assistant']['archive']
+        layout.delete(self.root,dict(id=two['id']));self.assertTrue(archive.exists())
+        with self.assertRaises(ValueError):layout.delete(self.root,dict(id=one['id']))
+        layout.protect(self.root,dict(id=one['id'],protected=False));layout.delete(self.root,dict(id=one['id']))
+        self.assertFalse(archive.exists())
+    def test_vendor_failure_preserves_windows_and_warns_scheduler(self):
+        self.start_assistant()
+        with patch.object(assistant,'MAX_BYTES',1):
+            value=layout.backup(self.root,{})
+            state=layout.tick(self.root)
+        self.assertEqual(value['assistant']['status'],'failed');self.assertTrue(state['created']);self.assertTrue(state['last_error'])
+        self.assertEqual(len(layout.history(self.root)[0]),2)
+    def test_changed_vendor_file_is_not_recorded_as_success(self):
+        self.start_assistant()
+        original=assistant._inventory
+        calls=[]
+        def changing(root):
+            value=original(root);calls.append(1)
+            return value if len(calls)==1 else value+ [('new',0,0)]
+        with patch.object(assistant,'_inventory',side_effect=changing):value=layout.backup(self.root,{})
+        self.assertEqual(value['assistant']['status'],'failed')
+        self.assertEqual(list((layout._folder(self.root)/'360-data').iterdir()),[])
+    def test_running_assistant_blocks_native_restore_before_moving(self):
+        saved=layout.backup(self.root,{})
+        preview=layout.preview(self.root,dict(id=saved['id']))
+        self.start_assistant()
+        with self.assertRaisesRegex(ValueError,'360 正在管理'):layout.restore(self.root,dict(id=saved['id'],fingerprint=preview['fingerprint']))
+        self.assertEqual(self.fake.calls,[])
+    def test_feature_switch_survives_reload_and_stops_all_layout_operations(self):
+        saved=layout.backup(self.root,{})
+        layout.settings(self.root,dict(feature_enabled=False,enabled=True,interval_minutes=10,keep_recent=144))
+        self.assertFalse(layout.info(self.root)['settings']['feature_enabled'])
+        self.assertIsNone(layout.tick(self.root)['created'])
+        with self.assertRaisesRegex(ValueError,'工具已关闭'):layout.backup(self.root,{})
+        with self.assertRaisesRegex(ValueError,'工具已关闭'):layout.preview(self.root,dict(id=saved['id']))
+        with self.assertRaisesRegex(ValueError,'工具已关闭'):layout.restore(self.root,dict(id=saved['id']))
+        layout.settings(self.root,dict(feature_enabled=True,enabled=False,interval_minutes=10,keep_recent=144))
+        self.assertEqual(layout.backup(self.root,{})['assistant']['status'],'not_running')
+    def test_missing_directory_is_partial_failure(self):
+        self.assistant_mock.return_value.update(running=True)
+        with patch.object(assistant,'data_root',return_value=self.root/'missing'):
+            self.assertEqual(layout.backup(self.root,{})['assistant']['status'],'failed')
+    def test_process_names_are_specific_to_desktop_ui(self):
+        self.assertTrue(assistant.is_desktop_assistant('360DesktopLite64.exe'))
+        for name in ('360tray.exe','360DesktopService.exe','DesktopMgr.exe'):
+            self.assertFalse(assistant.is_desktop_assistant(name))
+    def test_real_probe_distinguishes_data_from_running_state(self):
+        self.assistant.stop()
+        with patch.object(assistant,'_windows_processes',return_value=[]),patch.object(assistant,'_registered',return_value=True),patch.object(assistant,'data_root',return_value=None):
+            state=assistant.probe()
+        self.assertTrue(state['checked']);self.assertTrue(state['installed']);self.assertFalse(state['running']);self.assertFalse(state['data_found'])
+        self.assistant.start()
+
+    def test_pruning_keeps_protected_vendor_archive_and_removes_expired_one(self):
+        root=self.start_assistant()
+        layout.settings(self.root,dict(enabled=False,interval_minutes=10,keep_recent=1))
+        pinned=layout.backup(self.root,dict(protected=True))
+        (root/'layout.ini').write_text('synthetic layout 2');old=layout.backup(self.root,{})
+        (root/'layout.ini').write_text('synthetic layout 3');new=layout.backup(self.root,{})
+        archives={p.name for p in (layout._folder(self.root)/'360-data').glob('*.zip')}
+        self.assertEqual(archives,{pinned['assistant']['archive'],new['assistant']['archive']})
+        self.assertNotIn(old['assistant']['archive'],archives)
+    def test_symlinked_vendor_content_is_rejected(self):
+        root=self.start_assistant()
+        (root/'link').symlink_to(root/'layout.ini')
+        self.assertEqual(layout.backup(self.root,{})['assistant']['status'],'failed')
+
+class AssistantRestoreTests(DesktopFixture,unittest.TestCase):
+    start_assistant=AssistantTests.start_assistant
+    def setup_backup(self):
+        root=self.start_assistant();saved=layout.backup(self.root,{})
+        (root/'layout.ini').write_text('current layout before restore')
+        self.assistant_mock.return_value['running']=False
+        return root,saved
+    def test_restores_exact_files_and_preserves_entire_original_directory(self):
+        root,saved=self.setup_backup();(root/'new-only.dat').write_bytes(b'current-only')
+        preview=layout.assistant_preview(self.root,dict(id=saved['id']))
+        result=layout.assistant_restore(self.root,dict(id=saved['id'],fingerprint=preview['fingerprint']))
+        self.assertEqual((root/'layout.ini').read_text(),'synthetic layout 1')
+        self.assertFalse((root/'new-only.dat').exists())
+        rollback=Path(result['rollback_directory'])
+        self.assertEqual((rollback/'layout.ini').read_text(),'current layout before restore')
+        self.assertEqual((rollback/'new-only.dat').read_bytes(),b'current-only')
+        self.assertEqual(self.fake.calls,[])
+    def test_current_change_invalidates_confirmation(self):
+        root,saved=self.setup_backup();preview=layout.assistant_preview(self.root,dict(id=saved['id']))
+        (root/'layout.ini').write_text('changed after preview')
+        with self.assertRaisesRegex(ValueError,'重新预览'):layout.assistant_restore(self.root,dict(id=saved['id'],fingerprint=preview['fingerprint']))
+        self.assertEqual((root/'layout.ini').read_text(),'changed after preview')
+    def test_restarted_assistant_blocks_overwrite(self):
+        root,saved=self.setup_backup();preview=layout.assistant_preview(self.root,dict(id=saved['id']))
+        self.assistant_mock.return_value['running']=True
+        with self.assertRaisesRegex(ValueError,'退出桌面助手'):layout.assistant_restore(self.root,dict(id=saved['id'],fingerprint=preview['fingerprint']))
+        self.assertEqual((root/'layout.ini').read_text(),'current layout before restore')
+    def test_commit_failure_rolls_back_without_losing_configuration(self):
+        import desktop_layout_assistant_restore as restore
+        root,saved=self.setup_backup();preview=layout.assistant_preview(self.root,dict(id=saved['id']))
+        replace=restore.os.replace
+        def fail_stage(source,destination):
+            if Path(source).name.startswith('.360DesktopLite-restore-'):raise OSError('simulated locked directory')
+            return replace(source,destination)
+        with patch.object(restore.os,'replace',side_effect=fail_stage):
+            with self.assertRaisesRegex(ValueError,'已保留或回退'):layout.assistant_restore(self.root,dict(id=saved['id'],fingerprint=preview['fingerprint']))
+        self.assertEqual((root/'layout.ini').read_text(),'current layout before restore')
+    def test_corrupt_archive_never_changes_live_configuration(self):
+        root,saved=self.setup_backup()
+        path=layout._folder(self.root)/'360-data'/saved['assistant']['archive']
+        with zipfile.ZipFile(path,'w') as archive:archive.writestr('layout.ini','tampered')
+        with self.assertRaisesRegex(ValueError,'完整性校验失败'):layout.assistant_preview(self.root,dict(id=saved['id']))
+        self.assertEqual((root/'layout.ini').read_text(),'current layout before restore')
+    def test_unsafe_zip_paths_are_rejected_before_modification(self):
+        root,saved=self.setup_backup()
+        path=layout._folder(self.root)/'360-data'/saved['assistant']['archive']
+        for name in ('../outside','C:/outside','dir\\outside','file:stream','NUL.txt','dir./file','/absolute'):
+            with self.subTest(name=name):
+                with zipfile.ZipFile(path,'w') as archive:archive.writestr(name,'unsafe')
+                with self.assertRaises(ValueError):layout.assistant_preview(self.root,dict(id=saved['id']))
+                self.assertEqual((root/'layout.ini').read_text(),'current layout before restore')
+    def test_missing_directory_can_be_created_and_feature_off_blocks_vendor_restore(self):
+        import shutil
+        root,saved=self.setup_backup();shutil.rmtree(root)
+        preview=layout.assistant_preview(self.root,dict(id=saved['id']))
+        self.assertFalse(preview['current_exists'])
+        result=layout.assistant_restore(self.root,dict(id=saved['id'],fingerprint=preview['fingerprint']))
+        self.assertEqual(result['rollback_directory'],'');self.assertTrue((root/'layout.ini').is_file())
+        layout.settings(self.root,dict(feature_enabled=False,enabled=False,interval_minutes=10,keep_recent=144))
+        with self.assertRaisesRegex(ValueError,'工具已关闭'):layout.assistant_restore(self.root,dict(id=saved['id'],fingerprint=preview['fingerprint']))
+
+    def test_post_write_verification_failure_restores_original(self):
+        import desktop_layout_assistant_restore as restore
+        root,saved=self.setup_backup();preview=layout.assistant_preview(self.root,dict(id=saved['id']))
+        current=restore._current;calls=[]
+        def corrupt_after_commit(path):
+            calls.append(1)
+            if len(calls)==3:(path/'layout.ini').write_text('simulated corruption')
+            return current(path)
+        with patch.object(restore,'_current',side_effect=corrupt_after_commit):
+            with self.assertRaisesRegex(ValueError,'写入后内容校验失败'):layout.assistant_restore(self.root,dict(id=saved['id'],fingerprint=preview['fingerprint']))
+        self.assertEqual((root/'layout.ini').read_text(),'current layout before restore')
+    def test_rollback_failure_keeps_original_and_logs_no_paths(self):
+        import desktop_layout_assistant_restore as restore
+        root,saved=self.setup_backup();preview=layout.assistant_preview(self.root,dict(id=saved['id']))
+        replace=restore.os.replace
+        def locked(source,destination):
+            if Path(source).name.startswith(('.360DesktopLite-restore-','.360DesktopLite-before-restore-')):raise OSError('simulated lock')
+            return replace(source,destination)
+        with patch.object(restore.os,'replace',side_effect=locked):
+            with self.assertRaisesRegex(ValueError,'自动回退失败'):layout.assistant_restore(self.root,dict(id=saved['id'],fingerprint=preview['fingerprint']))
+        rollback=list(root.parent.glob('.360DesktopLite-before-restore-*'));self.assertEqual(len(rollback),1)
+        self.assertEqual((rollback[0]/'layout.ini').read_text(),'current layout before restore')
+        report=layout.diagnostics(self.root)['content'];self.assertNotIn(str(root.parent),report);self.assertNotIn('layout.ini',report)
+    def test_case_aliases_and_zip_symlinks_are_rejected(self):
+        root,saved=self.setup_backup();path=layout._folder(self.root)/'360-data'/saved['assistant']['archive']
+        with zipfile.ZipFile(path,'w') as archive:
+            archive.writestr('FILE','1');archive.writestr('file','2')
+        with self.assertRaisesRegex(ValueError,'重复文件'):layout.assistant_preview(self.root,dict(id=saved['id']))
+        entry=zipfile.ZipInfo('link');entry.create_system=3;entry.external_attr=0o120777<<16
+        with zipfile.ZipFile(path,'w') as archive:archive.writestr(entry,'outside')
+        with self.assertRaisesRegex(ValueError,'链接或特殊文件'):layout.assistant_preview(self.root,dict(id=saved['id']))

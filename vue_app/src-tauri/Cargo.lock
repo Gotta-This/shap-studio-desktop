@@ -2774,7 +2774,7 @@ dependencies = [
 
 [[package]]
 name = "research-studio-v3"
-version = "3.2.1"
+version = "3.2.2"
 dependencies = [
  "block2",
  "objc2",

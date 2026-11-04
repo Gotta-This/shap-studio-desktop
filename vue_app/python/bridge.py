@@ -116,7 +116,7 @@ def dispatch(method, p):
         import desktop_layout
         action=method.removeprefix('desktop.layout.')
         if action=='info':return desktop_layout.info(profile())
-        actions={'settings':desktop_layout.settings,'tick':desktop_layout.tick,'backup':desktop_layout.backup,'protect':desktop_layout.protect,'delete':desktop_layout.delete,'preview':desktop_layout.preview,'restore':desktop_layout.restore}
+        actions={'assistant_preview':desktop_layout.assistant_preview,'assistant_restore':desktop_layout.assistant_restore,'diagnostics':desktop_layout.diagnostics,'settings':desktop_layout.settings,'tick':desktop_layout.tick,'backup':desktop_layout.backup,'protect':desktop_layout.protect,'delete':desktop_layout.delete,'preview':desktop_layout.preview,'restore':desktop_layout.restore}
         if action not in actions:raise ValueError('未知的桌面布局操作。')
         return actions[action](profile(),p)
     if method=='weather.search':

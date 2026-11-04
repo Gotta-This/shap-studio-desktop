@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { readFile } from "node:fs/promises";
 
 const id = (n: number) => String(n).padStart(32, "0");
 const record = (n: number, pinned = false, label = `备份 ${n}`) => ({
@@ -9,11 +10,20 @@ const record = (n: number, pinned = false, label = `备份 ${n}`) => ({
   reason: "manual",
   icon_count: 12,
   display: { width: 1920, height: 1080, dpi: 96 },
+  assistant: { status: "not_running", message: "360 未运行" },
 });
 async function windows(page: Page, dueNow = false) {
   const store = {
     rows: [record(1, true), record(2), record(3), record(4)],
+    assistant: {
+      checked: true,
+      running: false,
+      installed: false,
+      data_found: false,
+      message: "",
+    },
     settings: {
+      feature_enabled: true,
       enabled: true,
       interval_minutes: 1,
       keep_recent: 20,
@@ -23,7 +33,11 @@ async function windows(page: Page, dueNow = false) {
     },
     automatic: 0,
     restoreCalls: 0,
+    assistantRestoreCalls: 0,
+    assistantRestoreError: "",
     failPreview: false,
+    unmatched: 0,
+    needsMove: 2,
     lastBackup: null as any,
   };
   await page.route("**/api/bridge", async (route) => {
@@ -41,12 +55,23 @@ async function windows(page: Page, dueNow = false) {
           directory: "C:\\Users\\test\\Documents\\.research\\desktop-layouts",
           keep_recent: store.settings.keep_recent,
           settings: store.settings,
+          assistant: store.assistant,
         };
         break;
       case "tick": {
-        const now = await page.evaluate(() => Date.now() / 1000);
+        let now: number;
+        try {
+          now = await page.evaluate(() => Date.now() / 1000);
+        } catch {
+          await route.abort();
+          return;
+        }
         let created = null;
-        if (store.settings.enabled && now >= store.settings.next_due_at) {
+        if (
+          store.settings.feature_enabled &&
+          store.settings.enabled &&
+          now >= store.settings.next_due_at
+        ) {
           created = id(100 + ++store.automatic);
           store.rows.unshift({
             ...record(100 + store.automatic),
@@ -86,6 +111,7 @@ async function windows(page: Page, dueNow = false) {
           restored_count: 2,
           new_count: 1,
           missing_count: 1,
+          needs_move_count: store.needsMove,
           display_changed: false,
           fingerprint: "confirmed-layout",
         };
@@ -93,7 +119,54 @@ async function windows(page: Page, dueNow = false) {
       case "restore":
         expect(p.fingerprint).toBe("confirmed-layout");
         store.restoreCalls++;
-        result = { unmatched_positions: 0 };
+        result = {
+          unmatched_positions: store.unmatched,
+          restored_count: 2,
+          new_count: 1,
+          missing_count: 1,
+          needs_move_count: store.needsMove,
+          diagnostic_id: "diagnostic-operation-123",
+          diagnostic_saved: true,
+        };
+        break;
+      case "assistant_preview":
+        result = {
+          file_count: 2,
+          bytes: 1024,
+          fingerprint: "vendor-config-confirmed",
+          current_exists: true,
+          message:
+            "当前目录将完整保留为回退副本；恢复后请手动启动 360 检查布局。",
+        };
+        break;
+      case "assistant_restore":
+        expect(p.fingerprint).toBe("vendor-config-confirmed");
+        store.assistantRestoreCalls++;
+        if (store.assistantRestoreError) {
+          await route.fulfill({
+            json: { ok: false, error: store.assistantRestoreError },
+          });
+          return;
+        }
+        result = {
+          file_count: 2,
+          bytes: 1024,
+          rollback_directory:
+            "C:/Users/test/AppData/Roaming/.360DesktopLite-before-restore-test",
+          message:
+            "360 数据文件已恢复并校验。请手动启动 360 确认布局是否生效。",
+        };
+        break;
+      case "diagnostics":
+        result = {
+          name: "desktop-layout-diagnostics-test.json",
+          content: JSON.stringify({
+            schema: 1,
+            events: [
+              { event: "native.position.result", hresult: "0x00000000" },
+            ],
+          }),
+        };
         break;
       case "settings": {
         Object.assign(store.settings, p);
@@ -106,6 +179,7 @@ async function windows(page: Page, dueNow = false) {
         );
         result = {
           settings: store.settings,
+          assistant: store.assistant,
           removed: before - store.rows.length,
         };
         break;
@@ -233,4 +307,151 @@ test("temporary startup failure retries the automatic backup", async ({
   expect(store.automatic).toBe(0);
   await page.clock.fastForward(31000);
   await expect.poll(() => store.automatic).toBe(1);
+});
+
+test("restore failure stays visible and diagnostics can be downloaded", async ({
+  page,
+}) => {
+  const store = await windows(page);
+  store.unmatched = 2;
+  await page.goto("/#/tools/desktop-layout");
+  await page
+    .getByRole("button", { name: "恢复备份 备份 1", exact: true })
+    .click();
+  await page.getByRole("button", { name: "确认恢复排列", exact: true }).click();
+  const status = page.locator(".layout-backup-page .layout-restore-summary");
+  await expect(status).toContainText("2 个图标未按预期落位");
+  await expect(status).toContainText("诊断编号");
+  const pending = page.waitForEvent("download");
+  await page.getByRole("button", { name: "导出诊断日志", exact: true }).click();
+  const exported = await pending;
+  const value = JSON.parse(await readFile((await exported.path())!, "utf8"));
+  expect(value.events[0].hresult).toBe("0x00000000");
+  await expect(status).toContainText("未按预期落位");
+});
+
+test("unchanged layout is explained before and after restore", async ({
+  page,
+}) => {
+  const store = await windows(page);
+  store.needsMove = 0;
+  await page.goto("/#/tools/desktop-layout");
+  await page
+    .getByRole("button", { name: "恢复备份 备份 1", exact: true })
+    .click();
+  await expect(page.getByRole("dialog")).toContainText("没有需要移动的图标");
+  await page.getByRole("button", { name: "确认恢复排列", exact: true }).click();
+  await expect(
+    page.locator(".layout-backup-page .layout-restore-summary"),
+  ).toContainText("所选备份与当前排列一致");
+});
+
+test("feature switch disables capture and restore but retains history after reload", async ({
+  page,
+}) => {
+  const store = await windows(page);
+  await page.goto("/#/tools/desktop-layout");
+  await page
+    .getByRole("checkbox", { name: "启用桌面布局工具", exact: true })
+    .uncheck();
+  await page.getByRole("button", { name: "保存备份设置", exact: true }).click();
+  await expect.poll(() => store.settings.feature_enabled).toBe(false);
+  await page.reload();
+  await expect(
+    page.getByRole("button", { name: "备份当前排列", exact: true }),
+  ).toBeDisabled();
+  await expect(
+    page.getByRole("button", { name: "恢复备份 备份 1", exact: true }),
+  ).toBeDisabled();
+  await expect(
+    page.getByRole("button", { name: "删除备份 备份 2", exact: true }),
+  ).toBeEnabled();
+  await expect(
+    page.getByRole("checkbox", { name: "启用桌面布局工具", exact: true }),
+  ).not.toBeChecked();
+  await page
+    .getByRole("checkbox", { name: "启用桌面布局工具", exact: true })
+    .check();
+  await page.getByRole("button", { name: "保存备份设置", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "备份当前排列", exact: true }),
+  ).toBeEnabled();
+});
+
+test("running 360 displays dual backup and blocks misleading native restore", async ({
+  page,
+}) => {
+  const store = await windows(page);
+  store.assistant.running = true;
+  store.assistant.installed = true;
+  store.rows[0].assistant = {
+    status: "saved",
+    message: "已保存 360 数据目录副本",
+  };
+  store.rows[1].assistant = {
+    status: "failed",
+    message: "360 数据被占用，本次未同步",
+  };
+  await page.goto("/#/tools/desktop-layout");
+  await expect(
+    page.getByRole("status").filter({ hasText: "360 正在运行" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "恢复备份 备份 1", exact: true }),
+  ).toBeDisabled();
+  await expect(
+    page.getByRole("button", { name: "备份当前排列", exact: true }),
+  ).toBeEnabled();
+  await expect(page.getByText("同步失败", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("360 数据被占用，本次未同步", { exact: true }),
+  ).toBeVisible();
+  expect(store.restoreCalls).toBe(0);
+});
+
+test("360 restore is separately confirmed and keeps a visible rollback location", async ({
+  page,
+}) => {
+  const store = await windows(page);
+  store.rows[0].assistant = { status: "saved", message: "已保存 360 数据副本" };
+  await page.goto("/#/tools/desktop-layout");
+  await page
+    .getByRole("button", { name: "恢复360备份 备份 1", exact: true })
+    .click();
+  await expect(page.getByRole("dialog")).toContainText("整体替换 360 数据目录");
+  expect(store.assistantRestoreCalls).toBe(0);
+  await page
+    .getByRole("button", { name: "确认恢复360配置", exact: true })
+    .click();
+  await expect.poll(() => store.assistantRestoreCalls).toBe(1);
+  expect(store.restoreCalls).toBe(0);
+  await expect(page.locator(".layout-restore-summary")).toContainText(
+    "请手动启动 360",
+  );
+  await expect(
+    page.getByRole("button", {
+      name: "打开恢复前的 360 配置目录",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "恢复360备份 备份 2", exact: true }),
+  ).toHaveCount(0);
+});
+
+test("360 restore errors remain visible instead of claiming success", async ({
+  page,
+}) => {
+  const store = await windows(page);
+  store.rows[0].assistant = { status: "saved", message: "已保存 360 数据副本" };
+  store.assistantRestoreError = "360 恢复未完成，已保留或回退原配置。";
+  await page.goto("/#/tools/desktop-layout");
+  await page
+    .getByRole("button", { name: "恢复360备份 备份 1", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "确认恢复360配置", exact: true })
+    .click();
+  await expect(page.getByRole("alert")).toContainText("已保留或回退原配置");
+  await expect(page.locator(".layout-restore-summary")).toHaveCount(0);
 });
