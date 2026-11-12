@@ -2332,6 +2332,199 @@ code {
   border-radius: 10px;
   background: var(--card);
 }
+.crosstabs-grid {
+  display: grid;
+  grid-template-columns: minmax(360px, 0.9fr) minmax(520px, 1.35fr);
+  gap: 20px;
+  align-items: start;
+}
+.crosstabs-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 16px;
+}
+.crosstabs-table-scroll,
+.crosstabs-result-table {
+  width: 100%;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.crosstabs-input-table,
+.crosstabs-result-table table {
+  width: max-content;
+  min-width: 100%;
+}
+.crosstabs-input-table th,
+.crosstabs-input-table td {
+  min-width: 92px;
+  white-space: nowrap;
+}
+.crosstabs-input-table th:first-child {
+  min-width: 125px;
+}
+.crosstabs-input-table input {
+  min-width: 78px;
+}
+.crosstabs-input-table .table-total,
+.crosstabs-input-table tfoot td,
+.crosstabs-input-table tfoot th {
+  background: var(--muted);
+  font-weight: 600;
+}
+.crosstabs-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(180px, 1fr));
+  gap: 13px 20px;
+}
+.crosstabs-options label {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 12px;
+}
+.crosstabs-run {
+  margin-top: 22px;
+}
+.crosstabs-results {
+  min-height: 440px;
+}
+.crosstabs-cell {
+  white-space: pre-line;
+  min-width: 145px;
+}
+.crosstabs-cell strong,
+.crosstabs-cell small {
+  display: block;
+}
+.crosstabs-cell small {
+  color: var(--muted-foreground);
+  font-size: 10px;
+  margin-top: 4px;
+}
+.crosstabs-test-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(150px, 1fr));
+  gap: 10px;
+  margin-top: 16px;
+}
+.crosstabs-test-card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 13px;
+  background: var(--muted);
+  min-width: 0;
+}
+.crosstabs-test-card span,
+.crosstabs-test-card small {
+  display: block;
+  color: var(--muted-foreground);
+  font-size: 10px;
+}
+.crosstabs-test-card strong {
+  display: block;
+  font-size: 16px;
+  margin: 9px 0 5px;
+}
+.crosstabs-pairwise .table-scroll {
+  max-height: 330px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.means-input-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(240px, 1fr));
+  gap: 18px;
+}
+.means-group-card {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(100px, 1fr));
+  gap: 13px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  background: var(--muted);
+}
+.means-group-card h3 {
+  grid-column: 1 / -1;
+  color: var(--primary);
+}
+.means-group-card .form-field:first-of-type {
+  grid-column: 1 / -1;
+}
+.means-controls {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.8fr) minmax(280px, 1.2fr);
+  gap: 18px;
+  margin-top: 20px;
+}
+.means-method select {
+  height: 36px;
+  border: 1px solid var(--input);
+  border-radius: 6px;
+  background: var(--background);
+  color: var(--foreground);
+  padding: 0 10px;
+}
+.means-results {
+  min-height: 280px;
+}
+.means-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(150px, 1fr));
+  gap: 10px;
+}
+.means-summary-grid > div {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+  background: var(--muted);
+}
+.means-summary-grid span {
+  display: block;
+  color: var(--muted-foreground);
+  font-size: 10px;
+}
+.means-summary-grid strong {
+  display: block;
+  margin-top: 8px;
+  font-size: 17px;
+  overflow-wrap: anywhere;
+}
+.means-assumption {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 15px;
+  color: var(--muted-foreground);
+  font-size: 11px;
+}
+@media (max-width: 1150px) {
+  .crosstabs-grid {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 650px) {
+  .crosstabs-options,
+  .crosstabs-test-grid {
+    grid-template-columns: 1fr;
+  }
+  .means-input-grid,
+  .means-controls {
+    grid-template-columns: 1fr;
+  }
+  .means-group-card {
+    grid-template-columns: 1fr;
+  }
+  .means-group-card .form-field:first-of-type {
+    grid-column: auto;
+  }
+  .means-summary-grid {
+    grid-template-columns: repeat(2, minmax(130px, 1fr));
+  }
+}
 .style-properties {
   max-height: 580px;
   overflow-y: auto;

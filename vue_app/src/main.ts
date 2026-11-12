@@ -9,6 +9,8 @@ import Inbox from "./views/Inbox.vue";
 import WordTool from "./views/WordTool.vue";
 import ShapTool from "./views/ShapTool.vue";
 import PredictionTool from "./views/PredictionTool.vue";
+import CrosstabsTool from "./views/CrosstabsTool.vue";
+import MeansTTestTool from "./views/MeansTTestTool.vue";
 import DesktopLayoutTool from "./views/DesktopLayoutTool.vue";
 import Tools from "./views/Tools.vue";
 import Settings from "./views/Settings.vue";
@@ -25,6 +27,8 @@ const router = createRouter({
     { path: "/tools/word", component: WordTool },
     { path: "/tools/shap", component: ShapTool },
     { path: "/tools/prediction", component: PredictionTool },
+    { path: "/tools/crosstabs", component: CrosstabsTool },
+    { path: "/tools/means-ttest", component: MeansTTestTool },
     { path: "/tools/desktop-layout", component: DesktopLayoutTool },
     { path: "/tools/:tool", component: Tools },
     { path: "/settings", component: Settings },

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import SelectionActions from "@/components/SelectionActions.vue";
 import { ref, computed, watch, onMounted } from "vue";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -99,6 +100,12 @@ const available = computed(() =>
   ),
 );
 const selected = computed(() => available.value.filter((f) => f.selected));
+function selectFeatures(names: string[]) {
+  if (locked.value) return;
+  for (const feature of available.value)
+    feature.selected = names.includes(feature.name);
+}
+
 const count = computed(() =>
   splitMode.value === "count"
     ? Number(trainCount.value)
@@ -394,11 +401,37 @@ function number(v: any) {
         <p class="prediction-note">
           取消不应参与预测的列，例如结局发生后的检查、其他结局或身份信息。自动识别的变量类型可修改；缺失指标在训练折内填补。
         </p>
+        <SelectionActions
+          label="预测指标"
+          scope="排除编号列和结局列后的全部指标"
+          :items="available.map((f) => f.name)"
+          :model-value="selected.map((f) => f.name)"
+          :disabled="locked"
+          @update:model-value="selectFeatures"
+        />
         <div class="table-scroll">
           <table class="data-table">
             <thead>
               <tr>
-                <th>使用</th>
+                <th>
+                  <Checkbox
+                    aria-label="全选预测指标"
+                    :model-value="
+                      selected.length && selected.length < available.length
+                        ? 'indeterminate'
+                        : !!available.length &&
+                          selected.length === available.length
+                    "
+                    :disabled="locked || !available.length"
+                    @update:model-value="
+                      (v) =>
+                        selectFeatures(
+                          v === true ? available.map((f) => f.name) : [],
+                        )
+                    "
+                  />
+                  使用
+                </th>
                 <th>指标名</th>
                 <th>变量类型</th>
                 <th>缺失数</th>
@@ -508,6 +541,12 @@ function number(v: any) {
           }}%）。按结局分层随机划分，训练集内进行分层 5 折交叉验证，以 AUC
           网格搜索选参。
         </p>
+        <SelectionActions
+          v-model="models"
+          :items="['LR', 'RF', 'XGB', 'SVM']"
+          label="预测模型"
+          :disabled="locked"
+        />
         <div class="prediction-models">
           <label v-for="m in ['LR', 'RF', 'XGB', 'SVM']" :key="m"
             ><input type="checkbox" :value="m" v-model="models" />
@@ -841,6 +880,7 @@ function number(v: any) {
       :factory="plotDefaults"
       :features="plotFeatures"
       :has-result="!!result"
+      :figure-exports="result?.images || []"
       @update:open="plotSettingsOpen = $event"
       @apply="applyPlotSettings"
     />

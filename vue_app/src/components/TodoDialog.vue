@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import SelectionActions from "@/components/SelectionActions.vue";
 import { reactive, ref, watch } from "vue";
 import {
   Dialog,
@@ -138,8 +139,14 @@ async function save() {
           </div>
         </div>
         <div v-if="files?.length" class="form-field">
-          <Label>关联材料</Label
-          ><label v-for="file in files" :key="file.id" class="file-check"
+          <Label>关联材料</Label>
+          <SelectionActions
+            label="关联材料"
+            :items="files.map((f) => f.id)"
+            v-model="form.file_ids"
+            :disabled="busy"
+          />
+          <label v-for="file in files" :key="file.id" class="file-check"
             ><Checkbox
               :model-value="form.file_ids.includes(file.id)"
               @update:model-value="

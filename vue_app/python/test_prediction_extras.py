@@ -85,21 +85,73 @@ class ShapLayoutTests(unittest.TestCase):
             fig.canvas.draw();renderer=fig.canvas.get_renderer();a,b,w,f,cb=fig.axes
             self.assertEqual(fig._suptitle.get_fontweight(),'bold')
             for axis in (a,b,w,f):
-                self.assertEqual(axis.title.get_fontweight(),'bold')
-                self.assertEqual(axis.xaxis.label.get_fontweight(),'bold')
+                self.assertEqual(next(t for t in axis.texts if (t.get_gid() or '').startswith('shap-title-')).get_fontweight(),'bold')
+                self.assertEqual(axis.xaxis.label.get_fontweight(),'normal')
                 self.assertTrue(all(t.get_fontweight()=='normal' for t in axis.get_xticklabels()))
-            for axis in (a,b,w):self.assertTrue(all(t.get_fontweight()=='bold' for t in axis.get_yticklabels()))
+            for axis in (a,b,w):self.assertTrue(all(t.get_fontweight()=='normal' for t in axis.get_yticklabels()))
             self.assertEqual(len(a.get_yticklabels()),20)
             for axis in (a,b,w):
                 boxes=[t.get_window_extent(renderer) for t in axis.get_yticklabels()]
                 self.assertTrue(all(box.x0>=0 for box in boxes))
                 self.assertTrue(all(not x.overlaps(y) for i,x in enumerate(boxes) for y in boxes[i+1:]))
             self.assertGreater(min(t.get_window_extent(renderer).x0 for t in b.get_yticklabels()),cb.get_tightbbox(renderer).x1)
-            self.assertFalse(fig._suptitle.get_window_extent(renderer).overlaps(a.title.get_window_extent(renderer)))
+            self.assertFalse(fig._suptitle.get_window_extent(renderer).overlaps(next(t for t in a.texts if t.get_gid()=='shap-title-A').get_window_extent(renderer)))
             for upper,lower in ((a,w),(w,f)):
-                self.assertFalse(upper.xaxis.label.get_window_extent(renderer).overlaps(lower.title.get_window_extent(renderer)))
+                self.assertFalse(upper.xaxis.label.get_window_extent(renderer).overlaps(next(t for t in lower.texts if (t.get_gid() or '').startswith('shap-title-')).get_window_extent(renderer)))
             self.assertFalse(f.xaxis.label.get_window_extent(renderer).overlaps(fig.texts[-1].get_window_extent(renderer)))
             plt.close(fig)
         draw_optional(Path('.'),{'shap':r},c,inspect,[])
+
+class ShapReferenceTests(unittest.TestCase):
+    @staticmethod
+    def snapshot():
+        rng=np.random.default_rng(91);sv=rng.normal(size=(119,6));cs=[2.226,.761,.330,-.304,.255,0.]
+        return dict(model='XGB',unit='log_odds',feature_names=['指标'+str(i) for i in range(6)],
+            importance=np.abs(sv).mean(0).tolist(),sample_shap=sv.tolist(),sample_color=rng.random((119,6)).tolist(),
+            sample_ids=[str(i) for i in range(119)],dataset='validation',
+            case=dict(id='002',base=-.721,output=-.721+sum(cs),probability=.9,shap=cs,values=['1']*6))
+
+    def test_reference_geometry_points_and_all_force_labels(self):
+        import matplotlib.pyplot as plt
+        from prediction_plots import validated
+        from prediction_extra_plots import draw_optional
+        from copy import deepcopy
+        r=self.snapshot();before=deepcopy(r);config=validated();config['plots']['shap']['enabled']=True
+        def inspect(fig,*args):
+            fig.canvas.draw();a,b,c,d,cb=fig.axes
+            np.testing.assert_allclose(fig.get_size_inches(),[12,10.4])
+            reference=plt.figure(figsize=(12,10.4));grid=reference.add_gridspec(3,2,left=.19,right=.97,bottom=.16,top=.91,height_ratios=[1.1,.9,.59],wspace=.62,hspace=.60)
+            for actual,cell in ((b,grid[0,1]),(c,grid[1,:]),(d,grid[2,:])):
+                expected=reference.add_subplot(cell).get_position()
+                np.testing.assert_allclose(actual.get_position().bounds,expected.bounds,atol=1e-10)
+            plt.close(reference)
+            self.assertAlmostEqual(a.get_position().y0,b.get_position().y0)
+            self.assertAlmostEqual(a.get_position().height,b.get_position().height)
+            self.assertEqual(fig._suptitle.get_fontsize(),17)
+            self.assertEqual(a.get_yticklabels()[0].get_fontsize(),10)
+            self.assertEqual(a.collections[0].get_sizes().tolist(),[2.5])
+            self.assertAlmostEqual(a.collections[0].get_alpha(),.72)
+            np.testing.assert_allclose(a.collections[0].cmap(0.)[:3],(68/255,121/255,201/255))
+            self.assertEqual(len([t for t in d.texts if t.get_gid()=='shap-force-label']),6)
+            self.assertEqual(len([line for line in d.lines if line.get_gid()=='shap-force-leader']),6)
+            self.assertEqual(len([line for line in c.lines if line.get_gid()=='shap-waterfall-connector']),5)
+            self.assertTrue(all(spine.get_visible() for spine in a.spines.values()))
+            for patch in d.patches:
+                x=patch.get_xy()[:,0]
+                if patch.get_gid()=='shap-force-positive':self.assertLessEqual(float(x.max()),r['case']['output']+1e-10)
+                else:self.assertGreaterEqual(float(x.min()),r['case']['output']-1e-10)
+            plt.close(fig)
+        draw_optional(Path('.'),{'shap':r},config,inspect,[])
+        self.assertEqual(r,before)
+
+    def test_old_factory_style_upgrades_but_custom_choices_survive(self):
+        from prediction_plots import validated
+        old={'plots':{'shap':dict(width=14,height=11.8,point_size=9,style={},bar_color='#123456',max_display=9,feature_order=['A'])}}
+        p=validated(old)['plots']['shap']
+        self.assertEqual((p['width'],p['height'],p['point_size']),(12,10.4,2.5))
+        self.assertEqual(p['style']['title_size'],17)
+        self.assertEqual(p['bar_color'],'#123456');self.assertEqual(p['max_display'],9);self.assertEqual(p['feature_order'],['A'])
+        p['point_size']=7
+        self.assertEqual(validated({'plots':{'shap':p}})['plots']['shap']['point_size'],7)
 
 if __name__=='__main__':unittest.main()

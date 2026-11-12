@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import SelectionActions from "@/components/SelectionActions.vue";
 import { ref, watch, computed } from "vue";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,12 +23,17 @@ import {
 } from "@/lib/predictionPlotFields";
 import { api, download, notify } from "@/lib/api";
 import { clone } from "@/lib/scientific";
+import {
+  predictionPlotDocuments,
+  type FigureExport,
+} from "@/lib/predictionPlotDocuments";
 const props = defineProps<{
   open: boolean;
   config: any;
   factory: any;
   features: { name: string; kind: string; values?: string[] }[];
   hasResult: boolean;
+  figureExports?: FigureExport[];
 }>();
 const emit = defineEmits<{
   "update:open": [boolean];
@@ -51,6 +57,64 @@ const tabs = [
   { id: "features", name: "指标顺序与颜色" },
   { id: "json", name: "完整配置 JSON" },
 ];
+const shareFormat = ref<"json" | "description" | "prompt">("json");
+const shareOptions = [
+  { id: "json", label: "JSON 配置" },
+  { id: "description", label: "中文参数说明" },
+  { id: "prompt", label: "AI 作图提示词" },
+] as const;
+const sharing = computed(() => {
+  try {
+    return {
+      documents: predictionPlotDocuments(
+        JSON.parse(json.value),
+        props.figureExports || [],
+      ),
+      error: "",
+    };
+  } catch {
+    return {
+      documents: null,
+      error: "请先修正 JSON，再生成中文参数说明和 AI 提示词。",
+    };
+  }
+});
+async function copyShare() {
+  busy.value = true;
+  error.value = "";
+  try {
+    const config = await validated();
+    const docs = predictionPlotDocuments(config, props.figureExports || []);
+    json.value = docs.json;
+    draft.value = config;
+    const text = docs[shareFormat.value];
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const focused = document.activeElement as HTMLElement | null;
+      const node = document.createElement("textarea");
+      node.value = text;
+      node.style.cssText = "position:fixed;opacity:0;pointer-events:none;";
+      (document.querySelector("[role=dialog]") || document.body).appendChild(
+        node,
+      );
+      node.select();
+      const copied = document.execCommand("copy");
+      node.remove();
+      focused?.focus({ preventScroll: true });
+      if (!copied) throw Error("未能访问剪贴板，请在下方文本框中全选后复制。");
+    }
+    message.value =
+      "已复制" +
+      shareOptions.find((o) => o.id === shareFormat.value)!.label +
+      "。";
+    notify(message.value);
+  } catch (e) {
+    error.value = (e as Error).message;
+  } finally {
+    busy.value = false;
+  }
+}
 const plot = computed(() => draft.value?.plots[tab.value]);
 const overrideGroups = computed(() =>
   tab.value === "nomogram"
@@ -79,11 +143,20 @@ const orderedFeatures = computed(() => {
     ),
   ];
 });
+function normalizeDraftStyles() {
+  if (!draft.value?.common || !draft.value?.plots) return;
+  for (const item of Object.values(draft.value.plots) as any[]) {
+    if (item?.style && Object.keys(item.style).length) {
+      item.style = clone({ ...draft.value.common, ...item.style });
+    }
+  }
+}
 watch(
   () => props.open,
   (open) => {
     if (open) {
       draft.value = clone(props.config);
+      normalizeDraftStyles();
       error.value = "";
       message.value = "";
       json.value = JSON.stringify(draft.value, null, 2);
@@ -94,6 +167,7 @@ function selectTab(next: string) {
   if (tab.value === "json") {
     try {
       draft.value = JSON.parse(json.value);
+      normalizeDraftStyles();
       error.value = "";
     } catch {
       error.value = "JSON 格式错误，请先修正。";
@@ -190,6 +264,30 @@ async function importConfig(e: Event) {
     error.value = (e as Error).message;
   }
 }
+function selectOptionalStyles(names: string[]) {
+  for (const feature of props.features) {
+    if (
+      names.includes(feature.name) &&
+      !plot.value.feature_styles[feature.name]
+    )
+      toggleOptionalFeature(feature.name, true);
+    else if (!names.includes(feature.name))
+      delete plot.value.feature_styles[feature.name];
+  }
+}
+function selectVisibleModels(names: string[]) {
+  for (const model of draft.value.model_order) {
+    if (!plot.value.series[model]) seriesOverride(model, true);
+    plot.value.series[model].visible = names.includes(model);
+  }
+}
+function selectModelStyles(names: string[]) {
+  for (const model of draft.value.model_order) {
+    if (names.includes(model) && !plot.value.series[model])
+      seriesOverride(model, true);
+    else if (!names.includes(model)) delete plot.value.series[model];
+  }
+}
 function toggleOptionalFeature(name: string, value: boolean) {
   if (value)
     plot.value.feature_styles[name] = {
@@ -232,12 +330,37 @@ function referenceNomogram() {
   message.value = "已应用参考图版式；积分和风险刻度仍按本次 LR 模型计算。";
   error.value = "";
 }
+function referenceShap() {
+  const current = draft.value.plots.shap;
+  draft.value.plots.shap = {
+    ...clone(props.factory.plots.shap),
+    enabled: current.enabled,
+    filename: current.filename,
+    max_display: current.max_display,
+    max_single: current.max_single,
+    order: current.order,
+    feature_order: clone(current.feature_order),
+    feature_styles: Object.fromEntries(
+      Object.entries(current.feature_styles || {}).map(
+        ([name, value]: [string, any]) => [
+          name,
+          { ...value, color: props.factory.plots.shap.bar_color },
+        ],
+      ),
+    ),
+  };
+  normalizeDraftStyles();
+  message.value =
+    "已应用最终 SHAP 参考脚本版式；病例、指标选择和已计算结果保持不变。";
+  error.value = "";
+}
 function reset() {
   const extraEnabled = {
     lasso: draft.value?.plots?.lasso?.enabled,
     shap: draft.value?.plots?.shap?.enabled,
   };
   draft.value = clone(props.factory);
+  normalizeDraftStyles();
   for (const name of ["lasso", "shap"] as const)
     if (extraEnabled[name] !== undefined)
       draft.value.plots[name].enabled = extraEnabled[name];
@@ -277,6 +400,11 @@ function reset() {
             </section>
             <section>
               <h3>导出格式</h3>
+              <SelectionActions
+                label="公共导出格式"
+                :items="['png', 'pdf', 'svg']"
+                v-model="draft.common.formats"
+              />
               <div class="plot-format">
                 <label v-for="format in ['png', 'pdf', 'svg']" :key="format"
                   ><input
@@ -338,6 +466,15 @@ function reset() {
                 轴仅连接可见概率刻度；恢复黑色线条和参考图间距。
               </p>
             </section>
+            <section v-if="tab === 'shap'">
+              <Button variant="outline" @click="referenceShap"
+                >应用最终 SHAP 参考版式</Button
+              >
+              <p>
+                采用 shap_reference_style.py 的 12 × 10.4
+                英寸画布、细小散点、瀑布连接线和力图引导标注；指标较多时自动增加必要空间。
+              </p>
+            </section>
             <section>
               <h3>画布与导出</h3>
               <PredictionPlotFields
@@ -370,6 +507,24 @@ function reset() {
               </section>
               <section>
                 <h3>本图各模型独立样式</h3>
+                <SelectionActions
+                  label="本图显示曲线"
+                  :items="draft.model_order"
+                  :model-value="
+                    draft.model_order.filter(
+                      (m: string) => plot.series[m]?.visible !== false,
+                    )
+                  "
+                  @update:model-value="selectVisibleModels"
+                />
+                <SelectionActions
+                  label="本图模型样式覆盖"
+                  :items="draft.model_order"
+                  :model-value="
+                    draft.model_order.filter((m: string) => !!plot.series[m])
+                  "
+                  @update:model-value="selectModelStyles"
+                />
                 <div
                   v-for="model in draft.model_order"
                   :key="model"
@@ -420,6 +575,16 @@ function reset() {
               </section>
               <section>
                 <h3>指标显示名称与颜色</h3>
+                <SelectionActions
+                  label="指标独立样式"
+                  :items="features.map((f) => f.name)"
+                  :model-value="
+                    features
+                      .filter((f) => !!plot.feature_styles[f.name])
+                      .map((f) => f.name)
+                  "
+                  @update:model-value="selectOptionalStyles"
+                />
                 <p>
                   LASSO 的保留指标曲线、SHAP
                   的重要性条形可分别改色；蜂群颜色始终表示特征值高低。
@@ -483,6 +648,11 @@ function reset() {
                     :prefix="tab + ' 独立 · '"
                   />
                 </div>
+                <SelectionActions
+                  label="本图独立导出格式"
+                  :items="['png', 'pdf', 'svg']"
+                  v-model="plot.style.formats"
+                />
                 <div class="plot-format">
                   <label v-for="format in ['png', 'pdf', 'svg']" :key="format"
                     ><input
@@ -561,12 +731,50 @@ function reset() {
           <section v-else-if="tab === 'json'">
             <h3>完整图表配置</h3>
             <p>
-              所有可用选项与表单相同。支持复制、保存与跨项目复用；应用前会统一校验。
+              三种格式来自同一份当前配置。JSON
+              可编辑；中文说明和提示词自动生成，复制前统一校验。复制不会应用设置或重新训练模型。
+            </p>
+            <div class="plot-share-controls">
+              <div role="group" aria-label="配置内容格式">
+                <Button
+                  v-for="option in shareOptions"
+                  :key="option.id"
+                  :variant="shareFormat === option.id ? 'default' : 'outline'"
+                  :aria-pressed="shareFormat === option.id"
+                  @click="
+                    shareFormat = option.id;
+                    error = '';
+                  "
+                  >{{ option.label }}</Button
+                >
+              </div>
+              <Button
+                variant="outline"
+                :disabled="busy || !!sharing.error"
+                @click="copyShare"
+                >复制{{
+                  shareOptions.find((o) => o.id === shareFormat)?.label
+                }}</Button
+              >
+            </div>
+            <p v-if="sharing.error && !error" role="alert">
+              {{ sharing.error }}
             </p>
             <textarea
+              v-if="shareFormat === 'json'"
               class="plot-json"
               v-model="json"
               aria-label="完整图表配置 JSON"
+              spellcheck="false"
+            />
+            <textarea
+              v-else
+              class="plot-json plot-readable"
+              readonly
+              :value="sharing.documents?.[shareFormat] || ''"
+              :aria-label="
+                shareFormat === 'description' ? '中文参数说明' : 'AI 作图提示词'
+              "
               spellcheck="false"
             />
           </section>
@@ -605,6 +813,21 @@ function reset() {
   >
 </template>
 <style scoped>
+.plot-share-controls,
+.plot-share-controls > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.plot-share-controls {
+  justify-content: space-between;
+  margin: 12px 0;
+}
+.plot-readable {
+  line-height: 1.7;
+}
+
 .plot-settings-body {
   display: grid;
   grid-template-columns: 170px minmax(0, 1fr);

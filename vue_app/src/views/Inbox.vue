@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { changeSelection } from "@/lib/selection";
+import SelectionActions from "@/components/SelectionActions.vue";
+import { computed, ref, watch } from "vue";
 import { Download, FolderInput, FileText, Search } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,6 +27,16 @@ const rows = computed(() =>
   selectedFiles = computed(() =>
     state.inbox.filter((f) => selected.value.includes(f.id)),
   );
+
+function selectRows(value: string[]) {
+  selected.value = value;
+}
+watch(
+  () => state.inbox.map((f) => f.id),
+  (ids) => {
+    selected.value = selected.value.filter((id) => ids.includes(id));
+  },
+);
 </script>
 <template>
   <section>
@@ -63,6 +75,12 @@ const rows = computed(() =>
         />
       </div>
     </div>
+    <SelectionActions
+      label="待归档材料"
+      scope="当前筛选结果"
+      :items="rows.map((f) => f.id)"
+      v-model="selected"
+    />
     <div class="table-panel">
       <div class="table-scroll">
         <table class="data-table">
@@ -71,11 +89,23 @@ const rows = computed(() =>
               <th class="w-12">
                 <Checkbox
                   :model-value="
-                    !!rows.length && rows.every((f) => selected.includes(f.id))
+                    rows.some((f) => selected.includes(f.id)) &&
+                    !rows.every((f) => selected.includes(f.id))
+                      ? 'indeterminate'
+                      : !!rows.length &&
+                        rows.every((f) => selected.includes(f.id))
                   "
                   aria-label="全选待归档材料"
+                  :disabled="!rows.length"
                   @update:model-value="
-                    (v) => (selected = v ? rows.map((f) => f.id) : [])
+                    (v) =>
+                      selectRows(
+                        changeSelection(
+                          selected,
+                          rows.map((f) => f.id),
+                          v === true ? 'all' : 'none',
+                        ),
+                      )
                   "
                 />
               </th>

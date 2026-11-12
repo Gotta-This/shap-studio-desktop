@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import SelectionActions from "@/components/SelectionActions.vue";
 import { ref, computed, onMounted, watch } from "vue";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -187,6 +188,13 @@ function move(f: any, d: number) {
   if (j >= 0 && j < a.length) {
     a.splice(i, 1);
     a.splice(j, 0, f);
+  }
+}
+function selectStyleKeys(keys: string[]) {
+  for (const key of Object.keys(config.value.plots.common)) {
+    const has = Object.hasOwn(currentStyle.value, key);
+    if (keys.includes(key) && !has) override(key, true);
+    else if (!keys.includes(key) && has) override(key, false);
   }
 }
 function override(k: string, v: any) {
@@ -592,6 +600,11 @@ async function copyTable() {
             </button>
             <div class="subsection">
               <h3>图片导出</h3>
+              <SelectionActions
+                label="图片导出格式"
+                :items="['png', 'svg', 'pdf']"
+                v-model="config.plots.formats"
+              />
               <label
                 v-for="f in ['png', 'svg', 'pdf']"
                 :key="f"
@@ -651,6 +664,17 @@ async function copyTable() {
                     (v) => (currentStyle.interaction_feature = v || null)
                   " /></template
             ></template>
+            <SelectionActions
+              v-if="style !== 'common'"
+              label="独立样式属性"
+              :items="Object.keys(config.plots.common)"
+              :model-value="
+                Object.keys(config.plots.common).filter((k) =>
+                  Object.hasOwn(currentStyle, k),
+                )
+              "
+              @update:model-value="selectStyleKeys"
+            />
             <div class="style-property">
               <label v-if="style !== 'common'" class="file-check"
                 ><Checkbox
@@ -977,6 +1001,11 @@ async function copyTable() {
           >
           <div class="subsection">
             <h3>选择保存内容</h3>
+            <SelectionActions
+              label="保存内容"
+              :items="['data', 'figures', 'config', 'reports']"
+              v-model="exports"
+            />
             <div class="toolbar">
               <label
                 v-for="[key, label] in [
@@ -1083,6 +1112,16 @@ async function copyTable() {
               "
             /><template v-if="style !== 'common'"
               ><h3>更多可继承属性</h3>
+              <SelectionActions
+                label="独立样式属性"
+                :items="Object.keys(config.plots.common)"
+                :model-value="
+                  Object.keys(config.plots.common).filter((k) =>
+                    Object.hasOwn(currentStyle, k),
+                  )
+                "
+                @update:model-value="selectStyleKeys"
+              />
               <div class="toolbar">
                 <label
                   v-for="k in Object.keys(config.plots.common)"

@@ -62,6 +62,8 @@ test("optional LASSO and SHAP generate real figures, tables and remain style con
   await dialog
     .getByRole("button", { name: "SHAP 解释图", exact: true })
     .click();
+  await dialog.getByRole("button", { name: "应用最终 SHAP 参考版式", exact: true }).click();
+  await expect(dialog.getByRole("spinbutton", { name: "shap · 蜂群点大小", exact: true })).toHaveValue("2.5");
   await dialog
     .getByRole("textbox", { name: "shap · 默认重要性条形颜色", exact: true })
     .fill("#226644");

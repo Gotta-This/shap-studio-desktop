@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import SelectionActions from "@/components/SelectionActions.vue";
 import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import {
@@ -320,8 +321,13 @@ async function undo(eventId: number) {
               ><Button variant="outline" class="columns-button"
                 >显示列</Button
               ></PopoverTrigger
-            ><PopoverContent class="w-44"
-              ><label
+            ><PopoverContent class="w-64"
+              ><SelectionActions
+                label="显示列"
+                :items="['tags', 'status', 'due', 'next', 'files']"
+                v-model="columns"
+              />
+              <label
                 v-for="c in [
                   { value: 'tags', name: '标签' },
                   { value: 'status', name: '状态' },

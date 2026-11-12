@@ -39,3 +39,40 @@
 - 可选 LASSO／SHAP 默认关闭；对照测试确认开启后四模型的指标、最优参数完全一致。核对 LASSO 仅使用训练病例、CV 均值／标准误与原始指标计数；核对 XGB/LR/RF 的 SHAP 加和及输出单位；验证样式重绘不重复计算可选分析、混合正负贡献的力图不互相遮盖。
 - Python 全部 78 项通过；16 条相关页面流程通过；实际 macOS WKWebView 25 步检查通过，包括勾选可选分析、计算、LASSO／SHAP 预览、图表设置和导出。
 - 没有系统鼠标或键盘操作；没有生成安装包或发布 Release。Windows 安装包与冻结引擎仍需在用户试用后另行验证。
+
+## 最终 SHAP 参考脚本对齐（2026-11-03）
+
+- 以 `todo/HSCT图件移机资料/SHAP/代码/shap_reference_style.py` 为最终版式依据，旧 `shap_figures.py` 不作为终稿。绘图实现独立为 `python/prediction_shap_plot.py`。
+- 六指标默认画布 12 × 10.4 英寸；恢复 17/12/10/9 pt 字号层级、蓝/玫红两色渐变、2.5 大小散点及固定显示抖动种子、四边轴框、条形边框、瀑布连接线与外置小贡献标注、力图逐项引导线及零贡献标注。
+- 同一六指标受控输入分别运行原始脚本和 App：A/B/C/D 子图位置误差均小于 2e-16；所有散点坐标与原脚本相同。该受控输入仅用于排版验收，不冒充患者分析结果。macOS 使用可用的宋体替代字体，不能声称跨系统像素级字体相同。
+- 实际用户导出的 20 指标绘图快照已重绘核验；按需要增加行高、长标签换行和力图标注行，保留全部所选指标。未重新拟合模型、修改 SHAP 数值或覆写原导出文件。
+- 旧版出厂默认样式自动迁移，保留手动更改的颜色、指标选择和排序；新增“应用最终 SHAP 参考版式”按钮，保留分析结果和选择。显示抖动参数可编辑，并明确只影响显示。
+- 25 项相关 Python 测试、4 条无头浏览器流程、TypeScript 检查通过；实际 macOS WKWebView 审计通过，含可选 SHAP 生成与样式重绘。未使用系统鼠标或系统录屏，未打包发布。
+- 本机验收产物：`/private/tmp/shap-final-reference-review/reference-audit.json`、`six-app.png`、`six-original-script.png`、实际快照 `SHAP解释组合图.png/.pdf`；原生审计 `/private/tmp/shap-v3-native-reference-review/native-ui-report.json`。
+
+## 图表配置三种可复制格式（2026-11-03）
+
+- 在“完整配置 JSON”原有区域内新增“JSON 配置／中文参数说明／AI 作图提示词”切换及对应复制按钮。JSON 继续可编辑，另外两种格式从同一当前配置生成；复制前经过后端校验，不保存或触发建模任务。
+- 中文说明覆盖五类图、模型颜色与顺序、公共与单图覆盖、列线图专用字号、SHAP 文字和固定图元细节。明确请求 DPI、自动尺寸与最近一次实际导出记录的区别；不将旧导出记录冒充草稿输出。
+- AI 提示词包含同一中文说明和完整 JSON，要求从本次数据或快照计算，不照抄参考图的病例、指标或统计值。配置设为自动字体时明确跨系统字体不能保证完全相同。
+- 5 项相关浏览器测试通过（含配置同步、三种实际剪贴板复制、无效 JSON、已生成图片的实际参数及小窗口布局）；TypeScript 检查通过。原生 WKWebView 审计新增 26–28 三个格式步骤并通过，系统剪贴板 JSON 校验通过。未移动系统鼠标，未打包发布。
+- 原生截图与报告：`/private/tmp/shap-v3-native-config-documents-review/`。
+
+## 多选表格与列表批量操作（2026-11-03）
+
+- 共用 `SelectionActions.vue`，提供全选、全不选、反选、选中计数、范围提示及空集合/禁用状态。`changeSelection` 只改变当前范围，去重并保留筛选范围外的选择。
+- 覆盖预测指标及模型、收件箱材料、待办关联材料、稿件显示列、第四工具图片格式/保存内容/独立样式属性、第五工具公共及单图格式/模型样式覆盖/曲线显示/指标独立样式。待办完成状态与其他非集合开关保持原有含义。
+- 预测指标和收件箱表头支持部分选中状态；预测指标仅操作排除当前编号列与结局列后的项目。收件箱的表头与批量按钮都按当前筛选操作，显示范围外已选数量。
+- 全选样式不会覆盖已编辑的颜色、字体或显示名称；全不选样式按原有单项取消语义恢复继承。初始 SHAP 部分字体覆盖先补齐公共配置，恢复初始样式后格式数组也正确继承。
+- 6 项批量选择专项检查及 5 项配置/绘图回归通过，共 11 项；此前预测建模、取消和空选择流程也通过。TypeScript 检查通过。原生 WKWebView 审计通过，新增 18a 全不选与反选恢复步骤；未移动系统鼠标。
+- 验收截图：`vue_app/test-results/prediction-bulk-selection.png`；原生报告 `/private/tmp/shap-v3-native-bulk-selection-review/native-ui-report.json`。未打包发布。
+
+## V3.1.0 发行包 Qt 依赖静态核查（2026-11-03）
+
+- 实际下载 GitHub v3.1.0 macOS ARM64 与 Windows 便携 ZIP，并分别通过 Release 资产 SHA-256 验证。仅静态读取 PyInstaller 目录与 PYZ 模块表，没有运行 Windows EXE 或安装程序。
+- macOS：冻结后端 67,242,864 字节、2469 个 Python 模块；Windows：240,625,649 字节、2496 个模块。两者 Qt/PySide/PyQt/Shiboken 运行库条目为 0，旧 Qt GUI 模块为 0。包内两个程序是 Tauri/Vue 主程序与 Python 科学后台。
+- 两个平台都携带 `clinical_studio` 的 20 个共享业务模块（Word 解析/生成、工作空间、统计与绘图等），不是第二套 Qt 应用；Vue 后端仍需这些模块。
+- Windows 较大的依赖之一是 `xgboost/lib/xgboost.dll`，解压后 211,156,480 字节；不能据安装包体积判断含两套 UI。未核查 macOS Intel 包和 Windows NSIS 内部二进制，不将它们计作实际扫描通过。
+- 发现 Python 资源中还附带旧 `penpot-layout.json` 与三份重复图标。更新 `build-sidecar.py`：资源仅暂存字体/许可文件；显式排除全部常见 Qt 绑定及 Pillow Qt 适配器；构建后执行 `audit-sidecar.py --strict-resources`，混入 Qt/旧 GUI/无用界面资源时终止构建。
+- 新审计脚本已用于上述两个实际发行后端，Qt 与 GUI 检查通过；严格资源模式在旧发行包上按预期阻止无用资源。打包脚本语法检查、资源筛选检查通过。此次未重打包、未修改现有 Release。
+- 本机报告：`/private/tmp/shap-v310-mac-audit.json`、`/private/tmp/shap-v310-windows-audit.json`。

@@ -151,6 +151,19 @@ with ZipFile(sys.argv[1]) as z:
       check.feature_color &&
       check.note,
   ).toBeTruthy();
+  await page.getByRole("button", { name: "图表设置", exact: true }).click();
+  await dialog
+    .getByRole("button", { name: "完整配置 JSON", exact: true })
+    .click();
+  await dialog
+    .getByRole("button", { name: "中文参数说明", exact: true })
+    .click();
+  await expect(
+    dialog.getByRole("textbox", { name: "中文参数说明", exact: true }),
+  ).toHaveValue(/CustomROC：.*PNG 实际 160 DPI/);
+  await expect(
+    dialog.getByRole("textbox", { name: "中文参数说明", exact: true }),
+  ).toHaveValue(/上一次导出记录/);
   expect(errors).toEqual([]);
 });
 test("invalid JSON is rejected and a saved default can be restored across reload", async ({

@@ -208,6 +208,22 @@ def dispatch(method, p):
     if method=='tool.numeric':
         from clinical_studio.data_tools_engine import numeric_numbers
         return csv_result(numeric_numbers(**numeric_parameters(p)),p.get('digits',0))
+    if method=='tool.crosstabs.analyze':
+        from crosstabs import analyze
+        return analyze(
+            p.get('table', []),
+            row_labels=p.get('row_labels'),
+            column_labels=p.get('column_labels'),
+            options=p.get('options'),
+        )
+    if method=='tool.means_ttest.analyze':
+        from means_ttest import analyze
+        return analyze(
+            p.get('group1', {}),
+            p.get('group2', {}),
+            method=p.get('method', 'pooled'),
+            group_labels=tuple(p.get('group_labels', ('第1组', '第2组'))),
+        )
     if method=='tool.job.start':
         from jobs import start
         return start(profile(),p)

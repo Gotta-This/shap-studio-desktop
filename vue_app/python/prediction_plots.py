@@ -38,8 +38,31 @@ def merge(base,patch,path=''):
             result[key]=deepcopy(value)
     return result
 
+def upgrade_shap_style(value):
+    """Upgrade the previous factory appearance without erasing custom settings.
+
+    Stored result snapshots and profile presets predate the reference script.
+    Only values matching a former default move to the adopted reference style;
+    labels, feature selections, colours edited by the user and DPI survive.
+    """
+    patch=deepcopy(value);old=patch.get('plots',{}).get('shap')
+    if not isinstance(old,dict) or 'reference_version' in old:return patch
+    factory=defaults()['plots']['shap']
+    former=dict(width=14.,height=11.8,left=.16,right=.97,top=.90,bottom=.10,
+        title='{model}模型 SHAP 可解释性分析',title_y=.98,note_x=.5,note_y=.025,
+        wspace=.44,hspace=.72,summary_height=1.5,waterfall_height=1.,force_height=.65,
+        point_size=9,point_alpha=.65,jitter=.32,bar_height=.68,low_color='#3c79b1',
+        high_color='#e93470',positive_color='#ec3471',negative_color='#397bb4',
+        bar_color='#477eb2',show_grid=True,importance_title='平均绝对SHAP值 特征重要性',
+        label_weight='bold',feature_weight='bold',row_height=.34,force_label_min=.12)
+    for key,previous in former.items():
+        if key in old and old[key]==previous:old[key]=deepcopy(factory[key])
+    if not old.get('style'):old['style']=deepcopy(factory['style'])
+    old['reference_version']=factory['reference_version']
+    return patch
+
 def validated(value=None,feature_names=None):
-    c=merge(defaults(),value or {});common=c['common']
+    c=merge(defaults(),upgrade_shap_style(value or {}));common=c['common']
     from matplotlib.colors import is_color_like
     def color(v,label):
         if not isinstance(v,str) or not is_color_like(v):raise ValueError(label+' 颜色无效。')
@@ -109,6 +132,7 @@ def validated(value=None,feature_names=None):
                 for k in ('low_color','high_color','neutral_color','positive_color','negative_color','bar_color'):color(p[k],k)
                 for k in ('max_display','max_single'):number(p[k],1,60,k,True)
                 number(p['wspace'],0,2,'面板水平间距');number(p['hspace'],0,2,'面板垂直间距');
+                number(p['reference_version'],1,1,'SHAP 参考版式版本',True);number(p['horizontal_jitter'],0,.05,'SHAP 水平显示抖动');number(p['scatter_seed'],0,2147483647,'SHAP 显示随机种子',True)
                 for k in ('title_weight','label_weight','feature_weight'):choice(p[k],('normal','bold'),k)
                 number(p['row_height'],.22,1,'SHAP 自动行高');number(p['label_width'],1,4,'SHAP 标签宽度')
                 for k in ('summary_height','waterfall_height','force_height'):number(p[k],.2,4,k)

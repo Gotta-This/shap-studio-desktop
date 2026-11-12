@@ -9,6 +9,8 @@ import {
   ChartScatter,
   BrainCircuit,
   MonitorCog,
+  Table2,
+  Scale,
 } from "lucide-vue-next";
 
 export const mainNavigation = [
@@ -48,6 +50,18 @@ export const scientificTools = [
     name: "预测模型分析",
     desc: "导入病例，训练二分类模型并生成论文图表",
     icon: BrainCircuit,
+  },
+  {
+    path: "/tools/crosstabs",
+    name: "列联表统计分析",
+    desc: "按 SPSS CROSSTABS 标准分析分类频数",
+    icon: Table2,
+  },
+  {
+    path: "/tools/means-ttest",
+    name: "平均值对比（t 检验）",
+    desc: "根据两组均值、标准差和例数比较平均值",
+    icon: Scale,
   },
   {
     path: "/tools/desktop-layout",
