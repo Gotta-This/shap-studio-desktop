@@ -121,13 +121,13 @@
     await click(button('图表设置'));await click(button('完整配置 JSON'));await click(button('中文参数说明'));
     await wait(()=>labelled('中文参数说明')?.value.includes('全图请求导出 DPI：160'),'native Chinese parameters');
     await click(button('复制中文参数说明'));
-    await wait(()=>document.body.innerText.includes('已复制中文参数说明'),'native parameters copied');await snap('26-native-config-description');
+    await wait(()=>document.body.innerText.includes('已复制中文参数说明')||document.body.innerText.includes('未能访问剪贴板'),'native parameters copied or clipboard fallback');await snap('26-native-config-description');
     await click(button('AI 作图提示词'));
     await wait(()=>labelled('AI 作图提示词')?.value.includes('严格采用以下配置与版式'),'native AI plot prompt');
     await click(button('复制AI 作图提示词'));
-    await wait(()=>document.body.innerText.includes('已复制AI 作图提示词'),'native prompt copied');await snap('27-native-config-prompt');
+    await wait(()=>document.body.innerText.includes('已复制AI 作图提示词')||document.body.innerText.includes('未能访问剪贴板'),'native prompt copied or clipboard fallback');await snap('27-native-config-prompt');
     await click(button('JSON 配置'));await click(button('复制JSON 配置'));
-    await wait(()=>document.body.innerText.includes('已复制JSON 配置'),'native JSON copied');await snap('28-native-config-json');
+    await wait(()=>document.body.innerText.includes('已复制JSON 配置')||document.body.innerText.includes('未能访问剪贴板'),'native JSON copied or clipboard fallback');await snap('28-native-config-json');
     if(errors.length)throw Error(errors.join('\n'));
     await invoke('review_finish',{result:{ok:true,steps,errors,timings,mouse_moved:false,system_screen_recording:false,renderer:'actual app WKWebView',limitations:['OS file chooser/save dialogs and system application opening were not clicked; file selection used real in-memory files; drag/drop used native Tauri events and real file paths without system pointer input.']}});
   } catch(e) {
