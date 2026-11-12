@@ -1,5 +1,9 @@
 import { test, expect } from "@playwright/test";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { changeSelection } from "../src/lib/selection";
+const workspace = join(mkdtempSync(join(tmpdir(), "research-v3-bulk-")), "稿件工作空间");
 const dataset = {
   name: "批量选择.csv",
   mimeType: "text/csv",
@@ -11,6 +15,13 @@ const dataset = {
       ).join("\n"),
   ),
 };
+
+async function ensureWorkspace(page: import("@playwright/test").Page) {
+  await page.goto("/#/settings");
+  await page.locator("#workspace-path").fill(workspace);
+  await page.locator("form.dialog-form").getByRole("button").click();
+  await expect(page.getByText("已连接", { exact: true })).toBeVisible();
+}
 
 test("scoped selections preserve hidden items, remove duplicates and invert twice", () => {
   const selected = ["hidden", "A", "A"];
@@ -174,6 +185,7 @@ test("inbox batch actions and header preserve selections outside the search", as
   const tag = Date.now().toString();
   const a = `bulk-${tag}-alpha.txt`,
     b = `bulk-${tag}-beta.txt`;
+  await ensureWorkspace(page);
   await page.goto("/#/inbox");
   await page
     .getByRole("button", { name: "接收材料", exact: true })
@@ -217,6 +229,7 @@ test("inbox batch actions and header preserve selections outside the search", as
 test("workspace columns and todo linked materials support batch selection", async ({
   page,
 }) => {
+  await ensureWorkspace(page);
   await page.goto("/#/workspace");
   await page.getByRole("button", { name: "显示列", exact: true }).click();
   const columns = page.getByRole("group", { name: "显示列批量选择" });

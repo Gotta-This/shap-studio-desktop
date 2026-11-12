@@ -1,3 +1,7 @@
+V3.2.5 · 修复批量选择回归测试并重新发布统计工具。
+
+- 修复批量选择浏览器回归测试依赖工作空间初始化的问题，发布验证可以独立运行。
+
 V3.2.4 · 新增列联表统计和平均值对比工具。
 
 - 新增 SPSS CROSSTABS 风格的列联表分析：行列百分比、Pearson 卡方、似然比卡方、Fisher 精确概率、Yates 校正、Bonferroni 两两比较、Kappa 和 McNemar / McNemar-Bowker 检验。
