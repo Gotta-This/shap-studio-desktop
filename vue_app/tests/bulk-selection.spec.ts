@@ -19,7 +19,7 @@ const dataset = {
 async function ensureWorkspace(page: import("@playwright/test").Page) {
   await page.goto("/#/settings");
   await page.locator("#workspace-path").fill(workspace);
-  await page.locator("form.dialog-form").getByRole("button").click();
+  await page.locator("form.dialog-form button[type='submit']").click();
   await expect(page.getByText("已连接", { exact: true })).toBeVisible();
 }
 
