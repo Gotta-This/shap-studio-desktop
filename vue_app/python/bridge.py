@@ -70,6 +70,10 @@ def state():
         for f in result['inbox']: f['available'] = s.inside(f['path']).is_file()
     return result
 
+def todo_state():
+    """Small refresh payload for the island and todo badges."""
+    return dict(todos=todos(workspace(False)))
+
 @contextlib.contextmanager
 def sources(params):
     """Browser uploads are staged temporarily; native paths remain originals."""
@@ -142,6 +146,7 @@ def dispatch(method, p):
         return migrate(profile(),p.get('directory'))
     if method=='storage.info': return dict(directory=str(DATA_ROOT),profile=str(profile()),automatic=using_default_storage())
     if method=='state': return state()
+    if method=='todos.state': return todo_state()
     if method=='runtime.info':
         import importlib.metadata
         return dict(engine_pid=os.getpid(),application_version=__import__('releases').VERSION,bundled=bool(getattr(sys,'frozen',False)),versions={name:importlib.metadata.version(name) for name in ['numpy','pandas','scikit-learn','shap','matplotlib','Pillow','openpyxl']})

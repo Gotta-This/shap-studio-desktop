@@ -1,7 +1,10 @@
 {
   "identifier": "main",
   "description": "Local desktop preview window with native file selection and explicit path opening.",
-  "windows": ["main", "todo-island"],
+  "windows": [
+    "main",
+    "todo-island"
+  ],
   "permissions": [
     "core:default",
     "core:window:allow-create",

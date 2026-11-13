@@ -1,5 +1,4 @@
 name: Build test and release Vue V3
-# Release commits intentionally include this workflow path so GitHub path filters trigger the build.
 on:
   workflow_dispatch:
   push:
@@ -193,4 +192,3 @@ jobs:
           gh release upload "v$version" release/* --repo "$GITHUB_REPOSITORY"
           gh release edit "v$version" --repo "$GITHUB_REPOSITORY" --draft=false --latest
           gh release view "v$version" --repo "$GITHUB_REPOSITORY" --json url,tagName,assets
-

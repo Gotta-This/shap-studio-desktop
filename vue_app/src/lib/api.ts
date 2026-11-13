@@ -64,6 +64,15 @@ export const state = reactive<State>({
   categories: ["原稿", "原始数据", "图表", "修改稿", "交付"],
   statuses: ["进行中", "待补资料", "返修中", "待交付", "已完成"],
 });
+try {
+  const cached = localStorage.getItem("research-v3-state");
+  if (cached) {
+    const value = JSON.parse(cached) as Partial<State>;
+    Object.assign(state, { ...value, inbox: [] });
+  }
+} catch {
+  // Ignore stale or unavailable browser storage.
+}
 export const feedback = reactive({ text: "", error: false, loading: false });
 export const desktop = "__TAURI_INTERNALS__" in window;
 export async function api<T = any>(
@@ -109,7 +118,29 @@ export function notify(text: string, error = false) {
   if (text) feedbackTimer = setTimeout(dismissFeedback, 2000);
 }
 export async function refresh() {
-  Object.assign(state, await api<State>("state"));
+  const next = await api<State>("state");
+  Object.assign(state, next);
+  try {
+    localStorage.setItem("research-v3-state", JSON.stringify({ root: next.root, tasks: next.tasks, todos: next.todos, categories: next.categories, statuses: next.statuses }));
+  } catch {
+    // Keep the in-memory state when storage quota is unavailable.
+  }
+}
+export async function refreshTodos() {
+  let result: { todos: Todo[] };
+  try {
+    result = await api<{ todos: Todo[] }>("todos.state");
+  } catch {
+    const full = await api<State>("state");
+    result = { todos: full.todos };
+  }
+  state.todos = result.todos;
+  try {
+    const cached = JSON.parse(localStorage.getItem("research-v3-state") || "{}");
+    localStorage.setItem("research-v3-state", JSON.stringify({ ...cached, todos: result.todos }));
+  } catch {
+    // Keep the in-memory state when storage quota is unavailable.
+  }
 }
 export async function action<T>(
   method: string,

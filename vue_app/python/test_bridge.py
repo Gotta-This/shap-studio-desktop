@@ -30,6 +30,7 @@ class BridgeTests(unittest.TestCase):
         event=next(e for e in self.call('events',{}) if e['kind']=='归档材料');self.call('files.undo',{'id':event['id']});self.assertEqual(len(self.call('state',{})['inbox']),1)
     def test_personal_todo_date_completion_delete_restore(self):
         tid=self.call('todo.save',{'text':'个人待办','due_date':'2028-02-29'})
+        self.assertEqual(self.call('todos.state',{})['todos'][0]['id'],tid)
         self.call('todo.save',{'id':tid,'completed':True});self.assertTrue(self.call('state',{})['todos'][0]['completed'])
         self.call('todo.save',{'id':tid,'deleted':True});self.assertFalse(self.call('state',{})['todos']);self.call('todo.save',{'id':tid,'deleted':False,'due_date':None});self.assertIsNone(self.call('state',{})['todos'][0]['due_date'])
     def test_invalid_dates_do_not_change_saved_state(self):

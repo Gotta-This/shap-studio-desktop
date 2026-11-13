@@ -26,6 +26,7 @@ import {
   state,
   feedback,
   refresh,
+  refreshTodos,
   notify,
   desktop,
   dismissFeedback,
@@ -43,6 +44,7 @@ const route = useRoute(),
   query = ref("");
 const pending = computed(() => state.todos.filter((t) => !t.completed).length);
 const widgetShell = computed(() => route.path === "/todo-island");
+let unlistenTodoUpdated: (() => void) | undefined;
 const activeName = computed(
   () =>
     [...main, ...tools, { path: "/settings", name: "设置与关于" }].find((n) =>
@@ -74,9 +76,14 @@ function shortcut(e: KeyboardEvent) {
 onMounted(async () => {
   window.addEventListener("keydown", shortcut);
   void startDesktopSchedule();
+  void refreshTodos().catch(() => {});
   try {
     await refresh();
     if (desktop) void checkUpdate();
+    if (desktop) {
+      const { listen } = await import("@tauri-apps/api/event");
+      unlistenTodoUpdated = await listen("todo-updated", () => { void refreshTodos(); });
+    }
   } catch (e) {
     notify((e as Error).message, true);
   }
@@ -84,6 +91,7 @@ onMounted(async () => {
 onUnmounted(() => {
   window.removeEventListener("keydown", shortcut);
   stopDesktopSchedule();
+  unlistenTodoUpdated?.();
 });
 </script>
 <template>

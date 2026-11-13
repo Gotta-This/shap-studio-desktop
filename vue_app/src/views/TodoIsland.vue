@@ -31,6 +31,7 @@ let unlistenTodoUpdated: (() => void) | undefined;
 let unlistenConfigUpdated: (() => void) | undefined;
 let unlistenHover: (() => void) | undefined;
 let shortcutCopiedTimer: ReturnType<typeof setTimeout> | undefined;
+let lightweightTodosUnavailable = false;
 
 function loadStored<T>(key: string, fallback: T): T {
   try { const value = localStorage.getItem(key); return value ? JSON.parse(value) as T : fallback; } catch { return fallback; }
@@ -42,16 +43,28 @@ function saveShortcutState() {
   localStorage.setItem("todo-island-numeric", JSON.stringify(numeric));
 }
 watch([shortcutTool, categoryRows, categorySeed, numeric], saveShortcutState, { deep: true });
-watch(shortcutTool, () => { if (expanded.value) void resizeIsland(true); });
+watch([shortcutTool, showSettings, pending, () => categoryRows.value.length], () => { if (expanded.value) void resizeIsland(true); });
 const categoryTotal = computed(() => categoryRows.value.reduce((sum, row) => sum + Number(row.count || 0), 0));
 const shortcutJob = computed(() => jobFor("todo-island"));
 
 async function refresh() {
   try {
-    const result = await api<{ todos: Todo[] }>("state");
+    const result = lightweightTodosUnavailable
+      ? await api<{ todos: Todo[] }>("state")
+      : await api<{ todos: Todo[] }>("todos.state");
     todos.value = result.todos;
+    try { localStorage.setItem("todo-island-todos", JSON.stringify(result.todos)); } catch { /* cache is optional */ }
     return true;
   } catch {
+    if (!lightweightTodosUnavailable) {
+      lightweightTodosUnavailable = true;
+      try {
+        const result = await api<{ todos: Todo[] }>("state");
+        todos.value = result.todos;
+        try { localStorage.setItem("todo-island-todos", JSON.stringify(result.todos)); } catch { /* cache is optional */ }
+        return true;
+      } catch { /* keep the cached list */ }
+    }
     // Keep the last known list visible if the engine is temporarily unavailable.
     return false;
   }
@@ -145,7 +158,9 @@ async function resizeIsland(open: boolean) {
     const monitor = await currentMonitor();
     if (sequence !== resizeSequence) return;
     const width = open ? expandedWidth.value : compactWidth.value;
-    const height = !open ? 44 : shortcutTool.value === "category" ? 420 : shortcutTool.value === "numeric" ? 360 : 250;
+    const todoRows = Math.min(pending.value.length, 8);
+    const settingsExtra = showSettings.value ? 82 : 0;
+    const height = !open ? 44 : Math.min(760, Math.max(190, shortcutTool.value === "category" ? 175 + categoryRows.value.length * 36 + todoRows * 46 + settingsExtra : shortcutTool.value === "numeric" ? 220 + todoRows * 46 + settingsExtra : 82 + todoRows * 46 + settingsExtra));
     await current.setSize(new LogicalSize(width, height));
     if (monitor) {
       const scale = monitor.scaleFactor;
@@ -170,8 +185,8 @@ function scheduleCollapse() {
   collapseTimer = setTimeout(() => {
     expanded.value = false;
     showSettings.value = false;
-    collapseResizeTimer = setTimeout(() => { void resizeIsland(false); }, 280);
-  }, 220);
+    collapseResizeTimer = setTimeout(() => { void resizeIsland(false); }, 160);
+  }, 100);
 }
 function saveOpacity(value: string | number) {
   const next = Math.min(1, Math.max(0.55, Number(value)));
@@ -186,11 +201,15 @@ async function showWhenReady() {
   ready.value = true;
 }
 onMounted(async () => {
-  await loadConfig();
-  for (let attempt = 0; attempt < 5 && !(await refresh()); attempt += 1) {
-    await new Promise((resolve) => setTimeout(resolve, 120));
+  try {
+    const cached = localStorage.getItem("todo-island-todos");
+    if (cached) todos.value = JSON.parse(cached) as Todo[];
+  } catch {
+    // Start empty when cached data is unavailable.
   }
+  void loadConfig();
   timer = setInterval(refresh, 1500);
+  await showWhenReady();
   if ("__TAURI_INTERNALS__" in window) {
     const { listen } = await import("@tauri-apps/api/event");
     unlistenTodoUpdated = await listen("todo-updated", () => { void refresh(); });
@@ -205,7 +224,7 @@ onMounted(async () => {
       else scheduleCollapse();
     });
   }
-  await showWhenReady();
+  void refresh();
 });
 onUnmounted(() => {
   if (timer) clearInterval(timer);
@@ -249,11 +268,11 @@ onUnmounted(() => {
           <div v-if="shortcutError" class="todo-island-tool-error">{{ shortcutError }}</div>
           <div v-if="shortcutResult" class="todo-island-tool-result"><span>已生成 {{ shortcutResult.values.length }} 个数值</span><button type="button" aria-label="复制结果" @click="copyShortcutResult"><Copy :size="13" /></button></div>
         </section>
-        <section class="todo-island-list">
-          <label v-for="todo in pending.slice(0, 8)" :key="todo.id" class="todo-island-row">
+        <section class="todo-island-list" :class="{ 'todo-island-list-scroll': pending.length > 8 }">
+          <div v-for="todo in pending" :key="todo.id" class="todo-island-row">
             <Checkbox :model-value="todo.completed" :aria-label="'完成 ' + todo.text" @update:model-value="(value) => complete(todo, !!value)" />
             <span><strong>{{ todo.text }}</strong><small>{{ todo.task_name || "个人待办" }}{{ todo.due_date ? ` · ${todo.due_date}` : "" }}</small></span>
-          </label>
+          </div>
           <div v-if="!pending.length" class="todo-island-empty"><Check :size="18" />没有未完成待办</div>
         </section>
       </div>
