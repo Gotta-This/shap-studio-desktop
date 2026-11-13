@@ -282,3 +282,20 @@ def _assistant_action(profile,p,restore=False):
 
 def assistant_preview(profile,p):return _assistant_action(profile,p)
 def assistant_restore(profile,p):return _assistant_action(profile,p,True)
+
+def sync(profile,p):
+    """Synchronize the Windows Shell grid with the 360 DTFence order."""
+    if sys.platform!='win32':raise ValueError(UNSUPPORTED)
+    direction=p.get('direction')
+    if direction not in ('360_to_system','system_to_360'):
+        raise ValueError('同步方向无效。')
+    with _LOCK,_file_lock(profile):
+        _require_enabled(profile)
+        from desktop_layout_sync import system_from_360,system_to_360
+        with _native() as view:
+            current=view.capture()
+            if direction=='360_to_system':
+                plan=system_from_360(current)
+                view.position(plan['items'])
+                return {k:v for k,v in plan.items() if k!='items'}|{'direction':direction,'applied_count':len(plan['items'])}
+            return system_to_360(current)|{'direction':direction}

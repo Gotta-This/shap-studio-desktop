@@ -9,6 +9,7 @@ import {
   Trash2,
   LockKeyhole,
   Download,
+  ArrowRightLeft,
 } from "lucide-vue-next";
 import PageHeading from "@/components/PageHeading.vue";
 import SelectField from "@/components/SelectField.vue";
@@ -90,6 +91,8 @@ interface AssistantPlan {
 const rollbackDirectory = ref("");
 const restoreSummary = ref("");
 const restoreFailed = ref(false);
+const syncBusy = ref(false);
+const syncMessage = ref("");
 async function exportDiagnostics() {
   busy.value = true;
   try {
@@ -204,6 +207,22 @@ async function saveSettings(confirmed = false) {
     error.value = (e as Error).message;
   } finally {
     busy.value = false;
+  }
+}
+async function syncLayout(direction: "360_to_system" | "system_to_360") {
+  syncBusy.value = true;
+  syncMessage.value = "";
+  error.value = "";
+  try {
+    const result = await api<{ message: string }>("desktop.layout.sync", { direction });
+    syncMessage.value = result.message;
+    await load(false);
+    notify(result.message);
+  } catch (e) {
+    syncMessage.value = (e as Error).message;
+    notify(syncMessage.value, true);
+  } finally {
+    syncBusy.value = false;
   }
 }
 function date(value: string) {
@@ -483,6 +502,30 @@ async function confirm() {
           Windows 原生备份记录当时系统接口可读取的排列，无法还原未曾备份的“启动
           360 前布局”。360 运行时仍可恢复 Windows 原生布局，但不会改变 360
           自己管理的排列；恢复 360 时会短暂关闭并重开它。
+        </p>
+      </div>
+      <div class="panel layout-sync-panel">
+        <h2>360 双向布局同步</h2>
+        <p class="muted">
+          读取 360 DTFence 排列顺序后应用到 Windows 桌面；也可以把 Windows 桌面顺序写回 360。匹配不到的图标会忽略，额外的 Windows 图标会放到空白网格。
+        </p>
+        <div class="layout-sync-actions">
+          <Button
+            variant="outline"
+            :disabled="syncBusy || loading || data.settings?.feature_enabled === false"
+            @click="syncLayout('360_to_system')"
+            ><ArrowRightLeft :size="15" />360 → Windows 桌面</Button
+          >
+          <Button
+            variant="outline"
+            :disabled="syncBusy || loading || data.settings?.feature_enabled === false || data.assistant?.running"
+            @click="syncLayout('system_to_360')"
+            ><ArrowRightLeft :size="15" />Windows → 360</Button
+          >
+        </div>
+        <p v-if="syncMessage" class="muted" role="status">{{ syncMessage }}</p>
+        <p v-if="data.assistant?.running" class="muted">
+          写入 360 前请先退出 360；读取 360 排列可以在 360 运行时执行。
         </p>
       </div>
       <div class="panel layout-save-panel">

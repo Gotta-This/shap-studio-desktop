@@ -2433,6 +2433,16 @@ code {
   border: 1px solid var(--border);
   border-radius: 8px;
 }
+.layout-sync-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.layout-sync-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
 .means-input-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(240px, 1fr));
