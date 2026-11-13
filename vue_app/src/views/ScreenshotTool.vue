@@ -158,7 +158,10 @@ async function capture() {
     imageData.value = `data:${result.mime};base64,${result.base64}`;
     await nextTick();
     bitmap.value = new Image();
-    bitmap.value.onload = fitCanvas;
+    bitmap.value.onload = () => {
+      fitCanvas();
+      void copy(true);
+    };
     bitmap.value.src = imageData.value;
     if (hidden) {
       const { getCurrentWindow } = await import("@tauri-apps/api/window");
@@ -177,15 +180,15 @@ async function capture() {
   }
 }
 function pngData() { return canvas.value?.toDataURL("image/png") || imageData.value; }
-async function copy() {
+async function copy(silent = false) {
   const data = pngData();
   try {
     const blob = await (await fetch(data)).blob();
     if (navigator.clipboard?.write && typeof ClipboardItem !== "undefined") await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
     else throw new Error("clipboard unavailable");
-    notify("截图已复制到剪贴板。");
+    if (!silent) notify("截图已复制到剪贴板。");
   } catch {
-    notify("当前环境无法直接写入图片剪贴板，请使用保存文件。", true);
+    if (!silent) notify("当前环境无法直接写入图片剪贴板，请使用保存文件。", true);
   }
 }
 function save() {
