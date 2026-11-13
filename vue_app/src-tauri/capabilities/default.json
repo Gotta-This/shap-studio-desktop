@@ -1,27 +1,25 @@
 {
   "identifier": "main",
   "description": "Local desktop preview window with native file selection and explicit path opening.",
-  "windows": ["main", "todo-widget"],
+  "windows": ["main", "todo-island"],
   "permissions": [
     "core:default",
     "core:window:allow-create",
     "core:window:allow-close",
+    "core:window:allow-hide",
     "core:window:allow-show",
     "core:window:allow-set-focus",
+    "core:window:allow-set-fullscreen",
+    "core:window:allow-set-size",
+    "core:window:allow-set-position",
+    "core:window:allow-current-monitor",
+    "core:window:allow-start-dragging",
     "core:window:allow-set-always-on-top",
     "core:webview:allow-create-webview-window",
     "global-shortcut:default",
     "core:webview:allow-set-webview-zoom",
     "dialog:allow-open",
     "dialog:allow-save",
-    "opener:allow-open-path",
-    {
-      "identifier": "opener:allow-open-path",
-      "allow": [
-        {
-          "path": "**"
-        }
-      ]
-    }
+    "opener:allow-open-path"
   ]
 }
