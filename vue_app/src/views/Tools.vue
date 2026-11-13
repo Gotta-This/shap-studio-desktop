@@ -113,7 +113,8 @@ async function autoCopy(result: any, kind: string) {
     if (generationCopiedTimer) clearTimeout(generationCopiedTimer);
     generationCopiedTimer = setTimeout(() => { generationCopied.value = false; }, 1600);
   } catch {
-    errors[kind] = "数据已生成，但自动复制到剪贴板失败。";
+    // Clipboard access is optional (for example, in an automated browser or a restricted context).
+    // Keep the generated result usable without turning a successful generation into an error.
   }
 }
 function csvDownload(result: any, name: string) {
