@@ -97,12 +97,12 @@ fn post_quickshot_region_hotkey() -> Result<(),String> {
     let value=quickshot_config().ok().and_then(|v|v.get("region").and_then(|v|v.as_str()).map(str::to_string)).unwrap_or_else(||"Ctrl+Alt+R".into());
     let mut tokens=value.split('+').map(str::trim).filter(|v|!v.is_empty()).collect::<Vec<_>>();
     let key_name=tokens.pop().unwrap_or("R").to_ascii_uppercase();
-    let vk=match key_name.as_str() {
-        "A"..="Z" => key_name.as_bytes()[0] as u16,
-        "0"..="9" => key_name.as_bytes()[0] as u16,
-        _ if key_name.strip_prefix('F').and_then(|n|n.parse::<u16>().ok()).is_some_and(|n|(1..=24).contains(&n)) => 0x70 + key_name[1..].parse::<u16>().unwrap() - 1,
-        "SPACE"=>0x20,"ENTER"=>0x0D,"TAB"=>0x09,"BACKSPACE"=>0x08,"ESCAPE"=>0x1B,
-        _=>return Err(format!("Windows 不支持 QuickShot 快捷键：{value}")),
+    let vk=if key_name.len()==1 && key_name.as_bytes()[0].is_ascii_alphanumeric() {
+        key_name.as_bytes()[0] as u16
+    } else if let Some(number)=key_name.strip_prefix('F').and_then(|n|n.parse::<u16>().ok()).filter(|n|(1..=24).contains(n)) {
+        0x70 + number - 1
+    } else {
+        match key_name.as_str() { "SPACE"=>0x20,"ENTER"=>0x0D,"TAB"=>0x09,"BACKSPACE"=>0x08,"ESCAPE"=>0x1B,_=>return Err(format!("Windows 不支持 QuickShot 快捷键：{value}")) }
     };
     let mut modifiers=Vec::new();
     for token in tokens { modifiers.push(match token.to_ascii_lowercase().as_str() { "ctrl"|"control"=>0x11,"alt"|"option"|"opt"=>0x12,"shift"=>0x10,"win"|"meta"|"super"=>0x5B,_=>return Err(format!("Windows 不支持 QuickShot 修饰键：{token}")) }); }
