@@ -76,7 +76,6 @@ function shortcut(e: KeyboardEvent) {
 onMounted(async () => {
   window.addEventListener("keydown", shortcut);
   void startDesktopSchedule();
-  void refreshTodos().catch(() => {});
   try {
     await refresh();
     if (desktop) void checkUpdate();
