@@ -292,10 +292,38 @@ def sync(profile,p):
     with _LOCK,_file_lock(profile):
         _require_enabled(profile)
         from desktop_layout_sync import system_from_360,system_to_360
-        with _native() as view:
-            current=view.capture()
-            if direction=='360_to_system':
-                plan=system_from_360(current)
-                view.position(plan['items'])
-                return {k:v for k,v in plan.items() if k!='items'}|{'direction':direction,'applied_count':len(plan['items'])}
-            return system_to_360(current)|{'direction':direction}
+        vendor_state=assistant.probe()
+        cycle = None
+        resumed = None
+        if vendor_state.get('running'):
+            from desktop_layout_assistant_control import ProcessCycle,process_snapshot
+            cycle = ProcessCycle(process_snapshot())
+        try:
+            if cycle:
+                cycle.shutdown()
+            with _native() as view:
+                current=view.capture()
+                if current.get('auto_arrange'):
+                    raise ValueError('请先在 Windows 桌面右键 → 查看中关闭“自动排列图标”，再执行双向布局同步。')
+                if direction=='360_to_system':
+                    plan=system_from_360(current)
+                    view.position(plan['items'])
+                    time.sleep(.25)
+                    actual=_icons(view.capture()['icons'])
+                    expected=_icons(plan['items'])
+                    if any((actual[key]['x'],actual[key]['y']) != (item['x'],item['y']) for key,item in expected.items() if key in actual):
+                        raise ValueError('Windows 桌面未接受新的图标位置，请关闭“自动排列图标”后重试。')
+                    result={k:v for k,v in plan.items() if k!='items'}|{'direction':direction,'applied_count':len(plan['items'])}
+                else:
+                    result=system_to_360(current)|{'direction':direction}
+            if cycle:
+                resumed=cycle.resume()
+            result['360_was_running']=bool(cycle)
+            result['360_restarted']=resumed
+            result['message'] += ' 已暂时退出 360 并完成同步。' + ('已重新打开 360。' if resumed else '请手动打开 360 检查排列。' if cycle else '')
+            return result
+        finally:
+            if cycle:
+                if resumed is None:
+                    resumed=cycle.resume()
+                cycle.close()

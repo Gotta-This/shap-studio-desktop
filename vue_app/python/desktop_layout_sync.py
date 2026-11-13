@@ -127,6 +127,23 @@ def _match(record: dict[str, Any], icons: list[dict[str, Any]]) -> dict[str, Any
     return None
 
 
+def _layout_records(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return actual icon records and discard DTF metadata tail markers.
+
+    Some 360DesktopLite files contain a final marker whose decoded name and
+    path are the same ``desktop.ini`` path.  It is not an icon record, but it
+    looks like one if every integer field is treated as an index.  Never write
+    a Windows ordering into that metadata slot.
+    """
+    return [
+        record
+        for record in records
+        if record["index"] >= 0
+        and record["name"]
+        and _norm(record["name"]) != _norm(record["path"])
+    ]
+
+
 def _grid(current: dict[str, Any], count: int) -> list[tuple[int, int]]:
     display = current["display"]
     sx, sy = display["spacing"]
@@ -176,7 +193,8 @@ def _read_records() -> tuple[Path, bytes, list[dict[str, Any]]]:
 
 def system_from_360(current: dict[str, Any]) -> dict[str, Any]:
     path, data, records = _read_records()
-    ordered = sorted(records, key=lambda item: (item["index"], item["name"].casefold()))
+    layout_records = _layout_records(records)
+    ordered = sorted(layout_records, key=lambda item: (item["index"], item["name"].casefold()))
     matched: list[dict[str, Any]] = []
     used: set[str] = set()
     for record in ordered:
@@ -194,8 +212,8 @@ def system_from_360(current: dict[str, Any]) -> dict[str, Any]:
         "items": items,
         "matched_count": len(matched),
         "extra_count": len(extras),
-        "missing_count": max(0, len(records) - len(matched)),
-        "dtf_records": len(records),
+        "missing_count": max(0, len(layout_records) - len(matched)),
+        "dtf_records": len(layout_records),
         "dtf_path": str(path),
         "message": f"已按 360 排列匹配 {len(matched)} 个图标，额外的 {len(extras)} 个系统图标放到空白网格。",
     }
@@ -206,16 +224,16 @@ def system_to_360(current: dict[str, Any]) -> dict[str, Any]:
     if state.get("running"):
         raise ValueError("请先退出 360 桌面助手，再把 Windows 排列写入 360。")
     path, data, records = _read_records()
+    layout_records = _layout_records(records)
     ordered_icons = sorted(current["icons"], key=lambda item: (item["x"], item["y"], item["name"].casefold()))
     matched: list[dict[str, Any]] = []
     used: set[str] = set()
-    record_by_offset: dict[int, dict[str, Any]] = {record["offset"]: record for record in records}
     for icon in ordered_icons:
-        record = next((r for r in records if r["offset"] not in used and _match(r, [icon])), None)
+        record = next((r for r in layout_records if r["offset"] not in used and _match(r, [icon])), None)
         if record:
             matched.append(record)
             used.add(record["offset"])
-    remaining = [record for record in records if record["offset"] not in used]
+    remaining = [record for record in layout_records if record["offset"] not in used]
     target = matched + sorted(remaining, key=lambda item: (item["index"], item["name"].casefold()))
     changed = 0
     output = bytearray(data)
@@ -226,14 +244,14 @@ def system_to_360(current: dict[str, Any]) -> dict[str, Any]:
             struct.pack_into("<i", output, offset + 5, index)
             changed += 1
     if changed:
-        _write(path, bytes(output))
         backup = path.with_suffix(path.suffix + ".bk")
-        _write(backup, bytes(output))
+        _write(backup, data)
+        _write(path, bytes(output))
     return {
         "matched_count": len(matched),
         "missing_count": len(remaining),
         "changed_count": changed,
-        "dtf_records": len(records),
+        "dtf_records": len(layout_records),
         "dtf_path": str(path),
         "message": f"已将 Windows 顺序写入 360，匹配 {len(matched)} 个图标，忽略 {len(remaining)} 个未匹配记录。",
     }

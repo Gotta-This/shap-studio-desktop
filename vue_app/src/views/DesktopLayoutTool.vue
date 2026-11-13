@@ -525,7 +525,7 @@ async function confirm() {
         </div>
         <p v-if="syncMessage" class="muted" role="status">{{ syncMessage }}</p>
         <p v-if="data.assistant?.running" class="muted">
-          写入 360 前请先退出 360；读取 360 排列可以在 360 运行时执行。
+          同步时会正常退出 360，完成后尝试重新打开；如果系统拒绝自动重启，请手动打开 360。
         </p>
       </div>
       <div class="panel layout-save-panel">

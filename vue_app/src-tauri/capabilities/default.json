@@ -1,7 +1,7 @@
 {
   "identifier": "main",
   "description": "Local desktop preview window with native file selection and explicit path opening.",
-  "windows": ["main"],
+  "windows": ["main", "todo-widget"],
   "permissions": [
     "core:default",
     "core:window:allow-create",
@@ -9,6 +9,7 @@
     "core:window:allow-show",
     "core:window:allow-set-focus",
     "core:window:allow-set-always-on-top",
+    "core:webview:allow-create-webview-window",
     "global-shortcut:default",
     "core:webview:allow-set-webview-zoom",
     "dialog:allow-open",

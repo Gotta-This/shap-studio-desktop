@@ -1,7 +1,7 @@
 import struct
 import unittest
 
-from desktop_layout_sync import parse
+from desktop_layout_sync import _layout_records, parse
 
 
 class DesktopLayoutSyncTests(unittest.TestCase):
@@ -21,6 +21,15 @@ class DesktopLayoutSyncTests(unittest.TestCase):
         self.assertEqual(result[0]["path"], "C:\\Users\\Public\\Desktop\\demo.lnk")
         self.assertEqual(result[0]["name"], "演示")
         self.assertEqual(result[0]["index"], 12)
+
+    def test_metadata_tail_is_not_treated_as_an_icon(self):
+        records = [
+            {"path": "C:\\demo.lnk", "name": "演示", "index": 3, "offset": 1},
+            {"path": "C:\\desktop.ini", "name": "C:\\desktop.ini", "index": 1, "offset": 2},
+            {"path": "", "name": "回收站", "index": -1, "offset": 3},
+        ]
+        result = _layout_records(records)
+        self.assertEqual([item["name"] for item in result], ["演示"])
 
 
 if __name__ == "__main__":
