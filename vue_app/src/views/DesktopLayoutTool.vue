@@ -518,7 +518,7 @@ async function confirm() {
           >
           <Button
             variant="outline"
-            :disabled="syncBusy || loading || data.settings?.feature_enabled === false || data.assistant?.running"
+            :disabled="syncBusy || loading || data.settings?.feature_enabled === false"
             @click="syncLayout('system_to_360')"
             ><ArrowRightLeft :size="15" />Windows → 360</Button
           >

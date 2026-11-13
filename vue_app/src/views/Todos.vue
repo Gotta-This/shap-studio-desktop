@@ -9,7 +9,6 @@ import {
   Pencil,
   Trash2,
   RotateCcw,
-  MonitorUp,
 } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,7 +25,7 @@ import EmptyState from "@/components/EmptyState.vue";
 import DatePicker from "@/components/DatePicker.vue";
 import SelectField from "@/components/SelectField.vue";
 import TodoDialog from "@/components/TodoDialog.vue";
-import { state, action, today, desktop, notify, type Todo } from "@/lib/api";
+import { state, action, today, type Todo } from "@/lib/api";
 const router = useRouter(),
   done = ref(false),
   query = ref(""),
@@ -81,41 +80,13 @@ async function undo() {
     deleted.value = null;
   }
 }
-async function toggleWidget() {
-  if (!desktop) {
-    notify("桌面待办小组件需要桌面版应用。", true);
-    return;
-  }
-  const { WebviewWindow } = await import("@tauri-apps/api/webviewWindow");
-  const current = await WebviewWindow.getByLabel("todo-widget");
-  if (current) {
-    await current.close();
-    notify("桌面待办小组件已关闭。");
-    return;
-  }
-  const widget = new WebviewWindow("todo-widget", {
-    url: "/#/todo-widget",
-    title: "待办事项",
-    width: 330,
-    height: 430,
-    minWidth: 280,
-    minHeight: 220,
-    decorations: false,
-    alwaysOnTop: true,
-    resizable: true,
-    transparent: true,
-    skipTaskbar: false,
-  });
-  widget.once("tauri://error", (event) => notify(String(event.payload), true));
-  await widget.once("tauri://created", () => notify("桌面待办小组件已开启。"));
-}
 </script>
 <template>
   <section>
     <PageHeading
       title="待办事项"
       subtitle="明确下一步工作，按截止日期有序推进。"
-      ><Button variant="outline" @click="toggleWidget"><MonitorUp :size="16" />桌面小组件</Button><Button @click="edit()"><Plus :size="16" />新增待办</Button></PageHeading
+      ><Button @click="edit()"><Plus :size="16" />新增待办</Button></PageHeading
     >
     <div class="todo-toolbar">
       <div class="segmented">

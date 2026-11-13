@@ -1,10 +1,26 @@
 import struct
+import tempfile
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 
+import desktop_layout_sync as sync
 from desktop_layout_sync import _layout_records, parse
 
 
 class DesktopLayoutSyncTests(unittest.TestCase):
+    @staticmethod
+    def _record(path, name, index):
+        path_bytes = path.encode("utf-16le") + b"\x00\x00"
+        name_bytes = name.encode("utf-16le") + b"\x00\x00"
+        return (
+            b"s" + struct.pack("<I", len(path_bytes)) + path_bytes
+            + b"s" + struct.pack("<I", len(name_bytes)) + name_bytes
+            + b"\x64\x04\x00\x00\x00" + struct.pack("<i", index)
+            + b"\x64\x04\x00\x00\x00" + struct.pack("<i", -1)
+            + b"\x42\x04\x00\x00\x00"
+        )
+
     def test_dtfence_index_field_is_parsed_without_decoding_unknown_binary(self):
         path = "C:\\Users\\Public\\Desktop\\demo.lnk".encode("utf-16le") + b"\x00\x00"
         name = "演示".encode("utf-16le") + b"\x00\x00"
@@ -30,6 +46,30 @@ class DesktopLayoutSyncTests(unittest.TestCase):
         ]
         result = _layout_records(records)
         self.assertEqual([item["name"] for item in result], ["演示"])
+
+    def test_adjacent_records_keep_their_names_and_namespace_paths(self):
+        data = self._record("C:\\Users\\Public\\Desktop\\a.lnk", "甲图", 0)
+        data += self._record("::{2CC5CA98-6485-489A-920E-B3E88A6CCCE3}", "Learn about this picture", 1)
+        result = _layout_records(parse(data))
+        self.assertEqual([(item["path"], item["name"]) for item in result], [
+            ("C:\\Users\\Public\\Desktop\\a.lnk", "甲图"),
+            ("::{2CC5CA98-6485-489A-920E-B3E88A6CCCE3}", "Learn about this picture"),
+        ])
+
+    def test_system_to_360_preserves_existing_dtf_gaps(self):
+        data = self._record("C:\\Users\\Public\\Desktop\\a.lnk", "甲图", 0)
+        data += self._record("C:\\Users\\Public\\Desktop\\b.lnk", "乙图", 2)
+        records = parse(data)
+        current = {"icons": [
+            {"key": "C:\\Users\\Public\\Desktop\\a.lnk", "name": "甲图", "x": 0, "y": 0},
+            {"key": "C:\\Users\\Public\\Desktop\\b.lnk", "name": "乙图", "x": 0, "y": 100},
+        ]}
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "DTFenceData.dtf"
+            path.write_bytes(data)
+            with patch.object(sync, "_read_records", return_value=(path, data, records)), patch.object(sync.assistant, "probe", return_value={"running": False}):
+                result = sync.system_to_360(current)
+        self.assertEqual((result["matched_count"], result["changed_count"]), (2, 0))
 
 
 if __name__ == "__main__":

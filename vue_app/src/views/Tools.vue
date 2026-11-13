@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from "vue";
+import { computed, onUnmounted, reactive, ref } from "vue";
 import { useRoute } from "vue-router";
 import {
   Plus,
@@ -26,8 +26,10 @@ const route = useRoute(),
   tool = computed(() => String(route.params.tool)),
   busy = ref(false),
   runningTool = ref(""),
+  generationCopied = ref(false),
   errors = reactive<Record<string, string>>({}),
   error = computed(() => errors[tool.value] || "");
+let generationCopiedTimer: ReturnType<typeof setTimeout> | undefined;
 const titles: Record<string, { name: string; desc: string }> = {
   category: {
     name: "自定义类别数列",
@@ -91,13 +93,27 @@ async function run(method: string, params: any, callback: (r: any) => void) {
     if (job.error) throw Error(job.error);
     if (job.message.includes("完成")) {
       callback(job.result);
-      notify("已生成模拟数据。");
+      await autoCopy(job.result, kind);
     } else notify(job.message);
   } catch (e) {
     errors[kind] = (e as Error).message;
   } finally {
     busy.value = false;
     runningTool.value = "";
+  }
+}
+function resultText(result: any, kind: string) {
+  const list = result.values.map((n: number) => kind === "numeric" ? n.toFixed(result.params?.digits ?? 0) : String(n));
+  return format.value === "comma" ? list.join(", ") : format.value === "space" ? list.join(" ") : format.value === "r" ? "c(" + list.join(", ") + ")" : list.join("\n");
+}
+async function autoCopy(result: any, kind: string) {
+  try {
+    await navigator.clipboard.writeText(resultText(result, kind));
+    generationCopied.value = true;
+    if (generationCopiedTimer) clearTimeout(generationCopiedTimer);
+    generationCopiedTimer = setTimeout(() => { generationCopied.value = false; }, 1600);
+  } catch {
+    errors[kind] = "数据已生成，但自动复制到剪贴板失败。";
   }
 }
 function csvDownload(result: any, name: string) {
@@ -111,6 +127,7 @@ async function copy() {
     notify("复制失败，可以从结果框中选取文字。", true);
   }
 }
+onUnmounted(() => { if (generationCopiedTimer) clearTimeout(generationCopiedTimer); });
 </script>
 <template>
   <section class="tools-page">
@@ -187,7 +204,7 @@ async function copy() {
                 )
               "
               ><Play :size="14" />{{
-                busy ? "正在生成…" : "生成随机数列"
+                busy ? "正在生成…" : generationCopied ? "已自动复制" : "生成随机数列"
               }}</Button
             ><Button
               v-if="busy && runningTool === 'numeric'"
@@ -292,7 +309,7 @@ async function copy() {
               :disabled="busy"
               @click="run('tool.numeric', numeric, (r) => (numericResult = r))"
               ><Play :size="14" />{{
-                busy ? "正在生成…" : "生成模拟数据"
+                busy ? "正在生成…" : generationCopied ? "已自动复制" : "生成模拟数据"
               }}</Button
             ><Button
               v-if="busy && runningTool === 'numeric'"

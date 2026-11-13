@@ -15,7 +15,7 @@ class ScreenshotCaptureTests(unittest.TestCase):
 
     @unittest.skipUnless(importlib.util.find_spec("PIL"), "Pillow is provided by the packaged scientific environment")
     @patch("screenshot_capture.platform.system", return_value="Darwin")
-    @patch("PIL.ImageGrab.grab", return_value=type("FakeImage", (), {"width": 2, "height": 3, "save": lambda self, output, format, optimize: output.write(b"png-data")})())
+    @patch("PIL.ImageGrab.grab", return_value=type("FakeImage", (), {"width": 2, "height": 3, "save": lambda self, output, **kwargs: output.write(b"png-data")})())
     def test_capture_encodes_png(self, _grab, _system):
         result = capture()
         self.assertEqual(result["mime"], "image/png")
@@ -24,7 +24,7 @@ class ScreenshotCaptureTests(unittest.TestCase):
         self.assertEqual(result["base64"], "cG5nLWRhdGE=")
 
     def test_macos_capture_does_not_pass_windows_only_flag(self):
-        image = type("FakeImage", (), {"width": 2, "height": 3, "save": lambda self, output, format, optimize: output.write(b"png-data")})()
+        image = type("FakeImage", (), {"width": 2, "height": 3, "save": lambda self, output, **kwargs: output.write(b"png-data")})()
         grab = Mock(return_value=image)
         pil = types.ModuleType("PIL")
         image_grab = types.ModuleType("PIL.ImageGrab")

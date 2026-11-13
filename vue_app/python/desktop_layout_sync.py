@@ -29,7 +29,7 @@ def _utf16_run(data: bytes, start: int, limit: int) -> tuple[str, int] | None:
             break
         chars.append(chr(code))
         pos += 2
-    return ("".join(chars), pos) if len(chars) >= 2 else None
+    return ("".join(chars), pos) if chars else None
 
 
 def _field_index(data: bytes, start: int) -> tuple[int, int] | None:
@@ -66,8 +66,8 @@ def parse(data: bytes) -> list[dict[str, Any]]:
         window_start = max(0, offset - 700)
         path_starts = [
             pos
-            for pos in range(window_start, offset - 5, 2)
-            if data[pos : pos + 6] == b"C\x00:\x00\\\x00"
+            for pos in range(window_start, offset - 5)
+            if data[pos : pos + 4] in (b"C\x00:\x00", b":\x00:\x00")
         ]
         path = ""
         name = ""
@@ -77,7 +77,12 @@ def parse(data: bytes) -> list[dict[str, Any]]:
             if path_run:
                 path, path_end = path_run
                 runs: list[str] = []
-                for marker_pos in range(path_end, offset - 5):
+                # The ``s<length>`` marker for the current display name sits
+                # immediately before the UTF-16 payload returned by
+                # ``_utf16_run``.  Start five bytes earlier so we do not skip
+                # the current name and accidentally attach the next record's
+                # name to this icon.
+                for marker_pos in range(max(window_start, path_end - 5), offset - 5):
                     if data[marker_pos] != 0x73:
                         continue
                     length = struct.unpack_from("<I", data, marker_pos + 1)[0]
@@ -141,6 +146,7 @@ def _layout_records(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if record["index"] >= 0
         and record["name"]
         and _norm(record["name"]) != _norm(record["path"])
+        and not (_basename(record["path"]) == "desktop.ini" and _norm(record["name"]) == _norm(record["path"]))
     ]
 
 
@@ -202,6 +208,8 @@ def system_from_360(current: dict[str, Any]) -> dict[str, Any]:
         if icon and icon["key"].casefold() not in used:
             matched.append(icon)
             used.add(icon["key"].casefold())
+    if not matched:
+        raise ValueError("未找到可匹配的 360 桌面图标，未修改 Windows 排列。请确认 360 与 Windows 使用的是同一批桌面快捷方式。")
     extras = [icon for icon in current["icons"] if icon["key"].casefold() not in used]
     target_order = matched + sorted(extras, key=lambda item: item["name"].casefold())
     cells = _grid(current, len(target_order))
@@ -233,11 +241,17 @@ def system_to_360(current: dict[str, Any]) -> dict[str, Any]:
         if record:
             matched.append(record)
             used.add(record["offset"])
+    if not matched:
+        raise ValueError("未找到可匹配的 Windows 桌面图标，未修改 360 排列。请确认 360 与 Windows 使用的是同一批桌面快捷方式。")
     remaining = [record for record in layout_records if record["offset"] not in used]
-    target = matched + sorted(remaining, key=lambda item: (item["index"], item["name"].casefold()))
+    # Keep slots that 360 already reserves for records we cannot see in the
+    # current Windows desktop.  The DTF samples legitimately contain gaps
+    # (for example a 360-only item at slot 34); collapsing those gaps shifts
+    # every later icon even when the two layouts are already identical.
+    slots = sorted(record["index"] for record in layout_records if record["offset"] in used)
     changed = 0
     output = bytearray(data)
-    for index, record in enumerate(target):
+    for record, index in zip(matched, slots):
         offset = record["offset"]
         value = struct.unpack_from("<i", output, offset + 5)[0]
         if value != index:
@@ -250,9 +264,10 @@ def system_to_360(current: dict[str, Any]) -> dict[str, Any]:
     return {
         "matched_count": len(matched),
         "missing_count": len(remaining),
+        "ignored_count": max(0, len(current["icons"]) - len(matched)),
         "changed_count": changed,
         "dtf_records": len(layout_records),
         "dtf_path": str(path),
-        "message": f"已将 Windows 顺序写入 360，匹配 {len(matched)} 个图标，忽略 {len(remaining)} 个未匹配记录。",
+        "message": f"已将 Windows 顺序写入 360，匹配 {len(matched)} 个图标，忽略 {len(remaining) + max(0, len(current['icons']) - len(matched))} 个无法双向匹配的图标。",
     }
 

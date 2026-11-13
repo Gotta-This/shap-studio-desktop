@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { ref, onMounted, onActivated } from "vue";
 import {
   updates,
   checkUpdate,
@@ -14,6 +14,7 @@ import {
   HardDrive,
   Check,
   ArrowUpRight,
+  ListTodo,
 } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,11 +28,75 @@ const path = ref(""),
   busy = ref(false),
   error = ref("");
 const dataDirectory = ref("");
+const islandEnabled = ref(false);
+const islandBusy = ref(false);
+const islandConfigBusy = ref(false);
+const compactWidth = ref(240);
+const expandedWidth = ref(380);
+async function refreshIslandSetting() {
+  if (!desktop) return;
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    islandEnabled.value = await invoke<boolean>("todo_island_enabled");
+  } catch (e) {
+    notify(`无法读取灵动岛设置：${String((e as Error).message || e)}`, true);
+  }
+}
+async function refreshIslandConfig() {
+  if (!desktop) return;
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const config = await invoke<{ compact_width: number; expanded_width: number }>("todo_island_config_command");
+    compactWidth.value = config.compact_width;
+    expandedWidth.value = config.expanded_width;
+  } catch {
+    // Keep defaults in browser preview or when running an older native build.
+  }
+}
+async function saveIslandConfig() {
+  if (!desktop || islandConfigBusy.value) return;
+  const compact = Math.round(Number(compactWidth.value));
+  const expanded = Math.round(Number(expandedWidth.value));
+  if (!Number.isFinite(compact) || !Number.isFinite(expanded) || compact < 180 || compact > 800 || expanded < 280 || expanded > 1000 || expanded < compact) {
+    notify("宽度范围无效：收起 180–800 px，展开 280–1000 px，且展开宽度不能更小。", true);
+    return;
+  }
+  islandConfigBusy.value = true;
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    await invoke("set_todo_island_config", { config: { compact_width: compact, expanded_width: expanded } });
+    compactWidth.value = compact;
+    expandedWidth.value = expanded;
+    notify("灵动岛宽度已保存。");
+  } catch (e) {
+    notify(`灵动岛宽度保存失败：${String((e as Error).message || e)}`, true);
+  } finally {
+    islandConfigBusy.value = false;
+  }
+}
+async function toggleIsland() {
+  if (!desktop || islandBusy.value) return;
+  islandBusy.value = true;
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const enabled = !islandEnabled.value;
+    await invoke("set_todo_island_enabled", { enabled });
+    islandEnabled.value = enabled;
+    notify(enabled ? "待办灵动岛已开启。" : "待办灵动岛已关闭。");
+  } catch (e) {
+    notify(`灵动岛设置失败：${String((e as Error).message || e)}`, true);
+  } finally {
+    islandBusy.value = false;
+  }
+}
 onMounted(async () => {
   try {
     dataDirectory.value = (await api("storage.info")).directory;
   } catch {}
+  void refreshIslandSetting();
+  void refreshIslandConfig();
 });
+onActivated(() => { void refreshIslandSetting(); void refreshIslandConfig(); });
 async function browse() {
   if (!desktop) {
     document.getElementById("workspace-path")?.focus();
@@ -94,6 +159,25 @@ async function connect() {
           立即生效并自动保存到本机。界面偏大时可选择 80% 或
           90%；此设置不影响导出图表的尺寸和 DPI。
         </p>
+      </div>
+    </div>
+    <div class="panel display-settings">
+      <div class="settings-heading">
+        <div class="setting-icon"><ListTodo :size="21" /></div>
+        <div>
+          <h2>待办灵动岛</h2>
+          <p>屏幕顶部显示待办摘要，鼠标移入后展开列表。</p>
+        </div>
+        <Badge variant="secondary" class="ml-auto">{{ islandEnabled ? "已开启" : "已关闭" }}</Badge>
+      </div>
+      <div class="settings-content">
+        <Button variant="outline" :disabled="!desktop || islandBusy" @click="toggleIsland">{{ islandEnabled ? "关闭灵动岛" : "开启灵动岛" }}</Button>
+        <div class="island-size-grid">
+          <div class="form-field"><Label for="island-compact-width">收起宽度（px）</Label><Input id="island-compact-width" v-model.number="compactWidth" type="number" min="180" max="800" step="1" /></div>
+          <div class="form-field"><Label for="island-expanded-width">展开宽度（px）</Label><Input id="island-expanded-width" v-model.number="expandedWidth" type="number" min="280" max="1000" step="1" /></div>
+          <Button variant="outline" :disabled="!desktop || islandConfigBusy" @click="saveIslandConfig">{{ islandConfigBusy ? "保存中…" : "保存宽度" }}</Button>
+        </div>
+        <p class="muted">开启状态会保存在本机，下次启动应用时自动恢复。</p>
       </div>
     </div>
     <div class="settings-grid">

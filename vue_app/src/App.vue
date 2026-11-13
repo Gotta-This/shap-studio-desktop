@@ -42,8 +42,7 @@ const route = useRoute(),
   searchOpen = ref(false),
   query = ref("");
 const pending = computed(() => state.todos.filter((t) => !t.completed).length);
-const widgetShell = computed(() => route.path === "/todo-widget");
-let unregisterScreenshotShortcut: (() => Promise<void>) | undefined;
+const widgetShell = computed(() => route.path === "/todo-island");
 const activeName = computed(
   () =>
     [...main, ...tools, { path: "/settings", name: "设置与关于" }].find((n) =>
@@ -78,23 +77,6 @@ onMounted(async () => {
   try {
     await refresh();
     if (desktop) void checkUpdate();
-    if (desktop) {
-      try {
-        const { register, unregister } = await import("@tauri-apps/plugin-global-shortcut");
-        await register("CommandOrControl+Shift+4", (event) => {
-          if (event.state === "Pressed") {
-            if (route.path !== "/tools/screenshot") {
-              void router.push("/tools/screenshot").then(() => window.dispatchEvent(new Event("screenshot-shortcut")));
-            } else {
-              window.dispatchEvent(new Event("screenshot-shortcut"));
-            }
-          }
-        });
-        unregisterScreenshotShortcut = () => unregister("CommandOrControl+Shift+4");
-      } catch (e) {
-        notify("全局截图快捷键注册失败：" + (e as Error).message, true);
-      }
-    }
   } catch (e) {
     notify((e as Error).message, true);
   }
@@ -102,7 +84,6 @@ onMounted(async () => {
 onUnmounted(() => {
   window.removeEventListener("keydown", shortcut);
   stopDesktopSchedule();
-  void unregisterScreenshotShortcut?.();
 });
 </script>
 <template>

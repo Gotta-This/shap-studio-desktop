@@ -118,6 +118,10 @@ export async function action<T>(
 ): Promise<T | undefined> {
   try {
     const result = await api<T>(method, params);
+    if (desktop && (method.startsWith("todo.") || method.startsWith("task.") || method.startsWith("files."))) {
+      const { emit } = await import("@tauri-apps/api/event");
+      await emit("todo-updated");
+    }
     await refresh();
     notify(message);
     return result;
