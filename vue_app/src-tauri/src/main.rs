@@ -1,5 +1,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-use std::{io::{Read, Write}, path::PathBuf, process::{Command,Stdio}, sync::{Arc,atomic::{AtomicUsize,Ordering}}};
+use std::{fs::OpenOptions, io::{Read, Write}, path::PathBuf, process::{Command,Stdio}, sync::{Arc,atomic::{AtomicUsize,Ordering}}, time::{SystemTime,UNIX_EPOCH}};
 use tauri::{Emitter,Manager};
 mod ui_review;
 mod engine;
@@ -7,6 +7,24 @@ mod engine;
 struct Running(Arc<AtomicUsize>);
 struct CountGuard(Arc<AtomicUsize>);
 impl Drop for CountGuard { fn drop(&mut self) { self.0.fetch_sub(1,Ordering::SeqCst); } }
+
+fn app_log_path() -> PathBuf {
+    #[cfg(target_os="windows")]
+    { return std::env::var_os("LOCALAPPDATA").or_else(||std::env::var_os("APPDATA")).map(PathBuf::from).unwrap_or_else(||PathBuf::from("." )).join("ResearchDataTools").join("logs").join("app.log"); }
+    #[cfg(target_os="macos")]
+    { return std::env::var_os("HOME").map(PathBuf::from).unwrap_or_else(||PathBuf::from("." )).join("Library").join("Logs").join("ResearchDataTools").join("app.log"); }
+    #[cfg(not(any(target_os="windows",target_os="macos")))]
+    { std::env::var_os("HOME").map(PathBuf::from).unwrap_or_else(||PathBuf::from("." )).join(".local").join("state").join("ResearchDataTools").join("app.log") }
+}
+
+fn write_app_log(message: impl AsRef<str>) {
+    let path=app_log_path();
+    if let Some(parent)=path.parent() { let _=std::fs::create_dir_all(parent); }
+    let now=SystemTime::now().duration_since(UNIX_EPOCH).map(|d|d.as_secs()).unwrap_or_default();
+    if let Ok(mut file)=OpenOptions::new().create(true).append(true).open(&path) {
+        let _=writeln!(file,"[{now}] {}",message.as_ref());
+    }
+}
 
 #[cfg(target_os="macos")]
 fn quickshot_region_hotkey() -> (u16,u64) {
@@ -76,10 +94,26 @@ fn post_quickshot_region_hotkey() -> Result<(),String> {
     #[link(name="user32")]
     unsafe extern "system" { fn SendInput(count:u32,inputs:*const Input,size:i32)->u32; }
     const KEYUP:u32=0x0002;
+    let value=quickshot_config().ok().and_then(|v|v.get("region").and_then(|v|v.as_str()).map(str::to_string)).unwrap_or_else(||"Ctrl+Alt+R".into());
+    let mut tokens=value.split('+').map(str::trim).filter(|v|!v.is_empty()).collect::<Vec<_>>();
+    let key_name=tokens.pop().unwrap_or("R").to_ascii_uppercase();
+    let vk=match key_name.as_str() {
+        "A"..="Z" => key_name.as_bytes()[0] as u16,
+        "0"..="9" => key_name.as_bytes()[0] as u16,
+        _ if key_name.strip_prefix('F').and_then(|n|n.parse::<u16>().ok()).is_some_and(|n|(1..=24).contains(&n)) => 0x70 + key_name[1..].parse::<u16>().unwrap() - 1,
+        "SPACE"=>0x20,"ENTER"=>0x0D,"TAB"=>0x09,"BACKSPACE"=>0x08,"ESCAPE"=>0x1B,
+        _=>return Err(format!("Windows 不支持 QuickShot 快捷键：{value}")),
+    };
+    let mut modifiers=Vec::new();
+    for token in tokens { modifiers.push(match token.to_ascii_lowercase().as_str() { "ctrl"|"control"=>0x11,"alt"|"option"|"opt"=>0x12,"shift"=>0x10,"win"|"meta"|"super"=>0x5B,_=>return Err(format!("Windows 不支持 QuickShot 修饰键：{token}")) }); }
+    if modifiers.is_empty() { return Err("QuickShot 快捷键至少需要一个修饰键。".into()); }
     let key=|vk:u16,flags:u32|Input{input_type:1,data:InputUnion{keyboard:KeyboardInput{vk,scan:0,flags,time:0,extra:0}}};
-    let events=[key(0x11,0),key(0x10,0),key(0x41,0),key(0x41,KEYUP),key(0x10,KEYUP),key(0x11,KEYUP)];
+    let mut events=Vec::with_capacity(modifiers.len()*2+2);
+    for modifier in &modifiers { events.push(key(*modifier,0)); }
+    events.push(key(vk,0)); events.push(key(vk,KEYUP));
+    for modifier in modifiers.iter().rev() { events.push(key(*modifier,KEYUP)); }
     let sent=unsafe{SendInput(events.len() as u32,events.as_ptr(),size_of::<Input>() as i32)};
-    if sent==events.len() as u32 { Ok(()) } else { Err("Windows 无法发送 QuickShot 快捷键，请检查辅助功能权限。".into()) }
+    if sent==events.len() as u32 { write_app_log(format!("QuickShot hotkey sent: {value}")); Ok(()) } else { Err("Windows 无法发送 QuickShot 快捷键，请检查辅助功能权限。".into()) }
 }
 
 // Use Tauri's environment: its CLI enables tauri/custom-protocol directly;
@@ -120,8 +154,8 @@ async fn python_request(app:tauri::AppHandle, request:serde_json::Value, running
         result
     }).await.map_err(|e|e.to_string())?
 }
-#[tauri::command]
-fn quickshot_capture(app:tauri::AppHandle) -> Result<(),String> {
+fn quickshot_capture_inner(app:tauri::AppHandle) -> Result<(),String> {
+    write_app_log("quickshot_capture requested");
     let name=if cfg!(windows){"quickshot.exe"}else{"quickshot"};
     let current=std::env::current_exe().map_err(|e|e.to_string())?;
     let resource=app.path().resource_dir().map_err(|e|e.to_string())?;
@@ -141,16 +175,35 @@ fn quickshot_capture(app:tauri::AppHandle) -> Result<(),String> {
             return post_quickshot_region_hotkey();
         }
     }
-    let mut command=Command::new(executable);
-    command.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
-    #[cfg(windows)] { use std::os::windows::process::CommandExt;command.creation_flags(0x08000000); }
-    command.spawn().map_err(|e|format!("无法启动 QuickShot：{e}"))?;
+    #[cfg(target_os="windows")]
+    if !quickshot_running_windows() {
+        write_app_log(format!("QuickShot is not running; starting {}",executable.display()));
+        let mut command=Command::new(&executable);
+        command.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
+        { use std::os::windows::process::CommandExt;command.creation_flags(0x08000000); }
+        command.spawn().map_err(|e|{ write_app_log(format!("QuickShot spawn failed: {e}")); format!("无法启动 QuickShot：{e}") })?;
+        std::thread::sleep(std::time::Duration::from_millis(900));
+    }
+    #[cfg(not(target_os="windows"))]
+    {
+        let mut command=Command::new(executable);
+        command.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
+        command.spawn().map_err(|e|{ write_app_log(format!("QuickShot spawn failed: {e}")); format!("无法启动 QuickShot：{e}") })?;
+    }
     #[cfg(target_os="macos")]
     { std::thread::sleep(std::time::Duration::from_millis(700)); return post_quickshot_region_hotkey(); }
     #[cfg(target_os="windows")]
-    { std::thread::sleep(std::time::Duration::from_millis(250)); return post_quickshot_region_hotkey(); }
+    { let result=post_quickshot_region_hotkey(); if let Err(error)=&result { write_app_log(format!("QuickShot hotkey failed: {error}")); } return result; }
     #[cfg(not(any(target_os="macos",target_os="windows")))]
     Ok(())
+}
+#[tauri::command]
+async fn quickshot_capture(app:tauri::AppHandle) -> Result<(),String> {
+    tauri::async_runtime::spawn_blocking(move || quickshot_capture_inner(app)).await.map_err(|e|e.to_string())?
+}
+#[cfg(target_os="windows")]
+fn quickshot_running_windows() -> bool {
+    Command::new("tasklist").args(["/FI","IMAGENAME eq quickshot.exe","/NH"]).output().ok().is_some_and(|output|String::from_utf8_lossy(&output.stdout).to_ascii_lowercase().contains("quickshot.exe"))
 }
 #[cfg(target_os="macos")]
 fn quickshot_running(executable:&PathBuf) -> bool {
@@ -167,15 +220,22 @@ fn quickshot_config_path() -> Result<PathBuf,String> {
     { let home=std::env::var_os("HOME").map(PathBuf::from).ok_or("无法确定用户目录")?; return Ok(home.join(".config").join("QuickShot").join("config.toml")); }
 }
 fn quickshot_default_config() -> String {
-    let region=if cfg!(target_os="windows") { "Ctrl+Shift+A" } else { "Cmd+Shift+A" };
-    let fullscreen=if cfg!(target_os="windows") { "Ctrl+Shift+S" } else { "Cmd+Shift+S" };
+    let region=if cfg!(target_os="windows") { "Ctrl+Alt+R" } else { "Cmd+Shift+A" };
+    let fullscreen=if cfg!(target_os="windows") { "Ctrl+Alt+F" } else { "Cmd+Shift+S" };
     let directory=if cfg!(target_os="windows") { "~/Pictures" } else { "~/Desktop" };
     format!("# QuickShot settings — edits are reloaded automatically.\n\n[hotkey]\nregion = \"{region}\"\nfullscreen = \"{fullscreen}\"\n\n[save]\nenabled = false\ndirectory = \"{directory}\"\nfilename_template = \"Screenshot_{{datetime}}.png\"\n\n[general]\nnotification_on_fullscreen = true\n")
 }
 fn ensure_quickshot_config() -> Result<PathBuf,String> {
     let path=quickshot_config_path()?;
     if let Some(parent)=path.parent() { std::fs::create_dir_all(parent).map_err(|e|e.to_string())?; }
-    if !path.exists() { std::fs::write(&path,quickshot_default_config()).map_err(|e|e.to_string())?; }
+    if !path.exists() { std::fs::write(&path,quickshot_default_config()).map_err(|e|e.to_string())?; write_app_log(format!("Created QuickShot config at {}",path.display())); }
+    #[cfg(target_os="windows")]
+    {
+        if let Ok(text)=std::fs::read_to_string(&path) {
+            let migrated=text.replace("region = \"Ctrl+Shift+A\"","region = \"Ctrl+Alt+R\"").replace("fullscreen = \"Ctrl+Shift+S\"","fullscreen = \"Ctrl+Alt+F\"");
+            if migrated!=text { std::fs::write(&path,&migrated).map_err(|e|e.to_string())?; write_app_log(format!("Migrated QuickShot defaults in {}",path.display())); }
+        }
+    }
     Ok(path)
 }
 fn quickshot_config_value(text:&str, key:&str, default:&str) -> String {
@@ -201,7 +261,7 @@ fn valid_quickshot_shortcut(value:&str) -> bool {
 fn quickshot_config() -> Result<serde_json::Value,String> {
     let path=ensure_quickshot_config()?;
     let text=std::fs::read_to_string(path).map_err(|e|e.to_string())?;
-    Ok(serde_json::json!({"region":quickshot_config_value(&text,"region",if cfg!(target_os="windows"){"Ctrl+Shift+A"}else{"Cmd+Shift+A"}),"fullscreen":quickshot_config_value(&text,"fullscreen",if cfg!(target_os="windows"){"Ctrl+Shift+S"}else{"Cmd+Shift+S"})}))
+    Ok(serde_json::json!({"region":quickshot_config_value(&text,"region",if cfg!(target_os="windows"){"Ctrl+Alt+R"}else{"Cmd+Shift+A"}),"fullscreen":quickshot_config_value(&text,"fullscreen",if cfg!(target_os="windows"){"Ctrl+Alt+F"}else{"Cmd+Shift+S"})}))
 }
 #[tauri::command]
 fn set_quickshot_config(region:String, fullscreen:String) -> Result<serde_json::Value,String> {
@@ -258,8 +318,19 @@ fn todo_island_enabled_inner(app:&tauri::AppHandle) -> bool {
     todo_island_preference(app).ok().and_then(|p|std::fs::read_to_string(p).ok()).is_some_and(|v|v.trim()=="true")
 }
 fn open_todo_island(app:&tauri::AppHandle) -> Result<(),String> {
-    if app.get_webview_window("todo-island").is_some() { return Ok(()); }
     let (compact_width,_)=todo_island_widths(app);
+    let position=app.get_webview_window("main").and_then(|w|w.current_monitor().ok().flatten()).map(|monitor| {
+        let scale=monitor.scale_factor();
+        tauri::LogicalPosition::new(monitor.position().x as f64/scale+(monitor.size().width as f64/scale-compact_width)/2.,monitor.position().y as f64/scale+8.)
+    });
+    if let Some(window)=app.get_webview_window("todo-island") {
+        write_app_log("Todo island window already declared; showing it");
+        let _=window.set_size(tauri::LogicalSize::new(compact_width,44.));
+        if let Some(position)=position { let _=window.set_position(position); }
+        let _=window.set_always_on_top(true);
+        window.show().map_err(|e|{ write_app_log(format!("Todo island show failed: {e}")); format!("无法显示待办灵动岛：{e}") })?;
+        return Ok(());
+    }
     let mut builder=tauri::WebviewWindowBuilder::new(app,"todo-island",tauri::WebviewUrl::App("index.html#/todo-island".into()))
         .title("待办灵动岛")
         .inner_size(compact_width,44.)
@@ -272,13 +343,15 @@ fn open_todo_island(app:&tauri::AppHandle) -> Result<(),String> {
         .focusable(true)
         .accept_first_mouse(true)
         .skip_taskbar(true);
-    if let Some(monitor)=app.get_webview_window("main").and_then(|w|w.current_monitor().ok().flatten()) {
-        let scale=monitor.scale_factor();
-        let x=monitor.position().x as f64/scale+(monitor.size().width as f64/scale-compact_width)/2.;
-        let y=monitor.position().y as f64/scale+8.;
-        builder=builder.position(x,y);
-    } else { builder=builder.center(); }
-    builder.build().map(|_|()).map_err(|e|format!("无法打开待办灵动岛：{e}"))
+    if let Some(position)=position { builder=builder.position(position.x,position.y); } else { builder=builder.center(); }
+    write_app_log(format!("Opening todo island: compact_width={compact_width}"));
+    match builder.build() {
+        Ok(_) => { write_app_log("Todo island created dynamically"); Ok(()) }
+        Err(error) => {
+            write_app_log(format!("Todo island create failed: {error}"));
+            Err(format!("无法打开待办灵动岛：{error}"))
+        }
+    }
 }
 #[cfg(target_os="macos")]
 fn start_todo_island_mouse_monitor(app:tauri::AppHandle) {
@@ -336,15 +409,20 @@ fn set_todo_island_config(app:tauri::AppHandle, config:serde_json::Value) -> Res
     let _=app.emit("todo-island-config-updated",value.clone());
     Ok(value)
 }
-#[tauri::command]
-fn set_todo_island_enabled(app:tauri::AppHandle, enabled:bool) -> Result<(),String> {
+fn set_todo_island_enabled_inner(app:tauri::AppHandle, enabled:bool) -> Result<(),String> {
+    write_app_log(format!("set_todo_island_enabled: {enabled}"));
     if enabled { open_todo_island(&app)?; }
-    else if let Some(window)=app.get_webview_window("todo-island") { window.close().map_err(|e|format!("无法关闭待办灵动岛：{e}"))?; }
+    else if let Some(window)=app.get_webview_window("todo-island") { window.hide().map_err(|e|{ write_app_log(format!("Todo island hide failed: {e}")); format!("无法隐藏待办灵动岛：{e}") })?; }
     let path=todo_island_preference(&app)?;
     if let Some(parent)=path.parent() { std::fs::create_dir_all(parent).map_err(|e|e.to_string())?; }
     std::fs::write(path,if enabled {"true"} else {"false"}).map_err(|e|e.to_string())
 }
+#[tauri::command]
+async fn set_todo_island_enabled(app:tauri::AppHandle, enabled:bool) -> Result<(),String> {
+    tauri::async_runtime::spawn_blocking(move || set_todo_island_enabled_inner(app,enabled)).await.map_err(|e|e.to_string())?
+}
 fn start_quickshot_daemon(app:&tauri::AppHandle) -> Result<(),String> {
+    let _=ensure_quickshot_config()?;
     let name=if cfg!(windows){"quickshot.exe"}else{"quickshot"};
     let current=std::env::current_exe().map_err(|e|e.to_string())?;
     let resource=app.path().resource_dir().map_err(|e|e.to_string())?;
@@ -361,12 +439,19 @@ fn start_quickshot_daemon(app:&tauri::AppHandle) -> Result<(),String> {
     let source=PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("binaries").join(source_name);
     let candidates=vec![current.parent().map(|p|p.join(name)),Some(resource.join(name)),Some(source)];
     let executable=candidates.iter().flatten().find(|p|p.is_file()).cloned().ok_or_else(||format!("QuickShot 组件未找到，已检查：{}",candidates.iter().flatten().map(|p|p.display().to_string()).collect::<Vec<_>>().join("、")))?;
-    let mut command=Command::new(executable);
+    #[cfg(target_os="windows")]
+    if quickshot_running_windows() {
+        write_app_log("QuickShot daemon already running; skipped duplicate launch");
+        return Ok(());
+    }
+    let mut command=Command::new(&executable);
     command.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
     #[cfg(windows)] { use std::os::windows::process::CommandExt;command.creation_flags(0x08000000); }
-    command.spawn().map(|_|()).map_err(|e|format!("无法启动 QuickShot：{e}"))
+    write_app_log(format!("Starting QuickShot daemon: {}",executable.display()));
+    command.spawn().map(|_|{ write_app_log("QuickShot daemon started"); }).map_err(|e|{ write_app_log(format!("QuickShot daemon failed: {e}")); format!("无法启动 QuickShot：{e}") })
 }
 fn main() {
+    write_app_log(format!("Application starting; args={:?}",std::env::args_os().collect::<Vec<_>>()));
     // Exercise the exact production bridge before constructing any window.
     // Used by installed-package tests; never needs a desktop or OS input.
     let args:Vec<_>=std::env::args_os().collect();
@@ -398,7 +483,7 @@ fn main() {
     let mut context=tauri::generate_context!();
     if ui_review::enabled() { for window in &mut context.config_mut().app.windows { window.visible=false;window.focus=false;window.incognito=true; } }
     tauri::Builder::default().manage(Running::default()).manage(Arc::new(engine::Engine::default())).plugin(tauri_plugin_dialog::init()).plugin(tauri_plugin_opener::init())
-      .setup(|app| { let warm_engine=app.state::<Arc<engine::Engine>>().inner().clone(); let warm_profile=std::env::var_os("RESEARCH_V3_PROFILE").map(PathBuf::from); let warm_legacy=if ui_review::enabled(){None}else{app.path().app_data_dir().ok()}; std::thread::spawn(move ||{let _=warm_engine.request(warm_profile,warm_legacy,serde_json::json!({"method":"runtime.info"}));}); if !ui_review::enabled() { let _=start_quickshot_daemon(app.handle()); if todo_island_enabled_inner(app.handle()) { let _=open_todo_island(app.handle()); } #[cfg(target_os="macos")] start_todo_island_mouse_monitor(app.handle().clone()); } if ui_review::enabled() { #[cfg(target_os="macos")] app.set_activation_policy(tauri::ActivationPolicy::Accessory); ui_review::arm_timeout(app.handle().clone()); } if std::env::var("RESEARCH_V3_DEBUG").as_deref()==Ok("1") { if let Some(window)=app.get_webview_window("main") { eprintln!("V3 URL: {:?}",window.url()); #[cfg(debug_assertions)] window.open_devtools(); } } Ok(()) })
+      .setup(|app| { let warm_engine=app.state::<Arc<engine::Engine>>().inner().clone(); let warm_profile=std::env::var_os("RESEARCH_V3_PROFILE").map(PathBuf::from); let warm_legacy=if ui_review::enabled(){None}else{app.path().app_data_dir().ok()}; std::thread::spawn(move ||{let _=warm_engine.request(warm_profile,warm_legacy,serde_json::json!({"method":"runtime.info"}));}); if !ui_review::enabled() { if let Err(error)=start_quickshot_daemon(app.handle()) { write_app_log(format!("QuickShot daemon setup failed: {error}")); } if todo_island_enabled_inner(app.handle()) { if let Err(error)=open_todo_island(app.handle()) { write_app_log(format!("Todo island startup failed: {error}")); } } #[cfg(target_os="macos")] start_todo_island_mouse_monitor(app.handle().clone()); } if ui_review::enabled() { #[cfg(target_os="macos")] app.set_activation_policy(tauri::ActivationPolicy::Accessory); ui_review::arm_timeout(app.handle().clone()); } if std::env::var("RESEARCH_V3_DEBUG").as_deref()==Ok("1") { if let Some(window)=app.get_webview_window("main") { eprintln!("V3 URL: {:?}",window.url()); #[cfg(debug_assertions)] window.open_devtools(); } } Ok(()) })
       .plugin(tauri_plugin_global_shortcut::Builder::new().build())
       .on_page_load(|webview,payload| { if payload.event()==tauri::webview::PageLoadEvent::Finished { ui_review::install(webview); } })
       .invoke_handler(tauri::generate_handler![python_request,quickshot_capture,quickshot_config,set_quickshot_config,quickshot_open_config,todo_island_enabled,todo_island_config_command,set_todo_island_config,set_todo_island_enabled,ui_review::review_fixture,ui_review::review_resize,ui_review::review_snapshot,ui_review::review_finish,ui_review::review_close])

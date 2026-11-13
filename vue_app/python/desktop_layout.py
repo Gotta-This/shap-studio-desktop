@@ -217,7 +217,10 @@ def preview(profile,p):
             diagnostic.record(profile,'preview.error',operation,error=diagnostic.failure(error));raise
 
 def diagnostics(profile,p=None):
-    with _LOCK,_file_lock(profile):return diagnostic.export(profile)
+    with _LOCK,_file_lock(profile):
+        result=diagnostic.export(profile)
+        result['path']=str(Path(profile)/diagnostic.LOG_NAME)
+        return result
 
 def restore(profile,p):
     with _LOCK,_file_lock(profile):
@@ -293,37 +296,63 @@ def sync(profile,p):
         _require_enabled(profile)
         from desktop_layout_sync import system_from_360,system_to_360
         vendor_state=assistant.probe()
+        operation=uuid.uuid4().hex
+        diagnostic.record(profile,'sync.begin',operation,direction=direction,assistant=vendor_state)
         cycle = None
         resumed = None
-        if vendor_state.get('running'):
-            from desktop_layout_assistant_control import ProcessCycle,process_snapshot
-            cycle = ProcessCycle(process_snapshot())
+        try:
+            if vendor_state.get('running'):
+                from desktop_layout_assistant_control import ProcessCycle,process_snapshot
+                snapshot=process_snapshot()
+                diagnostic.record(profile,'sync.assistant_detected',operation,process_count=len(snapshot))
+                cycle = ProcessCycle(snapshot)
+            else:
+                diagnostic.record(profile,'sync.assistant_not_running',operation)
+        except Exception as error:
+            diagnostic.record(profile,'sync.assistant_probe_error',operation,error=diagnostic.failure(error))
+            raise
         try:
             if cycle:
                 cycle.shutdown()
+                diagnostic.record(profile,'sync.assistant_stopped',operation)
             with _native() as view:
                 current=view.capture()
+                diagnostic.record(profile,'sync.current_captured',operation,icon_count=len(current.get('icons',[])),display=current.get('display'),auto_arrange=current.get('auto_arrange'))
                 if current.get('auto_arrange'):
                     raise ValueError('请先在 Windows 桌面右键 → 查看中关闭“自动排列图标”，再执行双向布局同步。')
                 if direction=='360_to_system':
                     plan=system_from_360(current)
+                    diagnostic.record(profile,'sync.360_plan',operation,dtf_records=plan.get('dtf_records'),matched_count=plan.get('matched_count'),extra_count=plan.get('extra_count'),missing_count=plan.get('missing_count'),applied_count=len(plan.get('items',[])))
                     view.position(plan['items'])
                     time.sleep(.25)
                     actual=_icons(view.capture()['icons'])
                     expected=_icons(plan['items'])
-                    if any((actual[key]['x'],actual[key]['y']) != (item['x'],item['y']) for key,item in expected.items() if key in actual):
+                    mismatches=sum(1 for key,item in expected.items() if key in actual and (actual[key]['x'],actual[key]['y']) != (item['x'],item['y']))
+                    diagnostic.record(profile,'sync.windows_verify',operation,mismatches=mismatches)
+                    if mismatches:
                         raise ValueError('Windows 桌面未接受新的图标位置，请关闭“自动排列图标”后重试。')
                     result={k:v for k,v in plan.items() if k!='items'}|{'direction':direction,'applied_count':len(plan['items'])}
                 else:
                     result=system_to_360(current)|{'direction':direction}
+                    diagnostic.record(profile,'sync.360_write',operation,dtf_records=result.get('dtf_records'),matched_count=result.get('matched_count'),missing_count=result.get('missing_count'),ignored_count=result.get('ignored_count'),changed_count=result.get('changed_count'))
             if cycle:
                 resumed=cycle.resume()
+                diagnostic.record(profile,'sync.assistant_resumed',operation,restarted=bool(resumed))
             result['360_was_running']=bool(cycle)
             result['360_restarted']=resumed
             result['message'] += ' 已暂时退出 360 并完成同步。' + ('已重新打开 360。' if resumed else '请手动打开 360 检查排列。' if cycle else '')
+            diagnostic.record(profile,'sync.complete',operation,direction=direction,matched_count=result.get('matched_count'),changed_count=result.get('changed_count'),applied_count=result.get('applied_count'))
             return result
+        except Exception as error:
+            diagnostic.record(profile,'sync.error',operation,error=diagnostic.failure(error),direction=direction)
+            raise
         finally:
             if cycle:
                 if resumed is None:
-                    resumed=cycle.resume()
+                    try:
+                        resumed=cycle.resume()
+                        diagnostic.record(profile,'sync.assistant_resumed_after_error',operation,restarted=bool(resumed))
+                    except Exception as error:
+                        diagnostic.record(profile,'sync.assistant_resume_error',operation,error=diagnostic.failure(error))
+                        raise
                 cycle.close()
