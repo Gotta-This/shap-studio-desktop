@@ -79,6 +79,7 @@ fn main() {
     if ui_review::enabled() { for window in &mut context.config_mut().app.windows { window.visible=false;window.focus=false;window.incognito=true; } }
     tauri::Builder::default().manage(Running::default()).manage(Arc::new(engine::Engine::default())).plugin(tauri_plugin_dialog::init()).plugin(tauri_plugin_opener::init())
       .setup(|app| { let warm_engine=app.state::<Arc<engine::Engine>>().inner().clone(); let warm_profile=std::env::var_os("RESEARCH_V3_PROFILE").map(PathBuf::from); let warm_legacy=if ui_review::enabled(){None}else{app.path().app_data_dir().ok()}; std::thread::spawn(move ||{let _=warm_engine.request(warm_profile,warm_legacy,serde_json::json!({"method":"runtime.info"}));}); if ui_review::enabled() { #[cfg(target_os="macos")] app.set_activation_policy(tauri::ActivationPolicy::Accessory); ui_review::arm_timeout(app.handle().clone()); } if std::env::var("RESEARCH_V3_DEBUG").as_deref()==Ok("1") { if let Some(window)=app.get_webview_window("main") { eprintln!("V3 URL: {:?}",window.url()); #[cfg(debug_assertions)] window.open_devtools(); } } Ok(()) })
+      .plugin(tauri_plugin_global_shortcut::Builder::new().build())
       .on_page_load(|webview,payload| { if payload.event()==tauri::webview::PageLoadEvent::Finished { ui_review::install(webview); } })
       .invoke_handler(tauri::generate_handler![python_request,ui_review::review_fixture,ui_review::review_resize,ui_review::review_snapshot,ui_review::review_finish,ui_review::review_close])
       .on_window_event(|window,event| {
