@@ -11,6 +11,8 @@ import ShapTool from "./views/ShapTool.vue";
 import PredictionTool from "./views/PredictionTool.vue";
 import CrosstabsTool from "./views/CrosstabsTool.vue";
 import MeansTTestTool from "./views/MeansTTestTool.vue";
+import ScreenshotTool from "./views/ScreenshotTool.vue";
+import TodoWidget from "./views/TodoWidget.vue";
 import DesktopLayoutTool from "./views/DesktopLayoutTool.vue";
 import Tools from "./views/Tools.vue";
 import Settings from "./views/Settings.vue";
@@ -29,6 +31,8 @@ const router = createRouter({
     { path: "/tools/prediction", component: PredictionTool },
     { path: "/tools/crosstabs", component: CrosstabsTool },
     { path: "/tools/means-ttest", component: MeansTTestTool },
+    { path: "/tools/screenshot", component: ScreenshotTool },
+    { path: "/todo-widget", component: TodoWidget },
     { path: "/tools/desktop-layout", component: DesktopLayoutTool },
     { path: "/tools/:tool", component: Tools },
     { path: "/settings", component: Settings },

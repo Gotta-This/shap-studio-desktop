@@ -224,6 +224,9 @@ def dispatch(method, p):
             method=p.get('method', 'pooled'),
             group_labels=tuple(p.get('group_labels', ('第1组', '第2组'))),
         )
+    if method=='tool.screenshot.capture':
+        from screenshot_capture import capture
+        return capture()
     if method=='tool.job.start':
         from jobs import start
         return start(profile(),p)

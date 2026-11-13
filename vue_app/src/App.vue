@@ -42,6 +42,7 @@ const route = useRoute(),
   searchOpen = ref(false),
   query = ref("");
 const pending = computed(() => state.todos.filter((t) => !t.completed).length);
+const widgetShell = computed(() => route.path === "/todo-widget");
 const activeName = computed(
   () =>
     [...main, ...tools, { path: "/settings", name: "设置与关于" }].find((n) =>
@@ -86,7 +87,7 @@ onUnmounted(() => {
 });
 </script>
 <template>
-  <div class="app-shell" :class="{ 'sidebar-collapsed': collapsed }">
+  <div class="app-shell" :class="{ 'sidebar-collapsed': collapsed, 'widget-shell': widgetShell }">
     <aside id="main-navigation-sidebar" class="sidebar">
       <div class="brand">
         <img class="brand-icon" :src="appIcon" alt="科研数据工具集" />

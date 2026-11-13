@@ -11,6 +11,7 @@ import {
   MonitorCog,
   Table2,
   Scale,
+  Camera,
 } from "lucide-vue-next";
 
 export const mainNavigation = [
@@ -62,6 +63,12 @@ export const scientificTools = [
     name: "平均值对比（t 检验）",
     desc: "根据两组均值、标准差和例数比较平均值",
     icon: Scale,
+  },
+  {
+    path: "/tools/screenshot",
+    name: "截图与标注",
+    desc: "截取屏幕并添加方框、圆框和文字标注",
+    icon: Camera,
   },
   {
     path: "/tools/desktop-layout",
