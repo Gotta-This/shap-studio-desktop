@@ -56,6 +56,22 @@ class DesktopLayoutSyncTests(unittest.TestCase):
             ("::{2CC5CA98-6485-489A-920E-B3E88A6CCCE3}", "Learn about this picture"),
         ])
 
+    def test_parser_respects_string_lengths_without_nul_terminators(self):
+        path = "C:\\Users\\Public\\Desktop\\demo.exe".encode("utf-16le")
+        name = "演示程序".encode("utf-16le")
+        # Real DTFence files commonly omit the NUL terminator.  The next
+        # ``s`` marker must not be decoded as the final path character.
+        data = (
+            b"s" + struct.pack("<I", len(path)) + path
+            + b"s" + struct.pack("<I", len(name)) + name
+            + b"\x64\x04\x00\x00\x00" + struct.pack("<i", 4)
+            + b"\x64\x04\x00\x00\x00" + struct.pack("<i", -1)
+            + b"\x42\x04\x00\x00\x00"
+        )
+        result = _layout_records(parse(data))
+        self.assertEqual(result[0]["path"], "C:\\Users\\Public\\Desktop\\demo.exe")
+        self.assertEqual(result[0]["name"], "演示程序")
+
     def test_system_to_360_preserves_existing_dtf_gaps(self):
         data = self._record("C:\\Users\\Public\\Desktop\\a.lnk", "甲图", 0)
         data += self._record("C:\\Users\\Public\\Desktop\\b.lnk", "乙图", 2)
