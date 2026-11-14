@@ -2935,7 +2935,12 @@ body:has(.widget-shell),
 .todo-island-tool-toggle { display: flex; align-items: center; gap: 7px; cursor: pointer; }
 .todo-island-tool-toggle [data-slot="checkbox"] { width: 15px; height: 15px; }
 .todo-island-tool-picker { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.todo-island-tool-picker select { min-width: 150px; height: 27px; padding: 0 7px; border: 1px solid #ffffff2e; border-radius: 6px; background: #ffffff12; color: #e4f0e7; font-size: 11px; }
+.todo-island-tool-select { width: 150px !important; min-width: 150px !important; height: 27px !important; padding: 0 7px !important; border: 1px solid #ffffff2e !important; border-radius: 6px !important; background: #26332d !important; color: #e4f0e7 !important; box-shadow: none !important; font-size: 11px !important; }
+.todo-island-tool-select svg { width: 14px; height: 14px; color: #a8c4b1; opacity: 1; }
+.todo-island-tool-select-content { min-width: 150px !important; padding: 4px !important; border: 1px solid #ffffff2e !important; border-radius: 6px !important; background: #202a25 !important; color: #e4f0e7 !important; box-shadow: 0 8px 22px #0008 !important; }
+.todo-island-tool-select-content [data-slot="select-item"] { min-height: 27px; padding: 5px 8px; border-radius: 4px; color: #dcefe2; font-size: 11px; }
+.todo-island-tool-select-content [data-slot="select-item"][data-highlighted] { background: #4d8065; color: #ffffff; }
+.todo-island-tool-select-content [data-slot="select-item"][data-state="checked"] { color: #9bd2ae; }
 .todo-island-panel { transform-origin: top center; overflow: hidden; }
 .todo-island-panel-enter-active,
 .todo-island-panel-leave-active {

@@ -3,6 +3,13 @@ import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import { Camera, Check, Copy, ListTodo, LoaderCircle, Play, Plus, SlidersHorizontal, Trash2, X } from "lucide-vue-next";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { api, notify, type Todo } from "@/lib/api";
 import { clone, jobFor, startJob } from "@/lib/scientific";
 
@@ -257,7 +264,19 @@ onUnmounted(() => {
         <div v-if="showSettings" class="todo-island-settings">
           <div class="todo-island-setting-row"><span>透明度</span><input :value="opacity" type="range" min="0.55" max="1" step="0.05" @input="saveOpacity(($event.target as HTMLInputElement).value)" /><strong>{{ Math.round(opacity * 100) }}%</strong></div>
           <label class="todo-island-tool-toggle"><Checkbox :model-value="showScreenshot" @update:model-value="(value) => saveToolVisibility(!!value)" /><span>显示截图按钮</span></label>
-          <label class="todo-island-tool-picker"><span>快捷工具</span><select v-model="shortcutTool"><option value="none">不显示</option><option value="category">自定义类别数列</option><option value="numeric">均数 / 标准差模拟</option></select></label>
+          <div class="todo-island-tool-picker">
+            <span>快捷工具</span>
+            <Select v-model="shortcutTool">
+              <SelectTrigger class="todo-island-tool-select" aria-label="快捷工具">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent class="todo-island-tool-select-content">
+                <SelectItem value="none">不显示</SelectItem>
+                <SelectItem value="category">自定义类别数列</SelectItem>
+                <SelectItem value="numeric">均数 / 标准差模拟</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
         <section v-if="shortcutTool !== 'none'" class="todo-island-tool-form">
           <div class="todo-island-tool-heading"><strong>{{ shortcutTool === 'category' ? '自定义类别数列' : '均数 / 标准差模拟' }}</strong><span>参数会自动保留</span></div>
