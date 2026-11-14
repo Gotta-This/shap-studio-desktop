@@ -162,7 +162,7 @@ async function resizeIsland(open: boolean) {
     const width = open ? expandedWidth.value : compactWidth.value;
     const todoRows = Math.min(pending.value.length, 8);
     const settingsExtra = showSettings.value ? 82 : 0;
-    const height = !open ? 44 : Math.min(760, Math.max(190, shortcutTool.value === "category" ? 175 + categoryRows.value.length * 36 + todoRows * 46 + settingsExtra : shortcutTool.value === "numeric" ? 220 + todoRows * 46 + settingsExtra : 82 + todoRows * 46 + settingsExtra));
+    const height = !open ? 44 : Math.min(760, Math.max(190, shortcutTool.value === "category" ? 285 + categoryRows.value.length * 36 + todoRows * 46 + settingsExtra : shortcutTool.value === "numeric" ? 285 + todoRows * 46 + settingsExtra : 82 + todoRows * 46 + settingsExtra));
     await current.setSize(new LogicalSize(width, height));
     if (monitor) {
       const scale = monitor.scaleFactor;

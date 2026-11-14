@@ -180,7 +180,7 @@ fn quickshot_capture_inner(app:tauri::AppHandle) -> Result<(),String> {
         write_app_log(format!("QuickShot is not running; starting {}",executable.display()));
         let mut command=Command::new(&executable);
         command.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
-        { use std::os::windows::process::CommandExt;command.creation_flags(0x00000008); }
+        { use std::os::windows::process::CommandExt;command.creation_flags(0x08000208); }
         command.spawn().map_err(|e|{ write_app_log(format!("QuickShot spawn failed: {e}")); format!("无法启动 QuickShot：{e}") })?;
         std::thread::sleep(std::time::Duration::from_millis(900));
     }
@@ -448,7 +448,7 @@ fn start_quickshot_daemon(app:&tauri::AppHandle) -> Result<(),String> {
     }
     let mut command=Command::new(&executable);
     command.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
-    #[cfg(windows)] { use std::os::windows::process::CommandExt;command.creation_flags(0x00000008); }
+    #[cfg(windows)] { use std::os::windows::process::CommandExt;command.creation_flags(0x08000208); }
     write_app_log(format!("Starting QuickShot daemon: {}",executable.display()));
     command.spawn().map(|_|{ write_app_log("QuickShot daemon started"); }).map_err(|e|{ write_app_log(format!("QuickShot daemon failed: {e}")); format!("无法启动 QuickShot：{e}") })
 }
