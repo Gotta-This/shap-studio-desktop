@@ -14,8 +14,8 @@ const settingsBusy = ref(false);
 const regionHotkey = ref("");
 const fullscreenHotkey = ref("");
 const settingsError = ref("");
-const defaultRegionHotkey = /Windows/i.test(navigator.userAgent) ? "Ctrl+Alt+R" : "Cmd+Shift+A";
-const defaultFullscreenHotkey = /Windows/i.test(navigator.userAgent) ? "Ctrl+Alt+F" : "Cmd+Shift+S";
+const defaultRegionHotkey = /Windows/i.test(navigator.userAgent) ? "Ctrl+Alt+Shift+A" : "Cmd+Shift+A";
+const defaultFullscreenHotkey = /Windows/i.test(navigator.userAgent) ? "Ctrl+Alt+Shift+S" : "Cmd+Shift+S";
 
 async function launchQuickShot() {
   busy.value = true;
@@ -82,8 +82,8 @@ async function saveQuickShotSettings() {
       </div>
       <p v-if="error" class="field-error">{{ error }}</p>
       <form v-if="settingsOpen" class="quickshot-settings-panel" @submit.prevent="saveQuickShotSettings">
-        <label class="screenshot-shortcut-setting"><span>区域截图</span><Input v-model="regionHotkey" placeholder="Ctrl+Alt+R" /></label>
-        <label class="screenshot-shortcut-setting"><span>全屏截图</span><Input v-model="fullscreenHotkey" placeholder="Ctrl+Alt+F" /></label>
+        <label class="screenshot-shortcut-setting"><span>区域截图</span><Input v-model="regionHotkey" placeholder="Ctrl+Alt+Shift+A" /></label>
+        <label class="screenshot-shortcut-setting"><span>全屏截图</span><Input v-model="fullscreenHotkey" placeholder="Ctrl+Alt+Shift+S" /></label>
         <Button type="submit" :disabled="settingsBusy">{{ settingsBusy ? "保存中…" : "保存快捷键" }}</Button>
         <p v-if="settingsError" class="field-error">{{ settingsError }}</p>
       </form>

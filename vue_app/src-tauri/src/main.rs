@@ -239,8 +239,8 @@ fn quickshot_config_path() -> Result<PathBuf,String> {
     { let home=std::env::var_os("HOME").map(PathBuf::from).ok_or("无法确定用户目录")?; return Ok(home.join(".config").join("QuickShot").join("config.toml")); }
 }
 fn quickshot_default_config() -> String {
-    let region=if cfg!(target_os="windows") { "Ctrl+Alt+R" } else { "Cmd+Shift+A" };
-    let fullscreen=if cfg!(target_os="windows") { "Ctrl+Alt+F" } else { "Cmd+Shift+S" };
+    let region=if cfg!(target_os="windows") { "Ctrl+Alt+Shift+A" } else { "Cmd+Shift+A" };
+    let fullscreen=if cfg!(target_os="windows") { "Ctrl+Alt+Shift+S" } else { "Cmd+Shift+S" };
     let directory=if cfg!(target_os="windows") { "~/Pictures" } else { "~/Desktop" };
     format!("# QuickShot settings — edits are reloaded automatically.\n\n[hotkey]\nregion = \"{region}\"\nfullscreen = \"{fullscreen}\"\n\n[save]\nenabled = false\ndirectory = \"{directory}\"\nfilename_template = \"Screenshot_{{datetime}}.png\"\n\n[general]\nnotification_on_fullscreen = true\n")
 }
@@ -251,7 +251,11 @@ fn ensure_quickshot_config() -> Result<PathBuf,String> {
     #[cfg(target_os="windows")]
     {
         if let Ok(text)=std::fs::read_to_string(&path) {
-            let migrated=text.replace("region = \"Ctrl+Shift+A\"","region = \"Ctrl+Alt+R\"").replace("fullscreen = \"Ctrl+Shift+S\"","fullscreen = \"Ctrl+Alt+F\"");
+            let migrated=text
+                .replace("region = \"Ctrl+Shift+A\"","region = \"Ctrl+Alt+Shift+A\"")
+                .replace("fullscreen = \"Ctrl+Shift+S\"","fullscreen = \"Ctrl+Alt+Shift+S\"")
+                .replace("region = \"Ctrl+Alt+R\"","region = \"Ctrl+Alt+Shift+A\"")
+                .replace("fullscreen = \"Ctrl+Alt+F\"","fullscreen = \"Ctrl+Alt+Shift+S\"");
             if migrated!=text { std::fs::write(&path,&migrated).map_err(|e|e.to_string())?; write_app_log(format!("Migrated QuickShot defaults in {}",path.display())); }
         }
     }
@@ -280,11 +284,11 @@ fn valid_quickshot_shortcut(value:&str) -> bool {
 fn quickshot_config() -> Result<serde_json::Value,String> {
     let path=ensure_quickshot_config()?;
     let text=std::fs::read_to_string(path).map_err(|e|e.to_string())?;
-    Ok(serde_json::json!({"region":quickshot_config_value(&text,"region",if cfg!(target_os="windows"){"Ctrl+Alt+R"}else{"Cmd+Shift+A"}),"fullscreen":quickshot_config_value(&text,"fullscreen",if cfg!(target_os="windows"){"Ctrl+Alt+F"}else{"Cmd+Shift+S"})}))
+    Ok(serde_json::json!({"region":quickshot_config_value(&text,"region",if cfg!(target_os="windows"){"Ctrl+Alt+Shift+A"}else{"Cmd+Shift+A"}),"fullscreen":quickshot_config_value(&text,"fullscreen",if cfg!(target_os="windows"){"Ctrl+Alt+Shift+S"}else{"Cmd+Shift+S"})}))
 }
 #[tauri::command]
 fn set_quickshot_config(region:String, fullscreen:String) -> Result<serde_json::Value,String> {
-    if !valid_quickshot_shortcut(&region) || !valid_quickshot_shortcut(&fullscreen) { return Err("快捷键格式无效，请使用 Cmd+Shift+A 或 Ctrl+Alt+R 这样的格式。".into()); }
+    if !valid_quickshot_shortcut(&region) || !valid_quickshot_shortcut(&fullscreen) { return Err("快捷键格式无效，请使用 Cmd+Shift+A 或 Ctrl+Alt+Shift+A 这样的格式。".into()); }
     let path=ensure_quickshot_config()?;
     let original=std::fs::read_to_string(&path).map_err(|e|e.to_string())?;
     let mut found_region=false; let mut found_fullscreen=false; let mut lines=Vec::new();
