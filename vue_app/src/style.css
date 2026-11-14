@@ -2582,6 +2582,17 @@ code {
   align-items: flex-start;
   gap: 5px;
 }
+.screenshot-hide-window-setting {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted-foreground);
+  font-size: 11px;
+  padding-bottom: 8px;
+}
+.screenshot-hide-window-setting input {
+  accent-color: var(--primary);
+}
 .screenshot-stage {
   min-height: 540px;
   display: grid;

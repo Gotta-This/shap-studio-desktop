@@ -13,6 +13,7 @@ const settingsOpen = ref(false);
 const settingsBusy = ref(false);
 const regionHotkey = ref("");
 const fullscreenHotkey = ref("");
+const hideCurrentWindow = ref(true);
 const settingsError = ref("");
 const defaultRegionHotkey = /Windows/i.test(navigator.userAgent) ? "Ctrl+Alt+Shift+A" : "Cmd+Shift+A";
 const defaultFullscreenHotkey = /Windows/i.test(navigator.userAgent) ? "Ctrl+Alt+Shift+S" : "Cmd+Shift+S";
@@ -40,9 +41,10 @@ async function openQuickShotSettings() {
   fullscreenHotkey.value = defaultFullscreenHotkey;
   try {
     const { invoke } = await import("@tauri-apps/api/core");
-    const config = await invoke<{ region: string; fullscreen: string }>("quickshot_config");
+    const config = await invoke<{ region: string; fullscreen: string; hide_current_window?: boolean }>("quickshot_config");
     regionHotkey.value = config.region;
     fullscreenHotkey.value = config.fullscreen;
+    hideCurrentWindow.value = config.hide_current_window !== false;
   } catch (e) {
     settingsError.value = (e as Error).message;
     notify(settingsError.value, true);
@@ -54,7 +56,7 @@ async function saveQuickShotSettings() {
   settingsError.value = "";
   try {
     const { invoke } = await import("@tauri-apps/api/core");
-    await invoke("set_quickshot_config", { region: regionHotkey.value.trim(), fullscreen: fullscreenHotkey.value.trim() });
+    await invoke("set_quickshot_config", { region: regionHotkey.value.trim(), fullscreen: fullscreenHotkey.value.trim(), hide_current_window: hideCurrentWindow.value });
     settingsOpen.value = false;
   } catch (e) {
     settingsError.value = (e as Error).message;
@@ -84,6 +86,7 @@ async function saveQuickShotSettings() {
       <form v-if="settingsOpen" class="quickshot-settings-panel" @submit.prevent="saveQuickShotSettings">
         <label class="screenshot-shortcut-setting"><span>区域截图</span><Input v-model="regionHotkey" placeholder="Ctrl+Alt+Shift+A" /></label>
         <label class="screenshot-shortcut-setting"><span>全屏截图</span><Input v-model="fullscreenHotkey" placeholder="Ctrl+Alt+Shift+S" /></label>
+        <label class="screenshot-hide-window-setting"><input v-model="hideCurrentWindow" type="checkbox" />隐藏当前应用窗口（默认开启）</label>
         <Button type="submit" :disabled="settingsBusy">{{ settingsBusy ? "保存中…" : "保存快捷键" }}</Button>
         <p v-if="settingsError" class="field-error">{{ settingsError }}</p>
       </form>

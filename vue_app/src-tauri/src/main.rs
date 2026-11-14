@@ -94,7 +94,10 @@ fn post_quickshot_region_hotkey() -> Result<(),String> {
     #[link(name="user32")]
     unsafe extern "system" { fn SendInput(count:u32,inputs:*const Input,size:i32)->u32; }
     const KEYUP:u32=0x0002;
-    let value=quickshot_config().ok().and_then(|v|v.get("region").and_then(|v|v.as_str()).map(str::to_string)).unwrap_or_else(||"Ctrl+Alt+R".into());
+    let value=ensure_quickshot_config().ok()
+        .and_then(|path|std::fs::read_to_string(path).ok())
+        .map(|text|quickshot_config_value(&text,"region", "Ctrl+Alt+Shift+A"))
+        .unwrap_or_else(||"Ctrl+Alt+Shift+A".into());
     let mut tokens=value.split('+').map(str::trim).filter(|v|!v.is_empty()).collect::<Vec<_>>();
     let key_name=tokens.pop().unwrap_or("R").to_ascii_uppercase();
     let vk=if key_name.len()==1 && key_name.as_bytes()[0].is_ascii_alphanumeric() {
@@ -190,7 +193,7 @@ fn quickshot_capture_inner(app:tauri::AppHandle) -> Result<(),String> {
         std::thread::sleep(std::time::Duration::from_millis(900));
     }
     #[cfg(target_os="windows")]
-    {
+    if screenshot_hide_current_window(&app) {
         // Minimize only after the daemon probe/start path has completed. This
         // prevents a failed tasklist/startup check from leaving the main app
         // hidden while still keeping the taskbar button available.
@@ -198,6 +201,13 @@ fn quickshot_capture_inner(app:tauri::AppHandle) -> Result<(),String> {
             if window.is_visible().unwrap_or(false) && !window.is_minimized().unwrap_or(false) {
                 window.minimize().map_err(|e|format!("无法最小化截图窗口：{e}"))?;
                 write_app_log("Main window minimized before manual QuickShot capture");
+                for _ in 0..25 {
+                    if window.is_minimized().unwrap_or(true) { break; }
+                    std::thread::sleep(std::time::Duration::from_millis(20));
+                }
+                // Let DWM commit the minimized state before SendInput opens
+                // the full-screen capture overlay.
+                std::thread::sleep(std::time::Duration::from_millis(80));
             }
         }
     }
@@ -242,6 +252,23 @@ fn quickshot_config_path() -> Result<PathBuf,String> {
     #[cfg(not(target_os="windows"))]
     { let home=std::env::var_os("HOME").map(PathBuf::from).ok_or("无法确定用户目录")?; return Ok(home.join(".config").join("QuickShot").join("config.toml")); }
 }
+fn screenshot_preference_path(app:&tauri::AppHandle) -> Result<PathBuf,String> {
+    Ok(app.path().app_data_dir().map_err(|e|e.to_string())?.join("screenshot-settings.json"))
+}
+fn screenshot_hide_current_window(app:&tauri::AppHandle) -> bool {
+    screenshot_preference_path(app).ok()
+        .and_then(|path|std::fs::read_to_string(path).ok())
+        .and_then(|text|serde_json::from_str::<serde_json::Value>(&text).ok())
+        .and_then(|value|value.get("hide_current_window").and_then(|value|value.as_bool()))
+        .unwrap_or(true)
+}
+fn save_screenshot_hide_preference(app:&tauri::AppHandle, value:bool) -> Result<(),String> {
+    let path=screenshot_preference_path(app)?;
+    if let Some(parent)=path.parent() { std::fs::create_dir_all(parent).map_err(|e|e.to_string())?; }
+    let temporary=path.with_extension("json.tmp");
+    std::fs::write(&temporary,serde_json::to_vec_pretty(&serde_json::json!({"hide_current_window":value})).map_err(|e|e.to_string())?).map_err(|e|e.to_string())?;
+    std::fs::rename(&temporary,&path).map_err(|e|e.to_string())
+}
 fn quickshot_default_config() -> String {
     let region=if cfg!(target_os="windows") { "Ctrl+Alt+Shift+A" } else { "Cmd+Shift+A" };
     let fullscreen=if cfg!(target_os="windows") { "Ctrl+Alt+Shift+S" } else { "Cmd+Shift+S" };
@@ -285,13 +312,13 @@ fn valid_quickshot_shortcut(value:&str) -> bool {
       || matches!(upper.as_str(),"SPACE"|"ENTER"|"TAB"|"BACKSPACE"|"ESCAPE")
 }
 #[tauri::command]
-fn quickshot_config() -> Result<serde_json::Value,String> {
+fn quickshot_config(app:tauri::AppHandle) -> Result<serde_json::Value,String> {
     let path=ensure_quickshot_config()?;
     let text=std::fs::read_to_string(path).map_err(|e|e.to_string())?;
-    Ok(serde_json::json!({"region":quickshot_config_value(&text,"region",if cfg!(target_os="windows"){"Ctrl+Alt+Shift+A"}else{"Cmd+Shift+A"}),"fullscreen":quickshot_config_value(&text,"fullscreen",if cfg!(target_os="windows"){"Ctrl+Alt+Shift+S"}else{"Cmd+Shift+S"})}))
+    Ok(serde_json::json!({"region":quickshot_config_value(&text,"region",if cfg!(target_os="windows"){"Ctrl+Alt+Shift+A"}else{"Cmd+Shift+A"}),"fullscreen":quickshot_config_value(&text,"fullscreen",if cfg!(target_os="windows"){"Ctrl+Alt+Shift+S"}else{"Cmd+Shift+S"}),"hide_current_window":screenshot_hide_current_window(&app)}))
 }
 #[tauri::command]
-fn set_quickshot_config(region:String, fullscreen:String) -> Result<serde_json::Value,String> {
+fn set_quickshot_config(app:tauri::AppHandle, region:String, fullscreen:String, hide_current_window:bool) -> Result<serde_json::Value,String> {
     if !valid_quickshot_shortcut(&region) || !valid_quickshot_shortcut(&fullscreen) { return Err("快捷键格式无效，请使用 Cmd+Shift+A 或 Ctrl+Alt+Shift+A 这样的格式。".into()); }
     let path=ensure_quickshot_config()?;
     let original=std::fs::read_to_string(&path).map_err(|e|e.to_string())?;
@@ -307,7 +334,8 @@ fn set_quickshot_config(region:String, fullscreen:String) -> Result<serde_json::
     let temp=path.with_extension("toml.tmp");
     std::fs::write(&temp,format!("{}\n",lines.join("\n"))).map_err(|e|e.to_string())?;
     std::fs::rename(&temp,&path).map_err(|e|e.to_string())?;
-    Ok(serde_json::json!({"region":region,"fullscreen":fullscreen}))
+    save_screenshot_hide_preference(&app,hide_current_window)?;
+    Ok(serde_json::json!({"region":region,"fullscreen":fullscreen,"hide_current_window":hide_current_window}))
 }
 #[tauri::command]
 fn quickshot_open_config() -> Result<(),String> {
