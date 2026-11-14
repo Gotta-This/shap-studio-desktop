@@ -156,6 +156,20 @@ async fn python_request(app:tauri::AppHandle, request:serde_json::Value, running
 }
 fn quickshot_capture_inner(app:tauri::AppHandle) -> Result<(),String> {
     write_app_log("quickshot_capture requested");
+    #[cfg(target_os="windows")]
+    {
+        // A manual click originates in the main Tauri window.  Minimize it
+        // before QuickShot receives the hotkey so the capture overlay starts
+        // over the user's desktop instead of leaving the app's dark title bar
+        // in front of the selection area.  Minimize keeps the taskbar button
+        // available for restoring the app after the capture.
+        if let Some(window)=app.get_webview_window("main") {
+            if window.is_visible().unwrap_or(false) && !window.is_minimized().unwrap_or(false) {
+                window.minimize().map_err(|e|format!("无法最小化截图窗口：{e}"))?;
+                write_app_log("Main window minimized before manual QuickShot capture");
+            }
+        }
+    }
     let name=if cfg!(windows){"quickshot.exe"}else{"quickshot"};
     let current=std::env::current_exe().map_err(|e|e.to_string())?;
     let resource=app.path().resource_dir().map_err(|e|e.to_string())?;
@@ -180,7 +194,12 @@ fn quickshot_capture_inner(app:tauri::AppHandle) -> Result<(),String> {
         write_app_log(format!("QuickShot is not running; starting {}",executable.display()));
         let mut command=Command::new(&executable);
         command.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
-        { use std::os::windows::process::CommandExt;command.creation_flags(0x08000208); }
+        // CREATE_NO_WINDOW suppresses the console host for the bundled
+        // QuickShot console-subsystem binary.  Do not combine it with
+        // DETACHED_PROCESS (0x8): Windows ignores CREATE_NO_WINDOW when both
+        // flags are present, which is why manual launches could flash a black
+        // command window even though the hotkey path was quiet.
+        { use std::os::windows::process::CommandExt;command.creation_flags(0x08000200); }
         command.spawn().map_err(|e|{ write_app_log(format!("QuickShot spawn failed: {e}")); format!("无法启动 QuickShot：{e}") })?;
         std::thread::sleep(std::time::Duration::from_millis(900));
     }
@@ -448,7 +467,7 @@ fn start_quickshot_daemon(app:&tauri::AppHandle) -> Result<(),String> {
     }
     let mut command=Command::new(&executable);
     command.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
-    #[cfg(windows)] { use std::os::windows::process::CommandExt;command.creation_flags(0x08000208); }
+    #[cfg(windows)] { use std::os::windows::process::CommandExt;command.creation_flags(0x08000200); }
     write_app_log(format!("Starting QuickShot daemon: {}",executable.display()));
     command.spawn().map(|_|{ write_app_log("QuickShot daemon started"); }).map_err(|e|{ write_app_log(format!("QuickShot daemon failed: {e}")); format!("无法启动 QuickShot：{e}") })
 }
