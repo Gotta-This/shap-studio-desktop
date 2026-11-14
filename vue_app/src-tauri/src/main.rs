@@ -298,15 +298,16 @@ fn todo_island_config_path(app:&tauri::AppHandle) -> Result<PathBuf,String> {
 }
 fn todo_island_config(app:&tauri::AppHandle) -> Result<serde_json::Value,String> {
     let path=todo_island_config_path(app)?;
-    let defaults=serde_json::json!({"compact_width":240,"expanded_width":380,"show_screenshot":true});
+    let defaults=serde_json::json!({"compact_width":240,"expanded_width":380,"animation_ms":360,"show_screenshot":true});
     let Some(parent)=path.parent() else { return Ok(defaults); };
     std::fs::create_dir_all(parent).map_err(|e|e.to_string())?;
     if !path.exists() { std::fs::write(&path,serde_json::to_vec_pretty(&defaults).map_err(|e|e.to_string())?).map_err(|e|e.to_string())?; return Ok(defaults); }
     let value=std::fs::read_to_string(&path).ok().and_then(|text|serde_json::from_str::<serde_json::Value>(&text).ok()).unwrap_or(defaults.clone());
     let compact=value.get("compact_width").and_then(|v|v.as_u64()).unwrap_or(240).clamp(180,800);
     let expanded=value.get("expanded_width").and_then(|v|v.as_u64()).unwrap_or(380).clamp(280,1000).max(compact);
+    let animation_ms=value.get("animation_ms").and_then(|v|v.as_u64()).unwrap_or(360).clamp(120,1000);
     let show_screenshot=value.get("show_screenshot").and_then(|v|v.as_bool()).unwrap_or(true);
-    Ok(serde_json::json!({"compact_width":compact,"expanded_width":expanded,"show_screenshot":show_screenshot}))
+    Ok(serde_json::json!({"compact_width":compact,"expanded_width":expanded,"animation_ms":animation_ms,"show_screenshot":show_screenshot}))
 }
 fn todo_island_widths(app:&tauri::AppHandle) -> (f64,f64) {
     todo_island_config(app).ok().map(|v|(
@@ -397,10 +398,11 @@ fn todo_island_config_command(app:tauri::AppHandle) -> Result<serde_json::Value,
 fn set_todo_island_config(app:tauri::AppHandle, config:serde_json::Value) -> Result<serde_json::Value,String> {
     let compact=config.get("compact_width").and_then(|v|v.as_u64()).ok_or("收起宽度必须是整数")?.clamp(180,800);
     let expanded=config.get("expanded_width").and_then(|v|v.as_u64()).ok_or("展开宽度必须是整数")?.clamp(280,1000);
+    let animation_ms=config.get("animation_ms").and_then(|v|v.as_u64()).or_else(||todo_island_config(&app).ok().and_then(|v|v.get("animation_ms").and_then(|v|v.as_u64()))).unwrap_or(360).clamp(120,1000);
     if expanded < compact { return Err("展开宽度不能小于收起宽度".into()); }
     let current=todo_island_config(&app)?;
     let show_screenshot=config.get("show_screenshot").and_then(|v|v.as_bool()).or_else(||current.get("show_screenshot").and_then(|v|v.as_bool())).unwrap_or(true);
-    let value=serde_json::json!({"compact_width":compact,"expanded_width":expanded,"show_screenshot":show_screenshot});
+    let value=serde_json::json!({"compact_width":compact,"expanded_width":expanded,"animation_ms":animation_ms,"show_screenshot":show_screenshot});
     let path=todo_island_config_path(&app)?;
     if let Some(parent)=path.parent() { std::fs::create_dir_all(parent).map_err(|e|e.to_string())?; }
     let temp=path.with_extension("json.tmp");

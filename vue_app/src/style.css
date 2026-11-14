@@ -2857,7 +2857,7 @@ body:has(.widget-shell),
   color: #f4f8f5;
   box-shadow: none;
   opacity: 0;
-  transition: opacity 160ms ease, border-radius 240ms cubic-bezier(.16, 1, .3, 1), background 240ms ease;
+  transition: opacity calc(var(--todo-animation-ms, 360ms) * .65) ease, border-radius var(--todo-animation-ms, 360ms) cubic-bezier(.16, 1, .3, 1), background var(--todo-animation-ms, 360ms) ease;
 }
 .todo-island:not(.todo-island-ready) { pointer-events: none; }
 .todo-island-ready { opacity: 1; }
@@ -2891,6 +2891,12 @@ body:has(.widget-shell),
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.todo-island-header-content-enter-active,
+.todo-island-header-content-leave-active {
+  transition: opacity calc(var(--todo-animation-ms, 360ms) * .55) ease, transform calc(var(--todo-animation-ms, 360ms) * .55) cubic-bezier(.16, 1, .3, 1);
+}
+.todo-island-header-content-enter-from { opacity: 0; transform: translateY(-5px); }
+.todo-island-header-content-leave-to { opacity: 0; transform: translateY(5px); }
 .todo-island-actions button {
   display: grid;
   place-items: center;
@@ -2918,7 +2924,7 @@ body:has(.widget-shell),
 .todo-island-panel { transform-origin: top center; }
 .todo-island-panel-enter-active,
 .todo-island-panel-leave-active {
-  transition: opacity 220ms cubic-bezier(.16, 1, .3, 1), transform 220ms cubic-bezier(.16, 1, .3, 1);
+  transition: opacity var(--todo-animation-ms, 360ms) cubic-bezier(.16, 1, .3, 1), transform var(--todo-animation-ms, 360ms) cubic-bezier(.16, 1, .3, 1);
   will-change: opacity, transform;
 }
 .todo-island-panel-enter-from,

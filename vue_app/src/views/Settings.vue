@@ -33,6 +33,7 @@ const islandBusy = ref(false);
 const islandConfigBusy = ref(false);
 const compactWidth = ref(240);
 const expandedWidth = ref(380);
+const animationMs = ref(360);
 async function refreshIslandSetting() {
   if (!desktop) return;
   try {
@@ -46,9 +47,10 @@ async function refreshIslandConfig() {
   if (!desktop) return;
   try {
     const { invoke } = await import("@tauri-apps/api/core");
-    const config = await invoke<{ compact_width: number; expanded_width: number }>("todo_island_config_command");
+    const config = await invoke<{ compact_width: number; expanded_width: number; animation_ms?: number }>("todo_island_config_command");
     compactWidth.value = config.compact_width;
     expandedWidth.value = config.expanded_width;
+    animationMs.value = config.animation_ms ?? 360;
   } catch {
     // Keep defaults in browser preview or when running an older native build.
   }
@@ -57,16 +59,18 @@ async function saveIslandConfig() {
   if (!desktop || islandConfigBusy.value) return;
   const compact = Math.round(Number(compactWidth.value));
   const expanded = Math.round(Number(expandedWidth.value));
-  if (!Number.isFinite(compact) || !Number.isFinite(expanded) || compact < 180 || compact > 800 || expanded < 280 || expanded > 1000 || expanded < compact) {
-    notify("宽度范围无效：收起 180–800 px，展开 280–1000 px，且展开宽度不能更小。", true);
+  const animation = Math.round(Number(animationMs.value));
+  if (!Number.isFinite(compact) || !Number.isFinite(expanded) || !Number.isFinite(animation) || compact < 180 || compact > 800 || expanded < 280 || expanded > 1000 || expanded < compact || animation < 120 || animation > 1000) {
+    notify("参数范围无效：收起 180–800 px，展开 280–1000 px，动画 120–1000 ms。", true);
     return;
   }
   islandConfigBusy.value = true;
   try {
     const { invoke } = await import("@tauri-apps/api/core");
-    await invoke("set_todo_island_config", { config: { compact_width: compact, expanded_width: expanded } });
+    await invoke("set_todo_island_config", { config: { compact_width: compact, expanded_width: expanded, animation_ms: animation } });
     compactWidth.value = compact;
     expandedWidth.value = expanded;
+    animationMs.value = animation;
     notify("灵动岛宽度已保存。");
   } catch (e) {
     notify(`灵动岛宽度保存失败：${String((e as Error).message || e)}`, true);
@@ -175,6 +179,7 @@ async function connect() {
         <div class="island-size-grid">
           <div class="form-field"><Label for="island-compact-width">收起宽度（px）</Label><Input id="island-compact-width" v-model.number="compactWidth" type="number" min="180" max="800" step="1" /></div>
           <div class="form-field"><Label for="island-expanded-width">展开宽度（px）</Label><Input id="island-expanded-width" v-model.number="expandedWidth" type="number" min="280" max="1000" step="1" /></div>
+          <div class="form-field"><Label for="island-animation-ms">动画速度（ms）</Label><Input id="island-animation-ms" v-model.number="animationMs" type="number" min="120" max="1000" step="20" /></div>
           <Button variant="outline" :disabled="!desktop || islandConfigBusy" @click="saveIslandConfig">{{ islandConfigBusy ? "保存中…" : "保存宽度" }}</Button>
         </div>
         <p class="muted">开启状态会保存在本机，下次启动应用时自动恢复。</p>

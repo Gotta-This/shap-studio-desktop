@@ -13,6 +13,7 @@ const showSettings = ref(false);
 const opacity = ref(Number(localStorage.getItem("todo-island-opacity") || "0.94"));
 const compactWidth = ref(240);
 const expandedWidth = ref(380);
+const animationMs = ref(360);
 const showScreenshot = ref(true);
 const shortcutTool = ref(localStorage.getItem("todo-island-tool") || "none");
 const categoryRows = ref<{ value: number; count: number }[]>(loadStored("todo-island-category-rows", [{ value: 1, count: 28 }, { value: 0, count: 93 }]));
@@ -73,9 +74,10 @@ async function loadConfig() {
   if (!("__TAURI_INTERNALS__" in window)) return;
   try {
     const { invoke } = await import("@tauri-apps/api/core");
-    const config = await invoke<{ compact_width: number; expanded_width: number; show_screenshot?: boolean }>("todo_island_config_command");
+    const config = await invoke<{ compact_width: number; expanded_width: number; animation_ms?: number; show_screenshot?: boolean }>("todo_island_config_command");
     compactWidth.value = config.compact_width;
     expandedWidth.value = config.expanded_width;
+    animationMs.value = config.animation_ms ?? 360;
     showScreenshot.value = config.show_screenshot !== false;
   } catch {
     // Keep the defaults if the native settings command is unavailable.
@@ -185,8 +187,8 @@ function scheduleCollapse() {
   collapseTimer = setTimeout(() => {
     expanded.value = false;
     showSettings.value = false;
-    collapseResizeTimer = setTimeout(() => { void resizeIsland(false); }, 160);
-  }, 100);
+    collapseResizeTimer = setTimeout(() => { void resizeIsland(false); }, Math.round(animationMs.value * 0.75));
+  }, Math.round(animationMs.value * 0.3));
 }
 function saveOpacity(value: string | number) {
   const next = Math.min(1, Math.max(0.55, Number(value)));
@@ -213,9 +215,10 @@ onMounted(async () => {
   if ("__TAURI_INTERNALS__" in window) {
     const { listen } = await import("@tauri-apps/api/event");
     unlistenTodoUpdated = await listen("todo-updated", () => { void refresh(); });
-    unlistenConfigUpdated = await listen<{ compact_width: number; expanded_width: number; show_screenshot?: boolean }>("todo-island-config-updated", (event) => {
+    unlistenConfigUpdated = await listen<{ compact_width: number; expanded_width: number; animation_ms?: number; show_screenshot?: boolean }>("todo-island-config-updated", (event) => {
       compactWidth.value = event.payload.compact_width;
       expandedWidth.value = event.payload.expanded_width;
+      animationMs.value = event.payload.animation_ms ?? 360;
       showScreenshot.value = event.payload.show_screenshot !== false;
       void resizeIsland(expanded.value);
     });
@@ -237,15 +240,17 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <main class="todo-island" :class="{ 'todo-island-expanded': expanded, 'todo-island-ready': ready, 'todo-island-with-tool': shortcutTool !== 'none', 'todo-island-tool-category': shortcutTool === 'category', 'todo-island-tool-numeric': shortcutTool === 'numeric' }" :style="{ '--todo-opacity': opacity }" @pointerenter="expand" @pointermove="expand" @pointerleave="scheduleCollapse">
+  <main class="todo-island" :class="{ 'todo-island-expanded': expanded, 'todo-island-ready': ready, 'todo-island-with-tool': shortcutTool !== 'none', 'todo-island-tool-category': shortcutTool === 'category', 'todo-island-tool-numeric': shortcutTool === 'numeric' }" :style="{ '--todo-opacity': opacity, '--todo-animation-ms': `${animationMs}ms` }" @pointerenter="expand" @pointermove="expand" @pointerleave="scheduleCollapse">
     <header class="todo-island-header">
       <div class="todo-island-title"><ListTodo :size="16" /><strong>待办事项</strong><span>{{ pending.length }}</span></div>
-      <span v-if="!expanded" class="todo-island-preview">{{ pending[0]?.text || "今天没有待办" }}</span>
-      <div v-else class="todo-island-actions">
+      <Transition name="todo-island-header-content" mode="out-in">
+      <span v-if="!expanded" key="preview" class="todo-island-preview">{{ pending[0]?.text || "今天没有待办" }}</span>
+      <div v-else key="actions" class="todo-island-actions">
         <button v-if="showScreenshot" aria-label="开始截图" @click="capture"><Camera :size="15" /></button>
         <button aria-label="调整灵动岛工具" @click="showSettings = !showSettings"><SlidersHorizontal :size="15" /></button>
         <button aria-label="关闭待办灵动岛" @click="close"><X :size="15" /></button>
       </div>
+      </Transition>
     </header>
     <Transition name="todo-island-panel">
       <div v-if="expanded" class="todo-island-panel">
