@@ -11,6 +11,7 @@ import os
 import re
 import struct
 import tempfile
+import hashlib
 from pathlib import Path
 from typing import Any
 
@@ -120,16 +121,58 @@ def _basename(value: str) -> str:
     return re.split(r"[\\/]", value)[-1].casefold()
 
 
-def _match(record: dict[str, Any], icons: list[dict[str, Any]]) -> dict[str, Any] | None:
-    path = _norm(record["path"])
-    name = _norm(record["name"])
-    base = _basename(record["path"])
+def _path_norm(value: str) -> str:
+    value = value.strip().replace("/", "\\")
+    value = re.sub(r"^file:\\+", "", value, flags=re.IGNORECASE)
+    value = re.sub(r"^\\\\\?\\", "", value)
+    return _norm(value)
+
+
+def _name_variants(value: str) -> set[str]:
+    value = _norm(value)
+    if not value:
+        return set()
+    values = {value}
+    stem = re.sub(r"\.(?:lnk|url|exe)$", "", value)
+    stem = re.sub(r"\s+-\s*(?:快捷方式|shortcut)$", "", stem)
+    values.add(stem)
+    return {item for item in values if item}
+
+
+def _token(value: str) -> str:
+    return hashlib.sha256(_norm(value).encode("utf-8")).hexdigest()[:12]
+
+
+def _match_details(record: dict[str, Any], icons: list[dict[str, Any]]) -> tuple[dict[str, Any] | None, str | None]:
+    path = _path_norm(str(record.get("path", "")))
+    name_variants = _name_variants(str(record.get("name", "")))
+    base_variants = _name_variants(_basename(str(record.get("path", ""))))
+    scored: list[tuple[int, str, dict[str, Any]]] = []
     for icon in icons:
-        key = _norm(str(icon.get("key", "")))
-        icon_name = _norm(str(icon.get("name", "")))
-        if path == key or name == icon_name or base == _basename(key):
-            return icon
-    return None
+        key = _path_norm(str(icon.get("key", "")))
+        icon_names = _name_variants(str(icon.get("name", "")))
+        icon_bases = _name_variants(_basename(str(icon.get("key", ""))))
+        if path and key and path == key:
+            scored.append((100, "path", icon))
+        elif name_variants & icon_names:
+            scored.append((90, "name", icon))
+        elif base_variants & icon_bases:
+            scored.append((80, "basename", icon))
+        elif name_variants & icon_bases or base_variants & icon_names:
+            scored.append((70, "stem", icon))
+    if not scored:
+        return None, None
+    best_score = max(item[0] for item in scored)
+    best = [(reason, icon) for score, reason, icon in scored if score == best_score]
+    unique = {str(icon.get("key", "")).casefold(): (reason, icon) for reason, icon in best}
+    if len(unique) != 1:
+        return None, "ambiguous"
+    reason, icon = next(iter(unique.values()))
+    return icon, reason
+
+
+def _match(record: dict[str, Any], icons: list[dict[str, Any]]) -> dict[str, Any] | None:
+    return _match_details(record, icons)[0]
 
 
 def _layout_records(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -203,13 +246,19 @@ def system_from_360(current: dict[str, Any]) -> dict[str, Any]:
     ordered = sorted(layout_records, key=lambda item: (item["index"], item["name"].casefold()))
     matched: list[dict[str, Any]] = []
     used: set[str] = set()
+    match_modes: dict[str, int] = {"path": 0, "name": 0, "basename": 0, "stem": 0, "ambiguous": 0, "unmatched": 0}
     for record in ordered:
-        icon = _match(record, current["icons"])
+        icon, reason = _match_details(record, current["icons"])
         if icon and icon["key"].casefold() not in used:
             matched.append(icon)
             used.add(icon["key"].casefold())
+            match_modes[reason or "unmatched"] = match_modes.get(reason or "unmatched", 0) + 1
+        elif reason == "ambiguous":
+            match_modes["ambiguous"] += 1
+        else:
+            match_modes["unmatched"] += 1
     if not matched:
-        raise ValueError("未找到可匹配的 360 桌面图标，未修改 Windows 排列。请确认 360 与 Windows 使用的是同一批桌面快捷方式。")
+        raise ValueError(f"未找到可匹配的 360 桌面图标（360记录 {len(layout_records)}，Windows图标 {len(current['icons'])}），未修改 Windows 排列。请确认 360 与 Windows 使用的是同一批桌面快捷方式。")
     extras = [icon for icon in current["icons"] if icon["key"].casefold() not in used]
     target_order = matched + sorted(extras, key=lambda item: item["name"].casefold())
     cells = _grid(current, len(target_order))
@@ -222,6 +271,7 @@ def system_from_360(current: dict[str, Any]) -> dict[str, Any]:
         "extra_count": len(extras),
         "missing_count": max(0, len(layout_records) - len(matched)),
         "dtf_records": len(layout_records),
+        "match_modes": match_modes,
         "dtf_path": str(path),
         "message": f"已按 360 排列匹配 {len(matched)} 个图标，额外的 {len(extras)} 个系统图标放到空白网格。",
     }
@@ -236,13 +286,27 @@ def system_to_360(current: dict[str, Any]) -> dict[str, Any]:
     ordered_icons = sorted(current["icons"], key=lambda item: (item["x"], item["y"], item["name"].casefold()))
     matched: list[dict[str, Any]] = []
     used: set[str] = set()
+    match_modes: dict[str, int] = {"path": 0, "name": 0, "basename": 0, "stem": 0, "ambiguous": 0, "unmatched": 0}
     for icon in ordered_icons:
-        record = next((r for r in layout_records if r["offset"] not in used and _match(r, [icon])), None)
+        record = None
+        reason = None
+        for candidate in layout_records:
+            if candidate["offset"] in used:
+                continue
+            candidate_icon, candidate_reason = _match_details(candidate, [icon])
+            if candidate_icon:
+                record, reason = candidate, candidate_reason
+                break
         if record:
             matched.append(record)
             used.add(record["offset"])
+            match_modes[reason or "unmatched"] = match_modes.get(reason or "unmatched", 0) + 1
+        elif reason == "ambiguous":
+            match_modes["ambiguous"] += 1
+        else:
+            match_modes["unmatched"] += 1
     if not matched:
-        raise ValueError("未找到可匹配的 Windows 桌面图标，未修改 360 排列。请确认 360 与 Windows 使用的是同一批桌面快捷方式。")
+        raise ValueError(f"未找到可匹配的 Windows 桌面图标（360记录 {len(layout_records)}，Windows图标 {len(current['icons'])}），未修改 360 排列。请确认 360 与 Windows 使用的是同一批桌面快捷方式。")
     remaining = [record for record in layout_records if record["offset"] not in used]
     # Keep slots that 360 already reserves for records we cannot see in the
     # current Windows desktop.  The DTF samples legitimately contain gaps
@@ -267,6 +331,7 @@ def system_to_360(current: dict[str, Any]) -> dict[str, Any]:
         "ignored_count": max(0, len(current["icons"]) - len(matched)),
         "changed_count": changed,
         "dtf_records": len(layout_records),
+        "match_modes": match_modes,
         "dtf_path": str(path),
         "message": f"已将 Windows 顺序写入 360，匹配 {len(matched)} 个图标，忽略 {len(remaining) + max(0, len(current['icons']) - len(matched))} 个无法双向匹配的图标。",
     }

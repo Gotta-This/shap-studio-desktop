@@ -322,7 +322,7 @@ def sync(profile,p):
                     raise ValueError('请先在 Windows 桌面右键 → 查看中关闭“自动排列图标”，再执行双向布局同步。')
                 if direction=='360_to_system':
                     plan=system_from_360(current)
-                    diagnostic.record(profile,'sync.360_plan',operation,dtf_records=plan.get('dtf_records'),matched_count=plan.get('matched_count'),extra_count=plan.get('extra_count'),missing_count=plan.get('missing_count'),applied_count=len(plan.get('items',[])))
+                    diagnostic.record(profile,'sync.360_plan',operation,dtf_records=plan.get('dtf_records'),matched_count=plan.get('matched_count'),extra_count=plan.get('extra_count'),missing_count=plan.get('missing_count'),match_modes=plan.get('match_modes'),applied_count=len(plan.get('items',[])))
                     view.position(plan['items'])
                     time.sleep(.25)
                     actual=_icons(view.capture()['icons'])
@@ -334,7 +334,7 @@ def sync(profile,p):
                     result={k:v for k,v in plan.items() if k!='items'}|{'direction':direction,'applied_count':len(plan['items'])}
                 else:
                     result=system_to_360(current)|{'direction':direction}
-                    diagnostic.record(profile,'sync.360_write',operation,dtf_records=result.get('dtf_records'),matched_count=result.get('matched_count'),missing_count=result.get('missing_count'),ignored_count=result.get('ignored_count'),changed_count=result.get('changed_count'))
+                    diagnostic.record(profile,'sync.360_write',operation,dtf_records=result.get('dtf_records'),matched_count=result.get('matched_count'),missing_count=result.get('missing_count'),ignored_count=result.get('ignored_count'),changed_count=result.get('changed_count'),match_modes=result.get('match_modes'))
             if cycle:
                 resumed=cycle.resume()
                 diagnostic.record(profile,'sync.assistant_resumed',operation,restarted=bool(resumed))
