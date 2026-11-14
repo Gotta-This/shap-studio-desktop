@@ -118,6 +118,15 @@ const pageCount = computed(() =>
     Math.ceil((data.value?.backups.length || 0) / Number(pageSize.value)),
   ),
 );
+const has360Desktop = computed(() => {
+  const assistant = data.value?.assistant;
+  return assistant?.checked === true && assistant.installed === true;
+});
+const assistantStatus = computed(() => {
+  const assistant = data.value?.assistant;
+  if (!assistant?.checked) return "检测失败";
+  return assistant.running ? "正在运行" : "已安装";
+});
 const pagedBackups = computed(() => {
   const start =
     (Math.min(page.value, pageCount.value) - 1) * Number(pageSize.value);
@@ -210,6 +219,7 @@ async function saveSettings(confirmed = false) {
   }
 }
 async function syncLayout(direction: "360_to_system" | "system_to_360") {
+  if (!has360Desktop.value) return;
   syncBusy.value = true;
   syncMessage.value = "";
   error.value = "";
@@ -371,7 +381,7 @@ async function confirm() {
   <section class="layout-backup-page">
     <PageHeading
       title="桌面布局备份"
-      subtitle="保存 Windows 桌面图标位置，排列错乱后恢复。"
+      subtitle="保存 Windows 图标排列，错乱时一键恢复。"
     >
       <Badge variant="secondary"><MonitorCog :size="14" />Windows 专用</Badge>
     </PageHeading>
@@ -403,9 +413,7 @@ async function confirm() {
     </div>
     <template v-else-if="data?.supported">
       <div class="layout-diagnostics muted">
-        <span
-          >恢复异常时，可导出诊断日志；日志不包含桌面文件名、完整路径或文件内容。</span
-        >
+        <span>恢复异常时可导出诊断日志。</span>
         <Button
           variant="outline"
           size="sm"
@@ -415,12 +423,9 @@ async function confirm() {
         >
       </div>
       <div class="panel layout-save-panel">
-        <h2>工具与自动备份设置</h2>
+        <h2>备份设置</h2>
         <p v-if="data.settings?.feature_enabled === false" class="muted">
-          工具已关闭：停止手动备份、自动备份及恢复，历史记录继续保留。
-        </p>
-        <p class="muted">
-          软件打开期间按频率自动保存；关闭后停止，下次打开会检查是否到期。
+          工具已关闭，历史记录仍会保留。
         </p>
         <form class="layout-save-form" @submit.prevent="saveSettings()">
           <label class="layout-permanent"
@@ -457,58 +462,32 @@ async function confirm() {
             >保存备份设置</Button
           >
         </form>
-        <p class="muted layout-retention">
-          永久保留的备份不占普通份数。自动备份、手动备份和恢复前备份共用普通份数限制。
-        </p>
-        <p class="muted layout-retention">
-          默认每 10 分钟备份一次、保留 144 份，连续运行约覆盖 24
-          小时；按份数清理，不按时间删除。
-        </p>
-        <p
-          v-if="data.settings?.last_automatic_at"
-          class="muted layout-retention"
-        >
-          上次自动备份：{{ date(data.settings.last_automatic_at) }}
-        </p>
+        <div class="layout-meta muted">
+          <span>每 {{ intervalMinutes }} 分钟</span>
+          <span>保留 {{ keepRecent }} 份普通备份</span>
+          <span v-if="data.settings?.last_automatic_at">上次 {{ date(data.settings.last_automatic_at) }}</span>
+        </div>
         <p
           v-if="desktopSchedule.error || data.settings?.last_error"
           class="field-error"
         >
-          自动备份暂未成功：{{
+          自动备份失败：{{
             desktopSchedule.error || data.settings?.last_error
-          }}，软件运行时会重试。
-        </p>
-      </div>
-      <div class="panel">
-        <h2>360 桌面助手兼容备份</h2>
-        <p role="status">
-          {{
-            !data.assistant?.checked
-              ? "运行状态检测失败，请刷新重试"
-              : data.assistant.running
-                ? "360 正在运行：备份 Windows 原生布局，并同步保存 360 数据目录副本。"
-                : data.assistant.installed
-                  ? "检测到安装记录或残留数据，360 当前未运行：仅备份 Windows 原生布局。"
-                  : "未检测到 360 桌面助手：仅备份 Windows 原生布局。"
           }}
         </p>
-        <p class="muted">
-          360 副本按原文件压缩保存于备份目录的 360-data
-          文件夹，相同内容共用副本。运行中复制尚未经 360
-          恢复验证。恢复时会正常退出并重新打开原本运行的
-          360；无法正常退出则停止，不强制结束。
-        </p>
-        <p class="muted">
-          Windows 原生备份记录当时系统接口可读取的排列，无法还原未曾备份的“启动
-          360 前布局”。360 运行时仍可恢复 Windows 原生布局，但不会改变 360
-          自己管理的排列；恢复 360 时会短暂关闭并重开它。
-        </p>
       </div>
-      <div class="panel layout-sync-panel">
-        <h2>360 双向布局同步</h2>
-        <p class="muted">
-          读取 360 DTFence 排列顺序后应用到 Windows 桌面；也可以把 Windows 桌面顺序写回 360。匹配不到的图标会忽略，额外的 Windows 图标会放到空白网格。
-        </p>
+      <div v-if="has360Desktop" class="panel layout-assistant-panel">
+        <div class="layout-panel-heading">
+          <div>
+            <h2>360 桌面助手</h2>
+            <p class="muted">备份副本与双向布局同步</p>
+          </div>
+          <span
+            class="layout-status-badge"
+            :class="{ running: data.assistant?.running }"
+            role="status"
+          >{{ assistantStatus }}</span>
+        </div>
         <div class="layout-sync-actions">
           <Button
             variant="outline"
@@ -524,14 +503,14 @@ async function confirm() {
           >
         </div>
         <p v-if="syncMessage" class="muted" role="status">{{ syncMessage }}</p>
-        <p v-if="data.assistant?.running" class="muted">
-          同步时会正常退出 360，完成后尝试重新打开；如果系统拒绝自动重启，请手动打开 360。
+        <p v-if="data.assistant?.running" class="muted layout-sync-note">
+          同步会暂时退出 360，完成后尝试重开。
         </p>
       </div>
       <div class="panel layout-save-panel">
         <div>
-          <h2>备份当前排列</h2>
-          <p class="muted">先把图标摆好，再保存一份随时可恢复的布局。</p>
+          <h2>保存当前布局</h2>
+          <p class="muted">先摆好图标，再保存快照。</p>
         </div>
         <form class="layout-save-form" @submit.prevent="save">
           <Input
@@ -557,9 +536,7 @@ async function confirm() {
           >
         </form>
         <p class="muted layout-retention">
-          普通备份保留最近
-          {{ data.keep_recent }}
-          份；永久备份不参与自动清理。每次恢复前会自动备份当前排列。
+          永久备份不参与清理，恢复前会自动保存当前布局。
         </p>
       </div>
       <div class="section-title">
@@ -585,7 +562,7 @@ async function confirm() {
                 <th>备份名称</th>
                 <th>保存时间</th>
                 <th>图标 / 显示设置</th>
-                <th>360 同步副本</th>
+                <th v-if="has360Desktop">360 同步副本</th>
                 <th>保留方式</th>
                 <th>操作</th>
               </tr>
@@ -602,8 +579,8 @@ async function confirm() {
                     class="muted layout-safety-label"
                     >{{
                       backup.reason === "automatic"
-                        ? "按频率自动保存"
-                        : "恢复前自动保存"
+                        ? "自动"
+                        : "恢复前"
                     }}</small
                   >
                 </td>
@@ -615,8 +592,9 @@ async function confirm() {
                     {{ backup.display.dpi }} DPI</small
                   >
                 </td>
-                <td>
+                <td v-if="has360Desktop">
                   <span
+                    :title="backup.assistant?.message"
                     :class="
                       backup.assistant?.status === 'failed'
                         ? 'field-error'
@@ -632,9 +610,6 @@ async function confirm() {
                             : "历史备份无副本"
                     }}</span
                   >
-                  <small class="muted layout-safety-label">{{
-                    backup.assistant?.message
-                  }}</small>
                 </td>
                 <td>
                   <Badge v-if="backup.protected" variant="secondary"
@@ -654,7 +629,7 @@ async function confirm() {
                       ><ArchiveRestore :size="14" />恢复 Windows</Button
                     >
                     <Button
-                      v-if="backup.assistant?.status === 'saved'"
+                      v-if="has360Desktop && backup.assistant?.status === 'saved'"
                       variant="outline"
                       size="sm"
                       :disabled="
@@ -906,6 +881,38 @@ async function confirm() {
 }
 .layout-save-panel h2 {
   margin-bottom: 6px;
+}
+.layout-panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.layout-status-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 9px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 999px;
+  color: hsl(var(--muted-foreground));
+  font-size: 12px;
+  white-space: nowrap;
+}
+.layout-status-badge.running {
+  border-color: hsl(var(--primary) / 0.35);
+  color: hsl(var(--primary));
+  background: hsl(var(--primary) / 0.08);
+}
+.layout-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin-top: 14px;
+  font-size: 12px;
+}
+.layout-assistant-panel p {
+  margin-bottom: 0;
 }
 .layout-save-form {
   display: flex;

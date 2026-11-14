@@ -205,9 +205,11 @@ fn quickshot_capture_inner(app:tauri::AppHandle) -> Result<(),String> {
                     if window.is_minimized().unwrap_or(true) { break; }
                     std::thread::sleep(std::time::Duration::from_millis(20));
                 }
-                // Let DWM commit the minimized state before SendInput opens
-                // the full-screen capture overlay.
-                std::thread::sleep(std::time::Duration::from_millis(80));
+                // `is_minimized()` becomes true when the minimize animation
+                // starts, before DWM has finished removing the window from
+                // the desktop. Give the animation a fixed settle window so
+                // the capture overlay never records the half-minimized app.
+                std::thread::sleep(std::time::Duration::from_millis(400));
             }
         }
     }

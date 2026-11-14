@@ -410,7 +410,7 @@ test("running 360 allows native restore and explains its scope", async ({
   };
   await page.goto("/#/tools/desktop-layout");
   await expect(
-    page.getByRole("status").filter({ hasText: "360 正在运行" }),
+    page.getByRole("status").filter({ hasText: "正在运行" }),
   ).toBeVisible();
   await expect(
     page.getByRole("button", { name: "恢复备份 备份 1", exact: true }),
@@ -419,9 +419,6 @@ test("running 360 allows native restore and explains its scope", async ({
     page.getByRole("button", { name: "备份当前排列", exact: true }),
   ).toBeEnabled();
   await expect(page.getByText("同步失败", { exact: true })).toBeVisible();
-  await expect(
-    page.getByText("360 数据被占用，本次未同步", { exact: true }),
-  ).toBeVisible();
   await page
     .getByRole("button", { name: "恢复备份 备份 1", exact: true })
     .click();
@@ -430,10 +427,22 @@ test("running 360 allows native restore and explains its scope", async ({
   expect(store.restoreCalls).toBe(0);
 });
 
+test("Windows without 360 hides assistant controls", async ({ page }) => {
+  const store = await windows(page);
+  store.rows[0].assistant = { status: "saved", message: "已保存 360 数据副本" };
+  await page.goto("/#/tools/desktop-layout");
+  await expect(page.getByRole("heading", { name: "360 桌面助手", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "360 → Windows 桌面", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Windows → 360", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "恢复360备份 备份 1", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("columnheader", { name: "360 同步副本", exact: true })).toHaveCount(0);
+});
+
 test("360 restore is separately confirmed and keeps a visible rollback location", async ({
   page,
 }) => {
   const store = await windows(page);
+  store.assistant.installed = true;
   store.rows[0].assistant = { status: "saved", message: "已保存 360 数据副本" };
   await page.goto("/#/tools/desktop-layout");
   await page
@@ -464,6 +473,7 @@ test("360 restore errors remain visible instead of claiming success", async ({
   page,
 }) => {
   const store = await windows(page);
+  store.assistant.installed = true;
   store.rows[0].assistant = { status: "saved", message: "已保存 360 数据副本" };
   store.assistantRestoreError = "360 恢复未完成，已保留或回退原配置。";
   await page.goto("/#/tools/desktop-layout");
@@ -481,6 +491,7 @@ test("running 360 can be restored with automatic normal exit and restart", async
   page,
 }) => {
   const store = await windows(page);
+  store.assistant.installed = true;
   store.assistant.running = true;
   store.rows[0].assistant = { status: "saved", message: "已保存 360 数据副本" };
   await page.goto("/#/tools/desktop-layout");
@@ -503,6 +514,7 @@ test("restart failure visibly distinguishes restored files from a stopped app", 
   page,
 }) => {
   const store = await windows(page);
+  store.assistant.installed = true;
   store.assistant.running = true;
   store.assistantRestartSucceeded = false;
   store.rows[0].assistant = { status: "saved", message: "已保存 360 数据副本" };

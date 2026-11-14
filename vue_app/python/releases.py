@@ -10,8 +10,8 @@ from urllib.request import Request, urlopen
 import certifi
 from release_assets import versioned_name
 
-# v3.2.25 Windows validation build.
-VERSION = "3.2.25"
+# v3.2.26 UI and screenshot flow release.
+VERSION = "3.2.26"
 REPO = "Gotta-This/shap-studio-desktop"
 PREFIX = f"https://github.com/{REPO}/releases/download/"
 
