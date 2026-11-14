@@ -294,7 +294,7 @@ def sync(profile,p):
         raise ValueError('同步方向无效。')
     with _LOCK,_file_lock(profile):
         _require_enabled(profile)
-        from desktop_layout_sync import system_from_360,system_to_360
+        from desktop_layout_sync import system_from_360,system_to_360,verify_system_to_360
         vendor_state=assistant.probe()
         operation=uuid.uuid4().hex
         diagnostic.record(profile,'sync.begin',operation,direction=direction,assistant=vendor_state)
@@ -322,22 +322,32 @@ def sync(profile,p):
                     raise ValueError('请先在 Windows 桌面右键 → 查看中关闭“自动排列图标”，再执行双向布局同步。')
                 if direction=='360_to_system':
                     plan=system_from_360(current)
-                    diagnostic.record(profile,'sync.360_plan',operation,dtf_records=plan.get('dtf_records'),matched_count=plan.get('matched_count'),extra_count=plan.get('extra_count'),missing_count=plan.get('missing_count'),match_modes=plan.get('match_modes'),applied_count=len(plan.get('items',[])))
+                    diagnostic.record(profile,'sync.360_plan',operation,dtf_records=plan.get('dtf_records'),matched_count=plan.get('matched_count'),extra_count=plan.get('extra_count'),missing_count=plan.get('missing_count'),match_modes=plan.get('match_modes'),slot_count=plan.get('slot_count'),occupied_slots=plan.get('occupied_slots'),applied_count=len(plan.get('items',[])))
                     view.position(plan['items'])
                     time.sleep(.25)
                     actual=_icons(view.capture()['icons'])
                     expected=_icons(plan['items'])
-                    mismatches=sum(1 for key,item in expected.items() if key in actual and (actual[key]['x'],actual[key]['y']) != (item['x'],item['y']))
-                    diagnostic.record(profile,'sync.windows_verify',operation,mismatches=mismatches)
+                    mismatches=sum(1 for key,item in expected.items() if key not in actual or (actual[key]['x'],actual[key]['y']) != (item['x'],item['y']))
+                    diagnostic.record(profile,'sync.windows_verify',operation,mismatches=mismatches,expected_count=len(expected),actual_count=len(actual))
                     if mismatches:
                         raise ValueError('Windows 桌面未接受新的图标位置，请关闭“自动排列图标”后重试。')
                     result={k:v for k,v in plan.items() if k!='items'}|{'direction':direction,'applied_count':len(plan['items'])}
                 else:
                     result=system_to_360(current)|{'direction':direction}
-                    diagnostic.record(profile,'sync.360_write',operation,dtf_records=result.get('dtf_records'),matched_count=result.get('matched_count'),missing_count=result.get('missing_count'),ignored_count=result.get('ignored_count'),changed_count=result.get('changed_count'),match_modes=result.get('match_modes'))
+                    diagnostic.record(profile,'sync.360_write',operation,dtf_records=result.get('dtf_records'),matched_count=result.get('matched_count'),missing_count=result.get('missing_count'),ignored_count=result.get('ignored_count'),changed_count=result.get('changed_count'),position_conflicts=result.get('position_conflicts'),position_unmapped_count=result.get('position_unmapped_count'),match_modes=result.get('match_modes'))
             if cycle:
                 resumed=cycle.resume()
                 diagnostic.record(profile,'sync.assistant_resumed',operation,restarted=bool(resumed))
+            if direction=='system_to_360':
+                # 360 may rewrite its DTF file during restart. Verify after the
+                # process cycle has settled instead of treating a pre-restart
+                # write as success.
+                if cycle:
+                    time.sleep(.5)
+                verification=verify_system_to_360(result)
+                diagnostic.record(profile,'sync.360_verify',operation,**verification)
+                if verification['mismatches']:
+                    raise ValueError('360 重开后未保留 Windows 坐标对应的布局槽位，请检查 360 权限或配置文件。')
             result['360_was_running']=bool(cycle)
             result['360_restarted']=resumed
             result['message'] += ' 已暂时退出 360 并完成同步。' + ('已重新打开 360。' if resumed else '请手动打开 360 检查排列。' if cycle else '')

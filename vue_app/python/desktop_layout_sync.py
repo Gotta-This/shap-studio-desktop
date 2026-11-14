@@ -201,20 +201,40 @@ def _layout_records(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
     ]
 
 
-def _grid(current: dict[str, Any], count: int) -> list[tuple[int, int]]:
+def _grid_cells(current: dict[str, Any]) -> list[tuple[int, int]]:
     display = current["display"]
     sx, sy = display["spacing"]
     icons = current["icons"]
     origin_x = min((icon["x"] for icon in icons), default=0) % sx
     origin_y = min((icon["y"] for icon in icons), default=0) % sy
     result: list[tuple[int, int]] = []
-    for area in display["workareas"]:
+    for area in sorted(display["workareas"], key=lambda item: (item["top"], item["left"])):
         left = origin_x + ((area["left"] - origin_x + sx - 1) // sx) * sx
         top = origin_y + ((area["top"] - origin_y + sy - 1) // sy) * sy
         for x in range(left, area["right"] - sx + 1, sx):
             for y in range(top, area["bottom"] - sy + 1, sy):
                 result.append((x, y))
-    return result[:count]
+    return result
+
+
+def _grid(current: dict[str, Any], count: int) -> list[tuple[int, int]]:
+    return _grid_cells(current)[:count]
+
+
+def _icon_slot(icon: dict[str, Any], cells: list[tuple[int, int]]) -> int | None:
+    point = (int(icon.get("x", 0)), int(icon.get("y", 0)))
+    try:
+        return cells.index(point)
+    except ValueError:
+        if not cells:
+            return None
+        # Shell positions can be a few pixels off the nominal grid after a
+        # DPI/display transition. Snap to the nearest cell only when it is
+        # closer than half a grid spacing in both dimensions.
+        px, py = point
+        nearest = min(range(len(cells)), key=lambda i: abs(cells[i][0] - px) + abs(cells[i][1] - py))
+        cx, cy = cells[nearest]
+        return nearest if abs(cx - px) <= 38 and abs(cy - py) <= 50 else None
 
 
 def _write(path: Path, data: bytes) -> None:
@@ -253,12 +273,14 @@ def system_from_360(current: dict[str, Any]) -> dict[str, Any]:
     layout_records = _layout_records(records)
     ordered = sorted(layout_records, key=lambda item: (item["index"], item["name"].casefold()))
     matched: list[dict[str, Any]] = []
+    matched_pairs: list[tuple[dict[str, Any], dict[str, Any]]] = []
     used: set[str] = set()
     match_modes: dict[str, int] = {"path": 0, "name": 0, "basename": 0, "stem": 0, "ambiguous": 0, "unmatched": 0}
     for record in ordered:
         icon, reason = _match_details(record, current["icons"])
         if icon and icon["key"].casefold() not in used:
             matched.append(icon)
+            matched_pairs.append((record, icon))
             used.add(icon["key"].casefold())
             match_modes[reason or "unmatched"] = match_modes.get(reason or "unmatched", 0) + 1
         elif reason == "ambiguous":
@@ -268,11 +290,28 @@ def system_from_360(current: dict[str, Any]) -> dict[str, Any]:
     if not matched:
         raise ValueError(f"未找到可匹配的 360 桌面图标（360记录 {len(layout_records)}，Windows图标 {len(current['icons'])}），未修改 Windows 排列。请确认 360 与 Windows 使用的是同一批桌面快捷方式。")
     extras = [icon for icon in current["icons"] if icon["key"].casefold() not in used]
-    target_order = matched + sorted(extras, key=lambda item: item["name"].casefold())
-    cells = _grid(current, len(target_order))
-    if len(cells) < len(target_order):
+    cells = _grid_cells(current)
+    if not cells:
+        raise ValueError("系统桌面没有可用的网格位置。")
+    occupied: set[int] = set()
+    items: list[dict[str, Any]] = []
+    max_index = max((int(record["index"]) for record in ordered if record["index"] >= 0), default=-1)
+    if max_index >= len(cells):
+        raise ValueError("360 布局包含超出当前显示区域的槽位，请先调整显示器布局后重试。")
+    for record, icon in matched_pairs:
+        slot = int(record["index"])
+        if slot in occupied:
+            continue
+        occupied.add(slot)
+        items.append(dict(icon, x=cells[slot][0], y=cells[slot][1]))
+    extra_slots = [slot for slot in range(max_index + 1, len(cells)) if slot not in occupied]
+    extra_slots += [slot for slot in range(0, min(max_index + 1, len(cells))) if slot not in occupied]
+    extras = sorted(extras, key=lambda item: item["name"].casefold())
+    if len(extra_slots) < len(extras):
         raise ValueError("系统桌面没有足够的空白网格放置图标。")
-    items = [dict(icon, x=x, y=y) for icon, (x, y) in zip(target_order, cells)]
+    for icon, slot in zip(extras, extra_slots):
+        occupied.add(slot)
+        items.append(dict(icon, x=cells[slot][0], y=cells[slot][1]))
     return {
         "items": items,
         "matched_count": len(matched),
@@ -281,7 +320,9 @@ def system_from_360(current: dict[str, Any]) -> dict[str, Any]:
         "dtf_records": len(layout_records),
         "match_modes": match_modes,
         "dtf_path": str(path),
-        "message": f"已按 360 排列匹配 {len(matched)} 个图标，额外的 {len(extras)} 个系统图标放到空白网格。",
+        "slot_count": len(cells),
+        "occupied_slots": len(occupied),
+        "message": f"已按 360 槽位匹配 {len(matched)} 个图标，保留空槽；额外的 {len(extras)} 个系统图标放到空白网格。",
     }
 
 
@@ -291,8 +332,9 @@ def system_to_360(current: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("请先退出 360 桌面助手，再把 Windows 排列写入 360。")
     path, data, records = _read_records()
     layout_records = _layout_records(records)
+    cells = _grid_cells(current)
     ordered_icons = sorted(current["icons"], key=lambda item: (item["x"], item["y"], item["name"].casefold()))
-    matched: list[dict[str, Any]] = []
+    matched: list[tuple[dict[str, Any], dict[str, Any], int]] = []
     used: set[str] = set()
     match_modes: dict[str, int] = {"path": 0, "name": 0, "basename": 0, "stem": 0, "ambiguous": 0, "unmatched": 0}
     for icon in ordered_icons:
@@ -306,7 +348,11 @@ def system_to_360(current: dict[str, Any]) -> dict[str, Any]:
                 record, reason = candidate, candidate_reason
                 break
         if record:
-            matched.append(record)
+            slot = _icon_slot(icon, cells)
+            if slot is None:
+                match_modes["unmatched"] += 1
+                continue
+            matched.append((record, icon, slot))
             used.add(record["offset"])
             match_modes[reason or "unmatched"] = match_modes.get(reason or "unmatched", 0) + 1
         elif reason == "ambiguous":
@@ -316,19 +362,26 @@ def system_to_360(current: dict[str, Any]) -> dict[str, Any]:
     if not matched:
         raise ValueError(f"未找到可匹配的 Windows 桌面图标（360记录 {len(layout_records)}，Windows图标 {len(current['icons'])}），未修改 360 排列。请确认 360 与 Windows 使用的是同一批桌面快捷方式。")
     remaining = [record for record in layout_records if record["offset"] not in used]
-    # Keep slots that 360 already reserves for records we cannot see in the
-    # current Windows desktop.  The DTF samples legitimately contain gaps
-    # (for example a 360-only item at slot 34); collapsing those gaps shifts
-    # every later icon even when the two layouts are already identical.
-    slots = sorted(record["index"] for record in layout_records if record["offset"] in used)
+    occupied = {int(record["index"]) for record in remaining if int(record["index"]) >= 0}
+    used_slots: set[int] = set(occupied)
     changed = 0
+    conflicts = 0
     output = bytearray(data)
-    for record, index in zip(matched, slots):
+    expected_positions: list[dict[str, Any]] = []
+    for record, icon, slot in sorted(matched, key=lambda item: (item[2], item[1]["name"].casefold())):
+        target = slot
+        if target in used_slots:
+            conflicts += 1
+            target = next((candidate for candidate in range(len(cells)) if candidate not in used_slots), None)
+            if target is None:
+                continue
+        used_slots.add(target)
         offset = record["offset"]
         value = struct.unpack_from("<i", output, offset + 5)[0]
-        if value != index:
-            struct.pack_into("<i", output, offset + 5, index)
+        if value != target:
+            struct.pack_into("<i", output, offset + 5, target)
             changed += 1
+        expected_positions.append({"token": _token(str(record.get("path") or record.get("name"))), "index": target})
     if changed:
         backup = path.with_suffix(path.suffix + ".bk")
         _write(backup, data)
@@ -338,9 +391,24 @@ def system_to_360(current: dict[str, Any]) -> dict[str, Any]:
         "missing_count": len(remaining),
         "ignored_count": max(0, len(current["icons"]) - len(matched)),
         "changed_count": changed,
+        "position_conflicts": conflicts,
+        "position_unmapped_count": match_modes.get("unmatched", 0),
+        "expected_positions": expected_positions,
         "dtf_records": len(layout_records),
         "match_modes": match_modes,
         "dtf_path": str(path),
-        "message": f"已将 Windows 顺序写入 360，匹配 {len(matched)} 个图标，忽略 {len(remaining) + max(0, len(current['icons']) - len(matched))} 个无法双向匹配的图标。",
+        "message": ("Windows 坐标对应的 360 槽位无需修改。" if changed == 0 else f"已将 Windows 坐标写入 360，修改 {changed} 个槽位。") + f" 匹配 {len(matched)} 个图标，保留 {len(remaining)} 个 360 未匹配槽位。",
     }
+
+
+def verify_system_to_360(result: dict[str, Any]) -> dict[str, Any]:
+    """Re-read the DTF file after 360 is restarted and verify written slots."""
+    expected = {item["token"]: int(item["index"]) for item in result.get("expected_positions", [])}
+    if not expected:
+        return {"mismatches": 0, "verified_count": 0, "expected_count": 0}
+    path = Path(result["dtf_path"])
+    records = _layout_records(parse(path.read_bytes()))
+    actual = {_token(str(record.get("path") or record.get("name"))): int(record["index"]) for record in records}
+    mismatches = sum(1 for token, index in expected.items() if actual.get(token) != index)
+    return {"mismatches": mismatches, "verified_count": len(expected) - mismatches, "expected_count": len(expected)}
 

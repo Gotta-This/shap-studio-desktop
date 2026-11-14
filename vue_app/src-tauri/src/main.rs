@@ -156,20 +156,6 @@ async fn python_request(app:tauri::AppHandle, request:serde_json::Value, running
 }
 fn quickshot_capture_inner(app:tauri::AppHandle) -> Result<(),String> {
     write_app_log("quickshot_capture requested");
-    #[cfg(target_os="windows")]
-    {
-        // A manual click originates in the main Tauri window.  Minimize it
-        // before QuickShot receives the hotkey so the capture overlay starts
-        // over the user's desktop instead of leaving the app's dark title bar
-        // in front of the selection area.  Minimize keeps the taskbar button
-        // available for restoring the app after the capture.
-        if let Some(window)=app.get_webview_window("main") {
-            if window.is_visible().unwrap_or(false) && !window.is_minimized().unwrap_or(false) {
-                window.minimize().map_err(|e|format!("无法最小化截图窗口：{e}"))?;
-                write_app_log("Main window minimized before manual QuickShot capture");
-            }
-        }
-    }
     let name=if cfg!(windows){"quickshot.exe"}else{"quickshot"};
     let current=std::env::current_exe().map_err(|e|e.to_string())?;
     let resource=app.path().resource_dir().map_err(|e|e.to_string())?;
@@ -203,6 +189,18 @@ fn quickshot_capture_inner(app:tauri::AppHandle) -> Result<(),String> {
         command.spawn().map_err(|e|{ write_app_log(format!("QuickShot spawn failed: {e}")); format!("无法启动 QuickShot：{e}") })?;
         std::thread::sleep(std::time::Duration::from_millis(900));
     }
+    #[cfg(target_os="windows")]
+    {
+        // Minimize only after the daemon probe/start path has completed. This
+        // prevents a failed tasklist/startup check from leaving the main app
+        // hidden while still keeping the taskbar button available.
+        if let Some(window)=app.get_webview_window("main") {
+            if window.is_visible().unwrap_or(false) && !window.is_minimized().unwrap_or(false) {
+                window.minimize().map_err(|e|format!("无法最小化截图窗口：{e}"))?;
+                write_app_log("Main window minimized before manual QuickShot capture");
+            }
+        }
+    }
     #[cfg(not(target_os="windows"))]
     {
         let mut command=Command::new(executable);
@@ -222,7 +220,13 @@ async fn quickshot_capture(app:tauri::AppHandle) -> Result<(),String> {
 }
 #[cfg(target_os="windows")]
 fn quickshot_running_windows() -> bool {
-    Command::new("tasklist").args(["/FI","IMAGENAME eq quickshot.exe","/NH"]).output().ok().is_some_and(|output|String::from_utf8_lossy(&output.stdout).to_ascii_lowercase().contains("quickshot.exe"))
+    let mut command=Command::new("tasklist");
+    command.args(["/FI","IMAGENAME eq quickshot.exe","/NH"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null());
+    { use std::os::windows::process::CommandExt;command.creation_flags(0x08000000); }
+    command.output().ok().is_some_and(|output|String::from_utf8_lossy(&output.stdout).to_ascii_lowercase().contains("quickshot.exe"))
 }
 #[cfg(target_os="macos")]
 fn quickshot_running(executable:&PathBuf) -> bool {

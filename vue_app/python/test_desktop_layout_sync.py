@@ -72,20 +72,47 @@ class DesktopLayoutSyncTests(unittest.TestCase):
         self.assertEqual(result[0]["path"], "C:\\Users\\Public\\Desktop\\demo.exe")
         self.assertEqual(result[0]["name"], "演示程序")
 
-    def test_system_to_360_preserves_existing_dtf_gaps(self):
+    @staticmethod
+    def _current(icons):
+        return {
+            "icons": icons,
+            "display": {
+                "width": 1920,
+                "height": 1080,
+                "spacing": [76, 100],
+                "workareas": [{"left": 0, "top": 0, "right": 1920, "bottom": 1032}],
+            },
+        }
+
+    def test_system_from_360_keeps_slot_gaps(self):
         data = self._record("C:\\Users\\Public\\Desktop\\a.lnk", "甲图", 0)
         data += self._record("C:\\Users\\Public\\Desktop\\b.lnk", "乙图", 2)
         records = parse(data)
-        current = {"icons": [
-            {"key": "C:\\Users\\Public\\Desktop\\a.lnk", "name": "甲图", "x": 0, "y": 0},
-            {"key": "C:\\Users\\Public\\Desktop\\b.lnk", "name": "乙图", "x": 0, "y": 100},
-        ]}
+        current = self._current([
+            {"key": "C:\\Users\\Public\\Desktop\\a.lnk", "name": "甲图", "x": 14, "y": 2},
+            {"key": "C:\\Users\\Public\\Desktop\\b.lnk", "name": "乙图", "x": 90, "y": 2},
+        ])
+        with patch.object(sync, "_read_records", return_value=(Path("/tmp/DTFenceData.dtf"), data, records)):
+            result = sync.system_from_360(current)
+        by_name = {item["name"]: (item["x"], item["y"]) for item in result["items"]}
+        self.assertEqual(by_name, {"甲图": (14, 2), "乙图": (14, 202)})
+
+    def test_system_to_360_detects_position_change_with_same_order(self):
+        data = self._record("C:\\Users\\Public\\Desktop\\a.lnk", "甲图", 0)
+        data += self._record("C:\\Users\\Public\\Desktop\\b.lnk", "乙图", 1)
+        records = parse(data)
+        current = self._current([
+            {"key": "C:\\Users\\Public\\Desktop\\a.lnk", "name": "甲图", "x": 14, "y": 2},
+            {"key": "C:\\Users\\Public\\Desktop\\b.lnk", "name": "乙图", "x": 14, "y": 202},
+        ])
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "DTFenceData.dtf"
             path.write_bytes(data)
             with patch.object(sync, "_read_records", return_value=(path, data, records)), patch.object(sync.assistant, "probe", return_value={"running": False}):
                 result = sync.system_to_360(current)
-        self.assertEqual((result["matched_count"], result["changed_count"]), (2, 0))
+                verification = sync.verify_system_to_360(result)
+        self.assertEqual((result["matched_count"], result["changed_count"]), (2, 1))
+        self.assertEqual(verification["mismatches"], 0)
 
 
 if __name__ == "__main__":
