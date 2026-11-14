@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import { Camera, Check, Copy, ListTodo, LoaderCircle, Play, Plus, SlidersHorizontal, Trash2, X } from "lucide-vue-next";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -159,6 +159,11 @@ async function resizeIsland(open: boolean) {
   if (!("__TAURI_INTERNALS__" in window)) return;
   const sequence = ++resizeSequence;
   try {
+    // Wait until the todo list and its transitions have committed before
+    // resizing the transparent native window. Resizing on the old DOM can
+    // clip the rounded bottom edge while a todo is being completed.
+    await nextTick();
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     const [{ getCurrentWindow, currentMonitor }, { LogicalPosition, LogicalSize }] = await Promise.all([
       import("@tauri-apps/api/window"),
       import("@tauri-apps/api/dpi"),
