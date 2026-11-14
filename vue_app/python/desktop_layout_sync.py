@@ -33,6 +33,36 @@ def _utf16_run(data: bytes, start: int, limit: int) -> tuple[str, int] | None:
     return ("".join(chars), pos) if chars else None
 
 
+def _string_field(data: bytes, marker_pos: int, limit: int) -> tuple[str, int] | None:
+    """Decode a DTF ``s<length><UTF-16LE payload>`` field exactly.
+
+    DTFence records do not consistently include a UTF-16 NUL terminator in
+    the payload.  Reading until the next binary field therefore consumes the
+    first two bytes of that field as a Chinese character (for example the
+    ``sT`` marker becomes ``味``).  The declared byte length is the reliable
+    boundary and must be preferred.
+    """
+    if marker_pos < 0 or marker_pos + 5 > limit or data[marker_pos] != 0x73:
+        return None
+    length = struct.unpack_from("<I", data, marker_pos + 1)[0]
+    if length < 2 or length > 2000 or length % 2:
+        return None
+    start = marker_pos + 5
+    end = start + length
+    if end > limit or end > len(data):
+        return None
+    try:
+        text = data[start:end].decode("utf-16le", errors="strict").rstrip("\x00")
+    except UnicodeDecodeError:
+        return None
+    return (text, end) if text else None
+
+
+def _looks_like_path(value: str) -> bool:
+    value = value.strip()
+    return bool(re.match(r"^(?:[A-Za-z]:[\\/]|\\\\|::)", value))
+
+
 def _field_index(data: bytes, start: int) -> tuple[int, int] | None:
     end = min(len(data), start + 220)
     fields: list[tuple[int, int]] = []
@@ -65,50 +95,28 @@ def parse(data: bytes) -> list[dict[str, Any]]:
         fields.append((offset, struct.unpack_from("<i", data, offset + 5)[0]))
     for offset, index in fields:
         window_start = max(0, offset - 700)
-        path_starts = [
-            pos
-            for pos in range(window_start, offset - 5)
-            if data[pos : pos + 4] in (b"C\x00:\x00", b":\x00:\x00")
-        ]
         path = ""
         name = ""
-        if path_starts:
-            path_start = path_starts[-1]
-            path_run = _utf16_run(data, path_start, offset)
-            if path_run:
-                path, path_end = path_run
-                runs: list[str] = []
-                # The ``s<length>`` marker for the current display name sits
-                # immediately before the UTF-16 payload returned by
-                # ``_utf16_run``.  Start five bytes earlier so we do not skip
-                # the current name and accidentally attach the next record's
-                # name to this icon.
-                for marker_pos in range(max(window_start, path_end - 5), offset - 5):
-                    if data[marker_pos] != 0x73:
-                        continue
-                    length = struct.unpack_from("<I", data, marker_pos + 1)[0]
-                    if not 2 <= length <= 2000:
-                        continue
-                    for start in (marker_pos + 5, marker_pos + 6):
-                        run = _utf16_run(data, start, offset)
-                        if run and not run[0].startswith("C:\\"):
-                            runs.append(run[0])
-                            break
-                if runs:
-                    name = runs[-1]
-        if not name:
-            # Namespace items such as Recycle Bin have no C:\ path.
-            for marker_pos in range(window_start, offset - 5):
-                if data[marker_pos] != 0x73:
-                    continue
-                length = struct.unpack_from("<I", data, marker_pos + 1)[0]
-                if not 2 <= length <= 2000:
-                    continue
-                for start in (marker_pos + 5, marker_pos + 6):
-                    run = _utf16_run(data, start, offset)
-                    if run:
-                        name = run[0]
-                        break
+        string_fields: list[tuple[int, str, int]] = []
+        for marker_pos in range(window_start, offset - 5):
+            field = _string_field(data, marker_pos, offset)
+            if field:
+                value, end = field
+                string_fields.append((marker_pos, value, end))
+        path_fields = [field for field in string_fields if _looks_like_path(field[1])]
+        if path_fields:
+            _, path, path_end = path_fields[-1]
+            # The display name follows the path field.  Use the last exact
+            # string field before the index marker, excluding path fields.
+            names = [field[1] for field in string_fields if field[0] >= path_end and not _looks_like_path(field[1])]
+            if names:
+                name = names[-1]
+        else:
+            # Namespace-only records (Recycle Bin, wallpaper item, etc.) may
+            # not have a path-like field.  Their last string field is the name.
+            names = [field[1] for field in string_fields if not _looks_like_path(field[1])]
+            if names:
+                name = names[-1]
         records.append({"path": path, "name": name, "index": index, "offset": offset})
     return records
 
