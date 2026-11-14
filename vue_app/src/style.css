@@ -2819,6 +2819,13 @@ body:has(.widget-shell),
   background: transparent !important;
   scrollbar-gutter: auto;
 }
+body:has(.widget-shell),
+#app:has(.widget-shell),
+.widget-shell,
+.widget-shell .shell-body,
+.widget-shell .main-content {
+  background-color: transparent !important;
+}
 .widget-shell .sidebar,
 .widget-shell .topbar {
   display: none;

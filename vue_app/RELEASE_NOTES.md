@@ -1,3 +1,8 @@
+# V3.2.18
+
+- 修复 Windows 灵动岛 WebView2 白色背景、边框和阴影。
+- QuickShot Windows 进程改为脱离控制台启动。
+
 # V3.2.17
 
 - Windows 安装器升级前自动关闭 QuickShot，避免 quickshot.exe 被后台进程锁定。
