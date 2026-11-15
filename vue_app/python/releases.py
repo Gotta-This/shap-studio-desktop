@@ -1,18 +1,20 @@
 """V3 stable releases: platform selection and checksum-verified staged installers."""
 import hashlib
 import json
+import os
 import platform
 import re
 import ssl
 import sys
+import threading
 import time
 from pathlib import Path
 from urllib.request import Request, urlopen
 import certifi
 from release_assets import versioned_name
 
-# v3.2.34 Todo island calculator, positioning, and app name release.
-VERSION = "3.2.34"
+# v3.2.35 Todo island calculator, positioning, and app name release.
+VERSION = "3.2.35"
 REPO = "Gotta-This/shap-studio-desktop"
 PREFIX = f"https://github.com/{REPO}/releases/download/"
 
@@ -20,12 +22,23 @@ def progress_path(profile):
     return profile / "updates" / "download-progress.json"
 
 def write_progress(path, status, downloaded=0, total=0, speed=0, error=""):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    percent = round(downloaded / total * 100, 1) if total > 0 else 0
-    value = dict(status=status, downloaded=downloaded, total=total, percent=percent, speed=max(0, round(speed)), error=error)
-    temporary = path.with_suffix(".tmp")
-    temporary.write_text(json.dumps(value, ensure_ascii=False), encoding="utf-8")
-    temporary.replace(path)
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.{threading.get_ident()}.tmp")
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        percent = round(downloaded / total * 100, 1) if total > 0 else 0
+        value = dict(status=status, downloaded=downloaded, total=total, percent=percent, speed=max(0, round(speed)), error=error)
+        temporary.write_text(json.dumps(value, ensure_ascii=False), encoding="utf-8")
+        for attempt in range(4):
+            try:
+                os.replace(temporary, path)
+                return
+            except PermissionError:
+                if attempt == 3: return
+                time.sleep(0.05 * (attempt + 1))
+    except OSError:
+        return
+    finally:
+        temporary.unlink(missing_ok=True)
 
 def read_url(url):
     context = ssl.create_default_context(cafile=certifi.where())
