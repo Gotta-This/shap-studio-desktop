@@ -95,11 +95,13 @@ async function save() {
           >明确要做的事，完成后再手动勾选。</DialogDescription
         ></DialogHeader
       >
-      <form @submit.prevent="save" class="dialog-form">
+      <form @submit.prevent="save" class="dialog-form" autocomplete="off">
         <div class="form-field">
           <Label for="todo-text">下一步工作 *</Label
           ><Input
             id="todo-text"
+            name="todo-description"
+            autocomplete="new-password"
             v-model="form.text"
             required
             maxlength="300"

@@ -54,6 +54,8 @@ const shortcutResult = ref<any>(null);
 const shortcutBusy = ref(false);
 const shortcutError = ref("");
 const shortcutCopied = ref(false);
+const quickTodoText = ref("");
+const quickTodoBusy = ref(false);
 const priorityRank: Record<string, number> = { high: 0, normal: 1, low: 2 };
 const pending = computed(() => todos.value.filter((todo) => !todo.completed).sort(compareTodos));
 let timer: ReturnType<typeof setInterval> | undefined;
@@ -115,6 +117,21 @@ function toggleFeaturedTodo(id: string) {
   featuredTodoId.value = featuredTodoId.value === id ? "" : id;
   if (featuredTodoId.value) localStorage.setItem("todo-island-featured-todo", featuredTodoId.value);
   else localStorage.removeItem("todo-island-featured-todo");
+}
+async function addQuickTodo() {
+  const text = quickTodoText.value.trim();
+  if (!text || quickTodoBusy.value) return;
+  quickTodoBusy.value = true;
+  try {
+    await api("todo.save", { text, priority: "normal", due_date: null, task_id: null });
+    quickTodoText.value = "";
+    await refresh();
+    notify("待办已添加。");
+  } catch (error) {
+    notify(String((error as Error).message || error), true);
+  } finally {
+    quickTodoBusy.value = false;
+  }
 }
 
 function clamp(value: number, minimum: number, maximum: number) {
@@ -295,10 +312,16 @@ async function saveToolVisibility(value: boolean) {
   }
 }
 async function capture() {
+  let islandWindow: Awaited<ReturnType<typeof import("@tauri-apps/api/window").getCurrentWindow>> | undefined;
   try {
+    const { getCurrentWindow } = await import("@tauri-apps/api/window");
+    islandWindow = getCurrentWindow();
+    await islandWindow.hide();
     const { invoke } = await import("@tauri-apps/api/core");
     await invoke("quickshot_capture");
+    setTimeout(() => { void islandWindow?.show(); }, 2200);
   } catch (error) {
+    if (islandWindow) await islandWindow.show().catch(() => undefined);
     notify(`截图工具启动失败：${String((error as Error).message || error)}`, true);
   }
 }
@@ -379,7 +402,7 @@ async function resizeIsland(open: boolean) {
       ? Math.ceil(header.getBoundingClientRect().height + panel.scrollHeight + Math.max(0, expectedListHeight - measuredListHeight))
       : 190;
     const calculatorMinimum = shortcutTool.value === "calculator"
-      ? 430 + Math.min(pending.value.length, 8) * 46
+      ? 470 + Math.min(pending.value.length, 8) * 46
       : 0;
     const height = !open ? 44 : Math.min(760, Math.max(190, contentHeight + 2, calculatorMinimum));
     await current.setSize(new LogicalSize(width, height));
@@ -606,6 +629,10 @@ onUnmounted(() => {
           </div>
           <small class="todo-island-drag-hint">{{ dragging ? '左右拖动中' : longPressing ? '继续按住，准备移动…' : '点击图钉优先显示，长按灵动岛 5 秒可移动位置' }}</small>
         </div>
+        <form class="todo-island-quick-add" autocomplete="off" @submit.prevent="addQuickTodo">
+          <input v-model="quickTodoText" name="todo-quick-add" autocomplete="new-password" maxlength="300" placeholder="新增待办…" aria-label="新增待办" />
+          <button type="submit" :disabled="quickTodoBusy || !quickTodoText.trim()" aria-label="添加待办"><Plus :size="14" /></button>
+        </form>
         <section v-if="shortcutTool !== 'none'" class="todo-island-tool-form">
           <div class="todo-island-tool-heading"><strong>{{ shortcutTool === 'category' ? '自定义类别数列' : shortcutTool === 'numeric' ? '均数 / 标准差模拟' : '计算器' }}</strong><span>{{ shortcutTool === 'calculator' ? '支持键盘输入' : '参数会自动保留' }}</span></div>
           <template v-if="shortcutTool === 'category'">

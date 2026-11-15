@@ -2984,6 +2984,12 @@ body:has(.widget-shell),
 .todo-island-tool-select-content [data-slot="select-item"][data-highlighted] { background: #4d8065; color: #ffffff; }
 .todo-island-tool-select-content [data-slot="select-item"][data-state="checked"] { color: #9bd2ae; }
 .todo-island-drag-hint { color: #91aa99; font-size: 9px; }
+.todo-island-quick-add { display: flex; align-items: center; gap: 5px; padding: 0 10px 8px; }
+.todo-island-quick-add input { min-width: 0; flex: 1; height: 28px; padding: 3px 8px; border: 1px solid #ffffff2e; border-radius: 7px; outline: none; background: #ffffff0d; color: #edf7ef; font-size: 11px; }
+.todo-island-quick-add input::placeholder { color: #8ea997; }
+.todo-island-quick-add input:focus { border-color: #80b895; background: #ffffff14; }
+.todo-island-quick-add button { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 7px; background: #4e8062; color: white; }
+.todo-island-quick-add button:disabled { opacity: .45; }
 .todo-island-panel { transform-origin: top center; overflow: hidden; }
 .todo-island-panel-enter-active,
 .todo-island-panel-leave-active {
