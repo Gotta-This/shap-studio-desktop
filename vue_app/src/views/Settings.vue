@@ -273,7 +273,7 @@ async function connect() {
           <div class="setting-icon"><RefreshCw :size="20" /></div>
           <div>
             <h2>版本与更新</h2>
-            <p>科研数据工具集 · V3</p>
+            <p>科研数据工具集</p>
           </div>
           <Badge variant="secondary" class="ml-auto"
             >V{{ updates.current }}</Badge
