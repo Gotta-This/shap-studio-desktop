@@ -331,7 +331,8 @@ async function resizeIsland(open: boolean) {
   try {
     // Wait until the todo list and its transitions have committed before
     // resizing the transparent native window. Resizing on the old DOM can
-    // clip the rounded bottom edge while a todo is being completed.
+    // clip the rounded bottom edge while a todo is being completed. The
+    // measured panel height also keeps platform display scaling consistent.
     await nextTick();
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     const [{ getCurrentWindow, currentMonitor }, { LogicalPosition, LogicalSize }] = await Promise.all([
