@@ -67,6 +67,9 @@ let unlistenConfigUpdated: (() => void) | undefined;
 let unlistenHover: (() => void) | undefined;
 let shortcutCopiedTimer: ReturnType<typeof setTimeout> | undefined;
 let longPressTimer: ReturnType<typeof setTimeout> | undefined;
+let panelResizeObserver: ResizeObserver | undefined;
+let observedPanel: HTMLElement | undefined;
+let panelResizeTimer: ReturnType<typeof setTimeout> | undefined;
 let pressState: { pointerId: number; startX: number; target: HTMLElement } | undefined;
 let dragState: {
   pointerId: number;
@@ -146,6 +149,11 @@ function cancelLongPress() {
 function saveIslandPosition(x: number) {
   islandPositionX.value = x;
   localStorage.setItem("todo-island-position-x", String(x));
+}
+function schedulePanelResize() {
+  if (!expanded.value) return;
+  if (panelResizeTimer) clearTimeout(panelResizeTimer);
+  panelResizeTimer = setTimeout(() => { void resizeIsland(true); }, 40);
 }
 function formatCalculatorValue(value: number) {
   if (!Number.isFinite(value)) return "错误";
@@ -382,6 +390,7 @@ async function resizeIsland(open: boolean) {
     // measured panel height also keeps platform display scaling consistent.
     await nextTick();
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     const [{ getCurrentWindow, currentMonitor }, { LogicalPosition, LogicalSize }] = await Promise.all([
       import("@tauri-apps/api/window"),
       import("@tauri-apps/api/dpi"),
@@ -393,13 +402,25 @@ async function resizeIsland(open: boolean) {
     const island = document.querySelector<HTMLElement>(".todo-island");
     const header = island?.querySelector<HTMLElement>(".todo-island-header");
     const panel = island?.querySelector<HTMLElement>(".todo-island-panel");
+    if (panel && panel !== observedPanel) {
+      panelResizeObserver?.disconnect();
+      panelResizeObserver = new ResizeObserver(schedulePanelResize);
+      panelResizeObserver.observe(panel);
+      observedPanel = panel;
+    }
     const list = panel?.querySelector<HTMLElement>(".todo-island-list");
     const measuredListHeight = list?.scrollHeight ?? 0;
     const expectedListHeight = pending.value.length
       ? Math.min(300, pending.value.length * 46 + 10)
       : 100;
+    const panelChildrenHeight = panel
+      ? Array.from(panel.children).reduce((height, child) => {
+        const element = child as HTMLElement;
+        return Math.max(height, element.offsetTop + element.scrollHeight);
+      }, 0)
+      : 0;
     const contentHeight = header && panel
-      ? Math.ceil(header.getBoundingClientRect().height + panel.scrollHeight + Math.max(0, expectedListHeight - measuredListHeight))
+      ? Math.ceil(header.getBoundingClientRect().height + Math.max(panel.scrollHeight, panelChildrenHeight) + Math.max(0, expectedListHeight - measuredListHeight))
       : 190;
     const calculatorMinimum = shortcutTool.value === "calculator"
       ? 470 + Math.min(pending.value.length, 8) * 46
@@ -586,6 +607,10 @@ onUnmounted(() => {
   if (timer) clearInterval(timer);
   if (collapseTimer) clearTimeout(collapseTimer);
   if (collapseResizeTimer) clearTimeout(collapseResizeTimer);
+  if (panelResizeTimer) clearTimeout(panelResizeTimer);
+  panelResizeObserver?.disconnect();
+  panelResizeObserver = undefined;
+  observedPanel = undefined;
   cancelLongPress();
   dragState = undefined;
   dragging.value = false;
