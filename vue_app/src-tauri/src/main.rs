@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-use std::{fs::OpenOptions, io::{Read, Write}, path::PathBuf, process::{Command,Stdio}, sync::{Arc,atomic::{AtomicUsize,Ordering}}, time::{SystemTime,UNIX_EPOCH}};
+use std::{fs::OpenOptions, io::{Read, Write}, path::PathBuf, process::{Command,Stdio}, sync::{Arc,atomic::{AtomicUsize,Ordering}}, time::{Duration,SystemTime,UNIX_EPOCH}};
 use tauri::{Emitter,Manager};
+use tauri_plugin_global_shortcut::GlobalShortcutExt;
 mod ui_review;
 mod engine;
 #[derive(Clone,Default)]
@@ -172,6 +173,7 @@ fn quickshot_capture_inner(app:tauri::AppHandle) -> Result<(),String> {
         let app_executable=app_bundle.join("Contents").join("MacOS").join("QuickShot");
         if app_executable.is_file() {
             if !quickshot_running(&app_executable) {
+                write_app_log(format!("Starting QuickShot macOS daemon: {}",app_executable.display()));
                 launch_quickshot(&app_bundle)?;
                 std::thread::sleep(std::time::Duration::from_millis(700));
             }
@@ -246,7 +248,7 @@ fn quickshot_running(executable:&PathBuf) -> bool {
 }
 #[cfg(target_os="macos")]
 fn launch_quickshot(bundle:&PathBuf) -> Result<(),String> {
-    Command::new("open").args(["-g",bundle.to_string_lossy().as_ref()]).spawn().map(|_|()).map_err(|e|format!("无法启动 QuickShot：{e}"))
+    Command::new("/usr/bin/open").args(["-n","-g",bundle.to_string_lossy().as_ref()]).status().map_err(|e|format!("无法启动 QuickShot：{e}")).and_then(|status|if status.success(){Ok(())}else{Err(format!("QuickShot 启动失败：{status}"))})
 }
 fn quickshot_config_path() -> Result<PathBuf,String> {
     #[cfg(target_os="windows")]
@@ -306,12 +308,46 @@ fn valid_quickshot_shortcut(value:&str) -> bool {
     let parts:Vec<_>=value.split('+').map(str::trim).filter(|part|!part.is_empty()).collect();
     if parts.is_empty() { return false; }
     let key=parts[parts.len()-1];
-    let modifier=|part:&str| matches!(part.to_ascii_lowercase().as_str(),"cmd"|"command"|"ctrl"|"control"|"alt"|"opt"|"option"|"shift"|"meta"|"super");
+    let modifier=|part:&str| matches!(part.to_ascii_lowercase().as_str(),"cmd"|"command"|"ctrl"|"control"|"alt"|"opt"|"option"|"shift"|"meta"|"super"|"win");
     if parts[..parts.len()-1].iter().any(|part|!modifier(part)) { return false; }
     let upper=key.to_ascii_uppercase();
     (upper.len()==1 && upper.chars().next().is_some_and(|c|c.is_ascii_alphanumeric()))
       || (upper.strip_prefix('F').and_then(|n|n.parse::<u8>().ok()).is_some_and(|n|(1..=24).contains(&n)))
       || matches!(upper.as_str(),"SPACE"|"ENTER"|"TAB"|"BACKSPACE"|"ESCAPE")
+}
+fn canonical_quickshot_shortcut(value:&str) -> String {
+    let mut parts=value.split('+').map(str::trim).filter(|part|!part.is_empty()).map(|part|part.to_ascii_lowercase()).collect::<Vec<_>>();
+    let order=|part:&str| match part { "cmd"|"command"|"win"|"meta"|"super"=>0,"ctrl"|"control"=>1,"alt"|"opt"|"option"=>2,"shift"=>3,_=>4 };
+    parts.sort_by_key(|part|order(part));
+    parts.join("+")
+}
+fn ensure_quickshot_shortcut_available(app:&tauri::AppHandle, shortcut:&str) -> Result<(),String> {
+    write_app_log(format!("Checking QuickShot shortcut availability: {shortcut}"));
+    let global_shortcut=shortcut.split('+').map(|part|match part.trim().to_ascii_lowercase().as_str() {
+        "win"|"meta"|"super" => "Super".to_string(),
+        _ => part.trim().to_string(),
+    }).collect::<Vec<_>>().join("+");
+    if let Err(error)=app.global_shortcut().register(global_shortcut.as_str()) {
+        write_app_log(format!("QuickShot shortcut unavailable: {shortcut}: {error}"));
+        return Err(format!("快捷键已被占用或系统拒绝：{error}"));
+    }
+    match app.global_shortcut().unregister(global_shortcut.as_str()) {
+        Ok(()) => Ok(()),
+        Err(error) => {
+            write_app_log(format!("QuickShot shortcut unregister check failed: {shortcut}: {error}"));
+            let _=app.global_shortcut().unregister_all();
+            Err(format!("快捷键占用检查失败：{error}"))
+        }
+    }
+}
+#[tauri::command]
+async fn check_quickshot_shortcut(app:tauri::AppHandle, shortcut:String) -> Result<serde_json::Value,String> {
+    tauri::async_runtime::spawn_blocking(move || check_quickshot_shortcut_inner(app,shortcut)).await.map_err(|error|error.to_string())?
+}
+fn check_quickshot_shortcut_inner(app:tauri::AppHandle, shortcut:String) -> Result<serde_json::Value,String> {
+    if !valid_quickshot_shortcut(&shortcut) { return Err("快捷键格式无效，请使用包含修饰键的组合，例如 Ctrl+Alt+Shift+A。".into()); }
+    ensure_quickshot_shortcut_available(&app,&shortcut)?;
+    Ok(serde_json::json!({"available":true}))
 }
 #[tauri::command]
 fn quickshot_config(app:tauri::AppHandle) -> Result<serde_json::Value,String> {
@@ -320,10 +356,26 @@ fn quickshot_config(app:tauri::AppHandle) -> Result<serde_json::Value,String> {
     Ok(serde_json::json!({"region":quickshot_config_value(&text,"region",if cfg!(target_os="windows"){"Ctrl+Alt+Shift+A"}else{"Cmd+Shift+A"}),"fullscreen":quickshot_config_value(&text,"fullscreen",if cfg!(target_os="windows"){"Ctrl+Alt+Shift+S"}else{"Cmd+Shift+S"}),"hide_current_window":screenshot_hide_current_window(&app)}))
 }
 #[tauri::command]
-fn set_quickshot_config(app:tauri::AppHandle, region:String, fullscreen:String, hide_current_window:bool) -> Result<serde_json::Value,String> {
+async fn set_quickshot_config(app:tauri::AppHandle, region:String, fullscreen:String, hide_current_window:bool) -> Result<serde_json::Value,String> {
+    tauri::async_runtime::spawn_blocking(move || set_quickshot_config_inner(app,region,fullscreen,hide_current_window)).await.map_err(|error|error.to_string())?
+}
+fn set_quickshot_config_inner(app:tauri::AppHandle, region:String, fullscreen:String, hide_current_window:bool) -> Result<serde_json::Value,String> {
+    write_app_log(format!("Saving QuickShot shortcuts: region={region}, fullscreen={fullscreen}"));
     if !valid_quickshot_shortcut(&region) || !valid_quickshot_shortcut(&fullscreen) { return Err("快捷键格式无效，请使用 Cmd+Shift+A 或 Ctrl+Alt+Shift+A 这样的格式。".into()); }
+    let mut warnings=Vec::new();
+    if canonical_quickshot_shortcut(&region)==canonical_quickshot_shortcut(&fullscreen) { warnings.push("区域截图和全屏截图使用了相同快捷键，QuickShot 可能只保留其中一个。".to_string()); }
     let path=ensure_quickshot_config()?;
     let original=std::fs::read_to_string(&path).map_err(|e|e.to_string())?;
+    let previous_region=quickshot_config_value(&original,"region",if cfg!(target_os="windows"){"Ctrl+Alt+Shift+A"}else{"Cmd+Shift+A"});
+    let previous_fullscreen=quickshot_config_value(&original,"fullscreen",if cfg!(target_os="windows"){"Ctrl+Alt+Shift+S"}else{"Cmd+Shift+S"});
+    for shortcut in [&region,&fullscreen] {
+        let canonical=canonical_quickshot_shortcut(shortcut);
+        if canonical!=canonical_quickshot_shortcut(&previous_region) && canonical!=canonical_quickshot_shortcut(&previous_fullscreen) {
+            if let Err(error)=ensure_quickshot_shortcut_available(&app,shortcut) {
+                warnings.push(format!("快捷键 {shortcut} 可能已被其他应用占用，已保存但可能无法触发：{error}"));
+            }
+        }
+    }
     let mut found_region=false; let mut found_fullscreen=false; let mut lines=Vec::new();
     for line in original.lines() {
         let trimmed=line.trim_start();
@@ -337,7 +389,19 @@ fn set_quickshot_config(app:tauri::AppHandle, region:String, fullscreen:String, 
     std::fs::write(&temp,format!("{}\n",lines.join("\n"))).map_err(|e|e.to_string())?;
     std::fs::rename(&temp,&path).map_err(|e|e.to_string())?;
     save_screenshot_hide_preference(&app,hide_current_window)?;
-    Ok(serde_json::json!({"region":region,"fullscreen":fullscreen,"hide_current_window":hide_current_window}))
+    restart_quickshot_daemon(&app)?;
+    write_app_log("QuickShot shortcuts saved and daemon restarted");
+    Ok(serde_json::json!({"region":region,"fullscreen":fullscreen,"hide_current_window":hide_current_window,"warning":if warnings.is_empty(){serde_json::Value::Null}else{serde_json::Value::String(warnings.join(" "))}}))
+}
+#[tauri::command]
+async fn quickshot_suspend() -> Result<(),String> {
+    write_app_log("Suspending QuickShot for shortcut capture");
+    tauri::async_runtime::spawn_blocking(stop_quickshot_daemon).await.map_err(|error|error.to_string())?;
+    Ok(())
+}
+#[tauri::command]
+async fn quickshot_resume(app:tauri::AppHandle) -> Result<(),String> {
+    tauri::async_runtime::spawn_blocking(move || restart_quickshot_daemon(&app)).await.map_err(|error|error.to_string())?
 }
 #[tauri::command]
 fn quickshot_open_config() -> Result<(),String> {
@@ -490,7 +554,15 @@ fn start_quickshot_daemon(app:&tauri::AppHandle) -> Result<(),String> {
         let app_bundle=resource.join("resources").join("quickshot").join("QuickShot.app");
         let app_executable=app_bundle.join("Contents").join("MacOS").join("QuickShot");
         if app_executable.is_file() {
-            if !quickshot_running(&app_executable) { launch_quickshot(&app_bundle)?; }
+            if !quickshot_running(&app_executable) {
+                launch_quickshot(&app_bundle)?;
+                for _ in 0..60 {
+                    if quickshot_running(&app_executable) { break; }
+                    std::thread::sleep(Duration::from_millis(100));
+                }
+                if !quickshot_running(&app_executable) { write_app_log("QuickShot macOS daemon did not stay running"); return Err("QuickShot 启动后未注册截图服务。".into()); }
+                write_app_log("QuickShot macOS daemon started");
+            }
             return Ok(());
         }
     }
@@ -508,6 +580,42 @@ fn start_quickshot_daemon(app:&tauri::AppHandle) -> Result<(),String> {
     #[cfg(windows)] { use std::os::windows::process::CommandExt;command.creation_flags(0x08000200); }
     write_app_log(format!("Starting QuickShot daemon: {}",executable.display()));
     command.spawn().map(|_|{ write_app_log("QuickShot daemon started"); }).map_err(|e|{ write_app_log(format!("QuickShot daemon failed: {e}")); format!("无法启动 QuickShot：{e}") })
+}
+fn bundled_quickshot_executable() -> Option<PathBuf> {
+    let current=std::env::current_exe().ok()?;
+    #[cfg(target_os="windows")]
+    { return current.parent().map(|path|path.join("quickshot.exe")); }
+    #[cfg(target_os="macos")]
+    { return current.parent()?.parent().map(|path|path.join("Resources").join("resources").join("quickshot").join("QuickShot.app").join("Contents").join("MacOS").join("QuickShot")); }
+    #[cfg(not(any(target_os="windows",target_os="macos")))]
+    { None }
+}
+fn stop_quickshot_daemon() {
+    #[cfg(target_os="windows")]
+    {
+        if let Some(path)=bundled_quickshot_executable() {
+            let escaped=path.to_string_lossy().replace('\'',"''");
+            let script=format!("$target='{}'; Get-CimInstance Win32_Process -Filter \"Name='quickshot.exe'\" | Where-Object {{$_.ExecutablePath -eq $target}} | ForEach-Object {{Stop-Process -Id $_.ProcessId -Force}}",escaped);
+            let _=Command::new("powershell").args(["-NoProfile","-NonInteractive","-Command",&script]).stdout(Stdio::null()).stderr(Stdio::null()).status();
+        }
+    }
+    #[cfg(target_os="macos")]
+    {
+        if let Some(path)=bundled_quickshot_executable() {
+            if let Some(bundle)=path.parent().and_then(|parent|parent.parent()).and_then(|contents|contents.parent()) {
+                if let Ok(output)=Command::new("pgrep").args(["-f",bundle.to_string_lossy().as_ref()]).output() {
+                    for pid in String::from_utf8_lossy(&output.stdout).split_whitespace() {
+                        let _=Command::new("kill").args(["-TERM",pid]).status();
+                    }
+                }
+            }
+        }
+    }
+    std::thread::sleep(Duration::from_millis(250));
+}
+fn restart_quickshot_daemon(app:&tauri::AppHandle) -> Result<(),String> {
+    stop_quickshot_daemon();
+    start_quickshot_daemon(app)
 }
 fn main() {
     write_app_log(format!("Application starting; args={:?}",std::env::args_os().collect::<Vec<_>>()));
@@ -542,14 +650,24 @@ fn main() {
     let mut context=tauri::generate_context!();
     if ui_review::enabled() { for window in &mut context.config_mut().app.windows { window.visible=false;window.focus=false;window.incognito=true; } }
     tauri::Builder::default().manage(Running::default()).manage(Arc::new(engine::Engine::default())).plugin(tauri_plugin_dialog::init()).plugin(tauri_plugin_opener::init())
+      .plugin(tauri::plugin::Builder::<_, ()>::new("quickshot-cleanup").on_event(|_,event| {
+          if matches!(event, tauri::RunEvent::ExitRequested{..} | tauri::RunEvent::Exit) {
+              write_app_log("Application exit requested; stopping QuickShot daemon");
+              stop_quickshot_daemon();
+          }
+      }).build())
       .setup(|app| { let warm_engine=app.state::<Arc<engine::Engine>>().inner().clone(); let warm_profile=std::env::var_os("RESEARCH_V3_PROFILE").map(PathBuf::from); let warm_legacy=if ui_review::enabled(){None}else{app.path().app_data_dir().ok()}; std::thread::spawn(move ||{let _=warm_engine.request(warm_profile,warm_legacy,serde_json::json!({"method":"runtime.info"}));}); if !ui_review::enabled() { if let Err(error)=start_quickshot_daemon(app.handle()) { write_app_log(format!("QuickShot daemon setup failed: {error}")); } if todo_island_enabled_inner(app.handle()) { if let Err(error)=open_todo_island(app.handle()) { write_app_log(format!("Todo island startup failed: {error}")); } } #[cfg(target_os="macos")] start_todo_island_mouse_monitor(app.handle().clone()); } if ui_review::enabled() { #[cfg(target_os="macos")] app.set_activation_policy(tauri::ActivationPolicy::Accessory); ui_review::arm_timeout(app.handle().clone()); } if std::env::var("RESEARCH_V3_DEBUG").as_deref()==Ok("1") { if let Some(window)=app.get_webview_window("main") { eprintln!("V3 URL: {:?}",window.url()); #[cfg(debug_assertions)] window.open_devtools(); } } Ok(()) })
       .plugin(tauri_plugin_global_shortcut::Builder::new().build())
       .on_page_load(|webview,payload| { if payload.event()==tauri::webview::PageLoadEvent::Finished && webview.label()=="main" { ui_review::install(webview); } })
-      .invoke_handler(tauri::generate_handler![python_request,quickshot_capture,quickshot_config,set_quickshot_config,quickshot_open_config,todo_island_enabled,todo_island_config_command,set_todo_island_config,set_todo_island_enabled,ui_review::review_fixture,ui_review::review_resize,ui_review::review_snapshot,ui_review::review_finish,ui_review::review_close])
+      .invoke_handler(tauri::generate_handler![python_request,quickshot_capture,quickshot_config,check_quickshot_shortcut,set_quickshot_config,quickshot_suspend,quickshot_resume,quickshot_open_config,todo_island_enabled,todo_island_config_command,set_todo_island_config,set_todo_island_enabled,ui_review::review_fixture,ui_review::review_resize,ui_review::review_snapshot,ui_review::review_finish,ui_review::review_close])
       .on_window_event(|window,event| {
           if let tauri::WindowEvent::CloseRequested{..}=event {
               ui_review::record_close(window);
-              if window.label() == "main" { window.app_handle().exit(0); }
+              if window.label() == "main" {
+                  write_app_log("Main window closing; stopping QuickShot daemon");
+                  stop_quickshot_daemon();
+                  window.app_handle().exit(0);
+              }
           }
       })
       .run(context).expect("启动科研数据工具集失败");

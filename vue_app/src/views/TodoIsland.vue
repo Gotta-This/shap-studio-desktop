@@ -30,6 +30,8 @@ const shortcutTool = ref(localStorage.getItem("todo-island-tool") || "none");
 const featuredTodoId = ref(localStorage.getItem("todo-island-featured-todo") || "");
 const storedIslandX = Number(localStorage.getItem("todo-island-position-x"));
 const islandPositionX = ref(Number.isFinite(storedIslandX) ? storedIslandX : null);
+const storedIslandCenterX = Number(localStorage.getItem("todo-island-position-center-x"));
+const islandCenterX = ref(Number.isFinite(storedIslandCenterX) ? storedIslandCenterX : null);
 const categoryRows = ref<{ value: number; count: number }[]>(loadStored("todo-island-category-rows", [{ value: 1, count: 28 }, { value: 0, count: 93 }]));
 const categorySeed = ref(Number(localStorage.getItem("todo-island-category-seed") || "12"));
 const numeric = reactive(loadStored("todo-island-numeric", { n: 70, mean: 27.92, sd: 14.87, digits: 0, lower: null as number | null, upper: null as number | null, mode: "target", seed: 12 }));
@@ -80,7 +82,14 @@ let dragState: {
   topY: number;
   moveWindow: (x: number, y: number) => Promise<void>;
 } | undefined;
+let dragMoveSequence = 0;
 let lightweightTodosUnavailable = false;
+
+type IslandMonitor = {
+  position: { x: number; y: number };
+  size: { width: number; height: number };
+  scaleFactor: number;
+};
 
 function loadStored<T>(key: string, fallback: T): T {
   try { const value = localStorage.getItem(key); return value ? JSON.parse(value) as T : fallback; } catch { return fallback; }
@@ -140,6 +149,34 @@ async function addQuickTodo() {
 function clamp(value: number, minimum: number, maximum: number) {
   return Math.min(maximum, Math.max(minimum, value));
 }
+function logicalMonitorBounds(monitor: IslandMonitor) {
+  const scale = monitor.scaleFactor || 1;
+  return {
+    x: monitor.position.x / scale,
+    y: monitor.position.y / scale,
+    width: monitor.size.width / scale,
+    height: monitor.size.height / scale,
+  };
+}
+function monitorForIsland(monitors: IslandMonitor[], centerX: number, centerY = 0) {
+  const bounds = monitors.map((monitor) => ({ monitor, bounds: logicalMonitorBounds(monitor) }));
+  const containing = bounds.find(({ bounds: value }) => centerX >= value.x && centerX <= value.x + value.width && centerY >= value.y && centerY <= value.y + value.height);
+  if (containing) return containing;
+  return bounds.sort(({ bounds: left }, { bounds: right }) => {
+    const leftDistance = Math.max(left.x - centerX, 0, centerX - (left.x + left.width)) ** 2 + Math.max(left.y - centerY, 0, centerY - (left.y + left.height)) ** 2;
+    const rightDistance = Math.max(right.x - centerX, 0, centerX - (right.x + right.width)) ** 2 + Math.max(right.y - centerY, 0, centerY - (right.y + right.height)) ** 2;
+    return leftDistance - rightDistance;
+  })[0];
+}
+function monitorLimits(monitors: IslandMonitor[], centerX: number, width: number, centerY = 0) {
+  const selected = monitorForIsland(monitors, centerX, centerY);
+  if (!selected) return undefined;
+  const margin = 8;
+  const { bounds } = selected;
+  const minX = bounds.x + margin;
+  const maxX = Math.max(minX, bounds.x + bounds.width - width - margin);
+  return { minX, maxX, topY: bounds.y + 8 };
+}
 function cancelLongPress() {
   if (longPressTimer) clearTimeout(longPressTimer);
   longPressTimer = undefined;
@@ -149,6 +186,8 @@ function cancelLongPress() {
 function saveIslandPosition(x: number) {
   islandPositionX.value = x;
   localStorage.setItem("todo-island-position-x", String(x));
+  islandCenterX.value = x + expandedWidth.value / 2;
+  localStorage.setItem("todo-island-position-center-x", String(islandCenterX.value));
 }
 function schedulePanelResize() {
   if (!expanded.value) return;
@@ -391,12 +430,12 @@ async function resizeIsland(open: boolean) {
     await nextTick();
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-    const [{ getCurrentWindow, currentMonitor }, { LogicalPosition, LogicalSize }] = await Promise.all([
+    const [{ getCurrentWindow, availableMonitors, currentMonitor }, { LogicalPosition, LogicalSize }] = await Promise.all([
       import("@tauri-apps/api/window"),
       import("@tauri-apps/api/dpi"),
     ]);
     const current = getCurrentWindow();
-    const monitor = await currentMonitor();
+    const [monitors, monitor, outer] = await Promise.all([availableMonitors(), currentMonitor(), current.outerPosition()]);
     if (sequence !== resizeSequence) return;
     const width = open ? expandedWidth.value : compactWidth.value;
     const island = document.querySelector<HTMLElement>(".todo-island");
@@ -409,35 +448,37 @@ async function resizeIsland(open: boolean) {
       observedPanel = panel;
     }
     const list = panel?.querySelector<HTMLElement>(".todo-island-list");
-    const measuredListHeight = list?.scrollHeight ?? 0;
     const expectedListHeight = pending.value.length
       ? Math.min(300, pending.value.length * 46 + 10)
       : 100;
     const panelChildrenHeight = panel
       ? Array.from(panel.children).reduce((height, child) => {
         const element = child as HTMLElement;
-        return Math.max(height, element.offsetTop + element.scrollHeight);
+        const visibleHeight = element === list
+          ? Math.max(element.getBoundingClientRect().height, expectedListHeight)
+          : element.getBoundingClientRect().height;
+        return height + visibleHeight;
       }, 0)
       : 0;
     const contentHeight = header && panel
-      ? Math.ceil(header.getBoundingClientRect().height + Math.max(panel.scrollHeight, panelChildrenHeight) + Math.max(0, expectedListHeight - measuredListHeight))
+      ? Math.ceil(header.getBoundingClientRect().height + panelChildrenHeight)
       : 190;
     const calculatorMinimum = shortcutTool.value === "calculator"
       ? 470 + Math.min(pending.value.length, 8) * 46
       : 0;
     const height = !open ? 44 : Math.min(760, Math.max(190, contentHeight + 2, calculatorMinimum));
     await current.setSize(new LogicalSize(width, height));
-    if (monitor) {
-      const scale = monitor.scaleFactor;
-      const monitorX = monitor.position.x / scale;
-      const monitorWidth = monitor.size.width / scale;
-      const margin = 8;
-      const minX = monitorX + margin;
-      const maxX = Math.max(minX, monitorX + monitorWidth - expandedWidth.value - margin);
-      const centeredX = monitorX + (monitorWidth - width) / 2;
-      const x = clamp(islandPositionX.value ?? centeredX, minX, maxX);
-      const y = monitor.position.y / scale + 8;
-      if (islandPositionX.value !== null) islandPositionX.value = x;
+    if (monitor && monitors.length) {
+      const currentScale = monitor.scaleFactor || 1;
+      const previousWidth = open ? compactWidth.value : expandedWidth.value;
+      const currentX = outer.x / currentScale;
+      const centerX = islandCenterX.value ?? currentX + previousWidth / 2;
+      const selected = monitorLimits(monitors as IslandMonitor[], centerX, width, outer.y / currentScale);
+      if (!selected) return;
+      const x = clamp(centerX - width / 2, selected.minX, selected.maxX);
+      const y = selected.topY;
+      islandPositionX.value = x;
+      islandCenterX.value = centerX;
       await current.setPosition(new LogicalPosition(x, y));
     }
   } catch {
@@ -482,30 +523,27 @@ async function beginIslandDrag() {
   const press = pressState;
   if (!press || dragState || !("__TAURI_INTERNALS__" in window)) return;
   try {
-    const [{ getCurrentWindow, currentMonitor }, { LogicalPosition }] = await Promise.all([
+    const [{ getCurrentWindow, availableMonitors, currentMonitor }, { LogicalPosition }] = await Promise.all([
       import("@tauri-apps/api/window"),
       import("@tauri-apps/api/dpi"),
     ]);
     const current = getCurrentWindow();
-    const monitor = await currentMonitor();
-    const outer = await current.outerPosition();
-    if (!monitor || pressState !== press) return;
-    const scale = monitor.scaleFactor;
-    const monitorX = monitor.position.x / scale;
-    const monitorWidth = monitor.size.width / scale;
-    const margin = 8;
-    const minX = monitorX + margin;
-    const maxX = Math.max(minX, monitorX + monitorWidth - expandedWidth.value - margin);
-    const originX = clamp(outer.x / scale, minX, maxX);
-    const topY = monitor.position.y / scale + 8;
+    const [monitors, monitor, outer] = await Promise.all([availableMonitors(), currentMonitor(), current.outerPosition()]);
+    if (!monitor || !monitors.length || pressState !== press) return;
+    const scale = monitor.scaleFactor || 1;
+    const originX = outer.x / scale;
+    const limits = monitorLimits(monitors as IslandMonitor[], originX + expandedWidth.value / 2, expandedWidth.value, outer.y / scale);
+    if (!limits) return;
+    const clampedOriginX = clamp(originX, limits.minX, limits.maxX);
     const moveWindow = (x: number, y: number) => current.setPosition(new LogicalPosition(x, y));
-    dragState = { pointerId: press.pointerId, startX: press.startX, originX, minX, maxX, topY, moveWindow };
+    dragState = { pointerId: press.pointerId, startX: press.startX, originX: clampedOriginX, minX: limits.minX, maxX: limits.maxX, topY: limits.topY, moveWindow };
     dragging.value = true;
     longPressing.value = false;
     press.target.setPointerCapture?.(press.pointerId);
     cancelLongPress();
-    islandPositionX.value = originX;
-    await moveWindow(originX, topY);
+    islandPositionX.value = clampedOriginX;
+    islandCenterX.value = clampedOriginX + expandedWidth.value / 2;
+    await moveWindow(clampedOriginX, limits.topY);
   } catch (error) {
     cancelLongPress();
     dragState = undefined;
@@ -536,12 +574,32 @@ function handleIslandPointerEnter() {
 function handleIslandPointerMove(event: PointerEvent) {
   islandHovered.value = true;
   if (dragState && event.pointerId === dragState.pointerId) {
-    const nextX = clamp(dragState.originX + event.screenX - dragState.startX, dragState.minX, dragState.maxX);
-    islandPositionX.value = nextX;
-    void dragState.moveWindow(nextX, dragState.topY);
+    void moveIslandDuringDrag(event);
     return;
   }
   expand();
+}
+async function moveIslandDuringDrag(event: PointerEvent) {
+  const state = dragState;
+  if (!state || event.pointerId !== state.pointerId) return;
+  const sequence = ++dragMoveSequence;
+  try {
+    const { availableMonitors } = await import("@tauri-apps/api/window");
+    const monitors = await availableMonitors();
+    if (dragState !== state || sequence !== dragMoveSequence) return;
+    const candidateX = state.originX + event.screenX - state.startX;
+    const limits = monitorLimits(monitors as IslandMonitor[], candidateX + expandedWidth.value / 2, expandedWidth.value);
+    if (!limits) return;
+    const nextX = clamp(candidateX, limits.minX, limits.maxX);
+    state.minX = limits.minX;
+    state.maxX = limits.maxX;
+    state.topY = limits.topY;
+    islandPositionX.value = nextX;
+    islandCenterX.value = nextX + expandedWidth.value / 2;
+    await state.moveWindow(nextX, limits.topY);
+  } catch {
+    // Keep the island at its last valid position if display information changes mid-drag.
+  }
 }
 function handleIslandPointerLeave() {
   islandHovered.value = false;

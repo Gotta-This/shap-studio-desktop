@@ -2594,11 +2594,26 @@ code {
   color: var(--muted-foreground);
   font-size: 11px;
 }
-.screenshot-shortcut-setting input {
+.shortcut-capture-field {
   width: 230px;
   height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--input);
+  border-radius: 6px;
+  background: var(--background);
+  color: var(--foreground);
+  text-align: left;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 11px;
+  cursor: pointer;
+}
+.shortcut-capture-field:focus-visible,
+.shortcut-capture-field.active {
+  border-color: var(--ring);
+  outline: 2px solid color-mix(in srgb, var(--ring) 35%, transparent);
+}
+.shortcut-capture-field.active {
+  color: var(--primary);
 }
 .quickshot-settings-panel {
   grid-column: 1 / -1;
@@ -3003,8 +3018,8 @@ body:has(.widget-shell),
 }
 .todo-island-list { display: flex; flex-direction: column; gap: 5px; padding: 0 10px 10px; overflow: visible; }
 .todo-island-with-tool .todo-island-list { max-height: none; }
-.todo-island-list-scroll { max-height: 300px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #71947d transparent; }
-.todo-island-with-tool .todo-island-list-scroll { max-height: 300px; overflow-y: auto; }
+.todo-island-list-scroll { height: 300px; max-height: 300px; box-sizing: border-box; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #71947d transparent; }
+.todo-island-with-tool .todo-island-list-scroll { height: 300px; max-height: 300px; overflow-y: auto; }
 .todo-island-with-tool .todo-island-panel,
 .todo-island-tool-category .todo-island-panel,
 .todo-island-tool-numeric .todo-island-panel,
