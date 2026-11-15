@@ -58,7 +58,7 @@ def personal_db():
 
 def todos(store):
     with personal_db() as db:
-        rows = [dict(r, completed=bool(r['completed']), deleted=bool(r['deleted']), task_id=None, task_name='个人待办', client='', file_ids=[]) for r in db.execute('SELECT * FROM todos')]
+        rows = [dict(r, completed=bool(r['completed']), deleted=bool(r['deleted']), task_id=None, task_name='个人待办', client='', file_ids=[]) for r in db.execute('SELECT todos.*, rowid created_order FROM todos')]
     return [r for r in rows + (store.todos() if store else []) if not r['deleted']]
 
 def state():

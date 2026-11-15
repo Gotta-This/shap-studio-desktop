@@ -3092,6 +3092,9 @@ body:has(.widget-shell),
 .todo-island-row strong, .todo-island-row small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .todo-island-row strong { color: #f4f8f5; font-size: 12px; }
 .todo-island-row small { flex: 0 0 auto; max-width: 48%; color: #a8bdaf; font-size: 10px; text-align: right; }
+.todo-island-pin { display: grid; place-items: center; width: 23px; height: 23px; flex: 0 0 23px; border-radius: 6px; color: #8ea997; }
+.todo-island-pin:hover { background: #ffffff1c; color: #d9f1df; }
+.todo-island-pin svg { transform: rotate(-28deg); }
 .todo-island-empty { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 50px 10px; color: #b7c9bc; font-size: 12px; }
 @media (prefers-reduced-motion: reduce) {
   .todo-island, .todo-island-header, .todo-island-panel,

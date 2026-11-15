@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from "vue";
-import { Camera, Check, Copy, Delete, ListTodo, LoaderCircle, Play, Plus, SlidersHorizontal, Trash2, X } from "lucide-vue-next";
+import { Camera, Check, Copy, Delete, ListTodo, LoaderCircle, Pin, PinOff, Play, Plus, SlidersHorizontal, Trash2, X } from "lucide-vue-next";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import {
@@ -27,6 +27,7 @@ const expandedWidth = ref(380);
 const animationMs = ref(360);
 const showScreenshot = ref(true);
 const shortcutTool = ref(localStorage.getItem("todo-island-tool") || "none");
+const featuredTodoId = ref(localStorage.getItem("todo-island-featured-todo") || "");
 const storedIslandX = Number(localStorage.getItem("todo-island-position-x"));
 const islandPositionX = ref(Number.isFinite(storedIslandX) ? storedIslandX : null);
 const categoryRows = ref<{ value: number; count: number }[]>(loadStored("todo-island-category-rows", [{ value: 1, count: 28 }, { value: 0, count: 93 }]));
@@ -53,7 +54,8 @@ const shortcutResult = ref<any>(null);
 const shortcutBusy = ref(false);
 const shortcutError = ref("");
 const shortcutCopied = ref(false);
-const pending = computed(() => todos.value.filter((todo) => !todo.completed));
+const priorityRank: Record<string, number> = { high: 0, normal: 1, low: 2 };
+const pending = computed(() => todos.value.filter((todo) => !todo.completed).sort(compareTodos));
 let timer: ReturnType<typeof setInterval> | undefined;
 let collapseTimer: ReturnType<typeof setTimeout> | undefined;
 let collapseResizeTimer: ReturnType<typeof setTimeout> | undefined;
@@ -94,6 +96,26 @@ watch(showSettings, (open) => {
 });
 const categoryTotal = computed(() => categoryRows.value.reduce((sum, row) => sum + Number(row.count || 0), 0));
 const shortcutJob = computed(() => jobFor("todo-island"));
+
+function compareTodos(left: Todo, right: Todo) {
+  const leftFeatured = left.id === featuredTodoId.value ? 0 : 1;
+  const rightFeatured = right.id === featuredTodoId.value ? 0 : 1;
+  if (leftFeatured !== rightFeatured) return leftFeatured - rightFeatured;
+  const priorityDifference = (priorityRank[left.priority] ?? 1) - (priorityRank[right.priority] ?? 1);
+  if (priorityDifference) return priorityDifference;
+  const leftDue = left.due_date || "9999-12-31";
+  const rightDue = right.due_date || "9999-12-31";
+  const dueDifference = leftDue.localeCompare(rightDue);
+  if (dueDifference) return dueDifference;
+  const createdDifference = (right.created_at || "").localeCompare(left.created_at || "");
+  if (createdDifference) return createdDifference;
+  return (right.created_order || 0) - (left.created_order || 0) || right.id.localeCompare(left.id);
+}
+function toggleFeaturedTodo(id: string) {
+  featuredTodoId.value = featuredTodoId.value === id ? "" : id;
+  if (featuredTodoId.value) localStorage.setItem("todo-island-featured-todo", featuredTodoId.value);
+  else localStorage.removeItem("todo-island-featured-todo");
+}
 
 function clamp(value: number, minimum: number, maximum: number) {
   return Math.min(maximum, Math.max(minimum, value));
@@ -346,8 +368,13 @@ async function resizeIsland(open: boolean) {
     const island = document.querySelector<HTMLElement>(".todo-island");
     const header = island?.querySelector<HTMLElement>(".todo-island-header");
     const panel = island?.querySelector<HTMLElement>(".todo-island-panel");
+    const list = panel?.querySelector<HTMLElement>(".todo-island-list");
+    const measuredListHeight = list?.scrollHeight ?? 0;
+    const expectedListHeight = pending.value.length
+      ? Math.min(300, pending.value.length * 46 + 10)
+      : 100;
     const contentHeight = header && panel
-      ? Math.ceil(header.getBoundingClientRect().height + panel.scrollHeight)
+      ? Math.ceil(header.getBoundingClientRect().height + panel.scrollHeight + Math.max(0, expectedListHeight - measuredListHeight))
       : 190;
     const height = !open ? 44 : Math.min(760, Math.max(190, contentHeight + 2));
     await current.setSize(new LogicalSize(width, height));
@@ -572,7 +599,7 @@ onUnmounted(() => {
               </SelectContent>
             </Select>
           </div>
-          <small class="todo-island-drag-hint">{{ dragging ? '左右拖动中' : longPressing ? '继续按住，准备移动…' : '长按灵动岛 5 秒可移动位置' }}</small>
+          <small class="todo-island-drag-hint">{{ dragging ? '左右拖动中' : longPressing ? '继续按住，准备移动…' : '点击图钉优先显示，长按灵动岛 5 秒可移动位置' }}</small>
         </div>
         <section v-if="shortcutTool !== 'none'" class="todo-island-tool-form">
           <div class="todo-island-tool-heading"><strong>{{ shortcutTool === 'category' ? '自定义类别数列' : shortcutTool === 'numeric' ? '均数 / 标准差模拟' : '计算器' }}</strong><span>{{ shortcutTool === 'calculator' ? '支持键盘输入' : '参数会自动保留' }}</span></div>
@@ -613,6 +640,7 @@ onUnmounted(() => {
           <div v-for="todo in pending" :key="todo.id" class="todo-island-row">
             <Checkbox :model-value="todo.completed" :aria-label="'完成 ' + todo.text" @update:model-value="(value) => complete(todo, !!value)" />
             <span><strong>{{ todo.text }}</strong><small>{{ todo.task_name || "个人待办" }}{{ todo.due_date ? ` · ${todo.due_date}` : "" }}</small></span>
+            <button type="button" class="todo-island-pin" :aria-label="featuredTodoId === todo.id ? '取消优先显示 ' + todo.text : '优先显示 ' + todo.text" @click.stop="toggleFeaturedTodo(todo.id)"><PinOff v-if="featuredTodoId === todo.id" :size="14" /><Pin v-else :size="14" /></button>
           </div>
           <div v-if="!pending.length" class="todo-island-empty"><Check :size="18" />没有未完成待办</div>
         </section>

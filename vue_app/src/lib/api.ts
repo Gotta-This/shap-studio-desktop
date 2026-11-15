@@ -20,6 +20,8 @@ export interface Todo {
   text: string;
   priority: string;
   due_date: string | null;
+  created_at?: string;
+  created_order?: number;
   completed: boolean;
   task_id: string | null;
   task_name: string;

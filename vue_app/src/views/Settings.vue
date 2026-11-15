@@ -60,9 +60,10 @@ async function refreshIslandConfig() {
 async function saveIslandConfig() {
   if (!desktop || islandConfigBusy.value) return;
   const compact = Math.round(Number(compactWidth.value));
-  const expanded = Math.round(Number(expandedWidth.value));
+  const requestedExpanded = Math.round(Number(expandedWidth.value));
+  const expanded = Math.max(requestedExpanded, compact);
   const animation = Math.round(Number(animationMs.value));
-  if (!Number.isFinite(compact) || !Number.isFinite(expanded) || !Number.isFinite(animation) || compact < 180 || compact > 800 || expanded < 280 || expanded > 1000 || expanded < compact || animation < 120 || animation > 1000) {
+  if (!Number.isFinite(compact) || !Number.isFinite(requestedExpanded) || !Number.isFinite(animation) || compact < 180 || compact > 800 || expanded < 280 || expanded > 1000 || animation < 120 || animation > 1000) {
     notify("参数范围无效：收起 180–800 px，展开 280–1000 px，动画 120–1000 ms。", true);
     return;
   }
