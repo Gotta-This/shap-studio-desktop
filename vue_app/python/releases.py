@@ -5,15 +5,27 @@ import platform
 import re
 import ssl
 import sys
+import time
 from pathlib import Path
 from urllib.request import Request, urlopen
 import certifi
 from release_assets import versioned_name
 
-# v3.2.30 Todo island calculator, positioning, and app name release.
-VERSION = "3.2.30"
+# v3.2.31 Todo island calculator, positioning, and app name release.
+VERSION = "3.2.31"
 REPO = "Gotta-This/shap-studio-desktop"
 PREFIX = f"https://github.com/{REPO}/releases/download/"
+
+def progress_path(profile):
+    return profile / "updates" / "download-progress.json"
+
+def write_progress(path, status, downloaded=0, total=0, speed=0, error=""):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    percent = round(downloaded / total * 100, 1) if total > 0 else 0
+    value = dict(status=status, downloaded=downloaded, total=total, percent=percent, speed=max(0, round(speed)), error=error)
+    temporary = path.with_suffix(".tmp")
+    temporary.write_text(json.dumps(value, ensure_ascii=False), encoding="utf-8")
+    temporary.replace(path)
 
 def read_url(url):
     context = ssl.create_default_context(cafile=certifi.where())
@@ -62,6 +74,8 @@ def download(profile):
     name = asset['name']
     directory = profile / "updates" / release["version"]
     directory.mkdir(parents=True, exist_ok=True)
+    progress = progress_path(profile)
+    write_progress(progress, "starting")
     def open_asset(item):
         url = item["browser_download_url"]
         if not url.startswith(PREFIX + "v" + release["version"] + "/"): raise ValueError("更新地址无效")
@@ -79,6 +93,8 @@ def download(profile):
     count = 0
     expected = int(asset["size"])
     if expected <= 0: raise ValueError("更新包大小无效")
+    write_progress(progress, "downloading", total=expected)
+    started = time.monotonic()
     try:
         with open_asset(asset) as response, partial.open("wb") as out:
             while chunk := response.read(256 * 1024):
@@ -86,8 +102,15 @@ def download(profile):
                 if count > expected: raise ValueError("更新包大小不符")
                 out.write(chunk)
                 hasher.update(chunk)
+                elapsed = max(time.monotonic() - started, 0.001)
+                write_progress(progress, "downloading", count, expected, count / elapsed)
         if count != expected or hasher.hexdigest() != digest[7:].lower(): raise ValueError("更新包校验失败，请重试")
+        write_progress(progress, "verifying", count, expected)
         partial.replace(target)
+        write_progress(progress, "complete", count, expected)
         return dict(path=str(target), version=release["version"])
+    except Exception as error:
+        write_progress(progress, "error", count, expected, error=str(error))
+        raise
     finally:
         partial.unlink(missing_ok=True)

@@ -138,6 +138,12 @@ def dispatch(method, p):
     if method=='updates.download':
         from releases import download
         return download(profile())
+    if method=='updates.progress':
+        from releases import progress_path
+        path = progress_path(profile())
+        if not path.is_file(): return dict(status='idle', downloaded=0, total=0, percent=0, speed=0, error='')
+        try: return json.loads(path.read_text(encoding='utf-8'))
+        except (OSError, ValueError): return dict(status='idle', downloaded=0, total=0, percent=0, speed=0, error='')
     if method=='migration.inspect':
         from migration import inspect
         return inspect(p.get('directory'))

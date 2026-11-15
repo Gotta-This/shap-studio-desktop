@@ -1412,6 +1412,39 @@ code {
   align-items: center;
   font-size: 11px;
 }
+.update-download-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: #f8fbf8;
+  font-size: 11px;
+}
+.update-download-progress-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--muted-foreground);
+  font-variant-numeric: tabular-nums;
+}
+.update-download-progress-heading strong { color: var(--foreground); font-size: 12px; }
+.update-download-progress-track {
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #dce8de;
+}
+.update-download-progress-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #5b9c73;
+  transition: width 180ms ease;
+}
+.update-download-progress small { color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
 .app-shell.sidebar-collapsed {
   --nav-width: 70px;
 }

@@ -5,6 +5,8 @@ import {
   checkUpdate,
   downloadUpdate,
   installUpdate,
+  formatUpdateBytes,
+  formatUpdateSpeed,
 } from "@/lib/updates";
 import {
   Monitor,
@@ -298,8 +300,19 @@ async function connect() {
             {{ updates.error }}，请稍后重试。
           </p>
           <p v-if="updates.status === 'downloading'" role="status">
-            正在下载并校验更新包，请保持应用打开…
+            {{
+              updates.progress.status === "verifying"
+                ? "正在校验更新包…"
+                : updates.progress.total
+                  ? `正在下载 ${updates.progress.percent.toFixed(1)}%`
+                  : "正在连接下载服务器…"
+            }}
           </p>
+          <div v-if="updates.status === 'downloading'" class="update-download-progress" role="status" aria-live="polite">
+            <div class="update-download-progress-heading"><span>{{ formatUpdateBytes(updates.progress.downloaded) }}<template v-if="updates.progress.total"> / {{ formatUpdateBytes(updates.progress.total) }}</template></span><strong v-if="updates.progress.total">{{ updates.progress.percent.toFixed(1) }}%</strong></div>
+            <div class="update-download-progress-track" role="progressbar" :aria-valuenow="updates.progress.percent" aria-valuemin="0" aria-valuemax="100"><span :style="{ width: `${Math.min(100, Math.max(0, updates.progress.percent))}%` }" /></div>
+            <small>{{ updates.progress.speed ? formatUpdateSpeed(updates.progress.speed) : "准备中…" }}</small>
+          </div>
           <Button v-if="updates.path" @click="installUpdate">打开更新包</Button>
           <Button
             v-else-if="updates.release?.newer && updates.release.asset"
