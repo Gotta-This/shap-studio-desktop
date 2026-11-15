@@ -2880,6 +2880,8 @@ body:has(.widget-shell),
 .todo-island:not(.todo-island-ready) { pointer-events: none; }
 .todo-island-ready { opacity: 1; }
 .todo-island-expanded { border-radius: 20px; box-shadow: none; }
+.todo-island-long-pressing { cursor: wait; }
+.todo-island-dragging { cursor: grabbing; user-select: none; }
 .todo-island-header {
   display: flex;
   align-items: center;
@@ -2944,6 +2946,7 @@ body:has(.widget-shell),
 .todo-island-tool-select-content [data-slot="select-item"] { min-height: 27px; padding: 5px 8px; border-radius: 4px; color: #dcefe2; font-size: 11px; }
 .todo-island-tool-select-content [data-slot="select-item"][data-highlighted] { background: #4d8065; color: #ffffff; }
 .todo-island-tool-select-content [data-slot="select-item"][data-state="checked"] { color: #9bd2ae; }
+.todo-island-drag-hint { color: #91aa99; font-size: 9px; }
 .todo-island-panel { transform-origin: top center; overflow: hidden; }
 .todo-island-panel-enter-active,
 .todo-island-panel-leave-active {
@@ -2961,7 +2964,8 @@ body:has(.widget-shell),
 .todo-island-with-tool .todo-island-list-scroll { max-height: 300px; overflow-y: auto; }
 .todo-island-with-tool .todo-island-panel,
 .todo-island-tool-category .todo-island-panel,
-.todo-island-tool-numeric .todo-island-panel { overflow: hidden; }
+.todo-island-tool-numeric .todo-island-panel,
+.todo-island-tool-calculator .todo-island-panel { overflow: hidden; }
 .todo-island-tool-form { display: flex; flex-direction: column; gap: 6px; padding: 0 10px 8px; }
 .todo-island-tool-heading { display: flex; align-items: baseline; justify-content: space-between; color: #dcefe2; font-size: 11px; }
 .todo-island-tool-heading span { color: #91aa99; font-size: 9px; }
@@ -2980,6 +2984,65 @@ body:has(.widget-shell),
 .todo-island-generate:disabled { opacity: .55; }
 .todo-island-tool-error { color: #ffb8b8; font-size: 10px; }
 .todo-island-tool-result { display: flex; align-items: center; justify-content: space-between; color: #b7d2bd; font-size: 10px; }
+.todo-island-calculator-display {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: space-between;
+  min-height: 59px;
+  padding: 8px 10px;
+  border: 1px solid #ffffff1c;
+  border-radius: 9px;
+  background: #101713;
+  box-sizing: border-box;
+}
+.todo-island-calculator-display span {
+  width: 100%;
+  min-height: 13px;
+  overflow: hidden;
+  color: #8ca695;
+  font-size: 9px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.todo-island-calculator-display strong {
+  max-width: 100%;
+  overflow: hidden;
+  color: #f2faf4;
+  font-size: 23px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.todo-island-calculator-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 5px;
+}
+.todo-island-calculator-grid button {
+  display: grid;
+  place-items: center;
+  min-height: 31px;
+  border: 1px solid #ffffff12;
+  border-radius: 7px;
+  background: #ffffff0d;
+  color: #e4f0e7;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  transition: background 120ms ease, color 120ms ease, transform 120ms ease;
+}
+.todo-island-calculator-grid button:hover { background: #ffffff1c; color: white; }
+.todo-island-calculator-grid button:active { transform: scale(.96); }
+.todo-island-calculator-grid .calculator-utility { color: #b9d6c1; background: #ffffff14; }
+.todo-island-calculator-grid .calculator-operator { color: #bfe3c9; background: #2f5540; }
+.todo-island-calculator-grid .calculator-operator:hover { background: #3d6d50; }
+.todo-island-calculator-grid .calculator-backspace { color: #b9d6c1; }
+.todo-island-calculator-grid .calculator-zero { grid-column: span 2; }
+.todo-island-calculator-grid .calculator-equals { color: #102016; background: #8ec49c; font-weight: 700; }
+.todo-island-calculator-grid .calculator-equals:hover { background: #a6d7b1; }
 .spin { animation: todo-island-spin .8s linear infinite; }
 @keyframes todo-island-spin { to { transform: rotate(360deg); } }
 .todo-island-row {
