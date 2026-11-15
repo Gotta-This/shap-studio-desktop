@@ -138,7 +138,7 @@ jobs:
       - name: Verify Mac host and default storage
         if: runner.os == 'macOS'
         run: |
-          app='src-tauri/target/${{ matrix.target }}/release/bundle/macos/科研数据工具集 V3.app'
+          app='src-tauri/target/${{ matrix.target }}/release/bundle/macos/科研数据工具集.app'
           /usr/libexec/PlistBuddy -c "Print :NSAppleEventsUsageDescription" "$app/Contents/Info.plist"
           codesign --force --deep --sign - "$app"
           codesign --verify --deep --strict "$app"

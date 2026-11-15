@@ -28,7 +28,7 @@ def collect(root,target,system):
     elif system=='darwin':
         arch={'aarch64-apple-darwin':'arm64','x86_64-apple-darwin':'x86_64'}[target]
         archive=destination('ResearchDataTools-macOS-'+arch+'.zip')
-        subprocess.run(['ditto','-c','-k','--sequesterRsrc','--keepParent',str(build/'bundle/macos/科研数据工具集 V3.app'),str(archive)],check=True)
+        subprocess.run(['ditto','-c','-k','--sequesterRsrc','--keepParent',str(build/'bundle/macos/科研数据工具集.app'),str(archive)],check=True)
     else:raise RuntimeError('Release packaging supports Windows and macOS only')
     for path in sorted(release.iterdir()):
         if path.stat().st_size<=0:raise RuntimeError('Empty release asset: '+path.name)
