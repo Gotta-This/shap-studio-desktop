@@ -233,15 +233,17 @@ function handleCalculatorKeydown(event: KeyboardEvent) {
   if (shortcutTool.value !== "calculator") return;
   if (event.target instanceof HTMLElement && ["INPUT", "TEXTAREA", "SELECT"].includes(event.target.tagName)) return;
   const key = event.key;
+  const code = event.code;
   if (/^[0-9]$/.test(key)) calculatorDigit(key);
   else if (key === "." || key === ",") calculatorDecimal();
-  else if (key === "+") calculatorOperator("+");
-  else if (key === "-") calculatorOperator("−");
-  else if (key === "*" || key.toLowerCase() === "x") calculatorOperator("×");
-  else if (key === "/") calculatorOperator("÷");
+  else if (key === "+" || key === "Add" || code === "NumpadAdd") calculatorOperator("+");
+  else if (key === "-" || key === "Subtract" || code === "NumpadSubtract") calculatorOperator("−");
+  else if (key === "*" || key === "Multiply" || code === "NumpadMultiply" || key.toLowerCase() === "x") calculatorOperator("×");
+  else if (key === "/" || key === "Divide" || code === "NumpadDivide") calculatorOperator("÷");
   else if (key === "%") calculatorPercent();
   else if (key === "Enter" || key === "=") calculatorEquals();
   else if (key === "Backspace") calculatorBackspace();
+  else if (key === "NumLock" || code === "NumLock") resetCalculator();
   else if (key === "Escape" || key.toLowerCase() === "c") resetCalculator();
   else return;
   event.preventDefault();
@@ -376,7 +378,10 @@ async function resizeIsland(open: boolean) {
     const contentHeight = header && panel
       ? Math.ceil(header.getBoundingClientRect().height + panel.scrollHeight + Math.max(0, expectedListHeight - measuredListHeight))
       : 190;
-    const height = !open ? 44 : Math.min(760, Math.max(190, contentHeight + 2));
+    const calculatorMinimum = shortcutTool.value === "calculator"
+      ? 430 + Math.min(pending.value.length, 8) * 46
+      : 0;
+    const height = !open ? 44 : Math.min(760, Math.max(190, contentHeight + 2, calculatorMinimum));
     await current.setSize(new LogicalSize(width, height));
     if (monitor) {
       const scale = monitor.scaleFactor;

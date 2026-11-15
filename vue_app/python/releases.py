@@ -11,8 +11,8 @@ from urllib.request import Request, urlopen
 import certifi
 from release_assets import versioned_name
 
-# v3.2.32 Todo island calculator, positioning, and app name release.
-VERSION = "3.2.32"
+# v3.2.33 Todo island calculator, positioning, and app name release.
+VERSION = "3.2.33"
 REPO = "Gotta-This/shap-studio-desktop"
 PREFIX = f"https://github.com/{REPO}/releases/download/"
 
