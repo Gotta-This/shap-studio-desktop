@@ -55,6 +55,7 @@ const calculator = reactive<CalculatorState>(loadStored("todo-island-calculator"
 const shortcutResult = ref<any>(null);
 const shortcutBusy = ref(false);
 const shortcutError = ref("");
+const islandError = ref("");
 const shortcutCopied = ref(false);
 const quickTodoText = ref("");
 const quickTodoBusy = ref(false);
@@ -83,6 +84,7 @@ let dragState: {
   moveWindow: (x: number, y: number) => Promise<void>;
 } | undefined;
 let dragMoveSequence = 0;
+let suppressExpandUntil = 0;
 let lightweightTodosUnavailable = false;
 
 type IslandMonitor = {
@@ -359,17 +361,53 @@ async function saveToolVisibility(value: boolean) {
   }
 }
 async function capture() {
+  islandError.value = "";
   let islandWindow: Awaited<ReturnType<typeof import("@tauri-apps/api/window").getCurrentWindow>> | undefined;
+  let islandFrame: { centerX: number; y: number } | undefined;
+  const restoreCompact = async () => {
+    expanded.value = false;
+    islandHovered.value = false;
+    try {
+      const { getCurrentWindow } = await import("@tauri-apps/api/window");
+      const current = getCurrentWindow();
+      const { LogicalSize, PhysicalPosition } = await import("@tauri-apps/api/dpi");
+      await current.setSize(new LogicalSize(compactWidth.value, 44));
+      if (islandFrame) {
+        const compactOuter = await current.outerSize();
+        const compactX = Math.round(islandFrame.centerX - compactOuter.width / 2);
+        await current.setPosition(new PhysicalPosition(compactX, islandFrame.y));
+        islandPositionX.value = compactX;
+      }
+      await current.show();
+      await current.unminimize().catch(() => undefined);
+    } catch {
+      await islandWindow?.show().catch(() => undefined);
+    }
+  };
   try {
     const { getCurrentWindow } = await import("@tauri-apps/api/window");
     islandWindow = getCurrentWindow();
-    await islandWindow.hide();
     const { invoke } = await import("@tauri-apps/api/core");
+    const permissions = await invoke<{ screen_recording: boolean; accessibility: boolean }>("quickshot_permissions");
+    if (!permissions.screen_recording) throw new Error("请先允许科研数据工具集使用屏幕录制权限。");
+    if (!permissions.accessibility) throw new Error("请先允许科研数据工具集使用辅助功能权限。");
+    if (collapseTimer) clearTimeout(collapseTimer);
+    if (collapseResizeTimer) clearTimeout(collapseResizeTimer);
+    toolSelectOpen.value = false;
+    showSettings.value = false;
+    expanded.value = false;
+    suppressExpandUntil = Date.now() + 1200;
+    const [outer, outerSize] = await Promise.all([islandWindow.outerPosition(), islandWindow.outerSize()]);
+    islandFrame = { centerX: outer.x + outerSize.width / 2, y: outer.y };
+    // Invalidate any resize that started before the screenshot and could move
+    // the window after it has been restored.
+    resizeSequence += 1;
+    await islandWindow.hide();
     await invoke("quickshot_capture");
-    setTimeout(() => { void islandWindow?.show(); }, 2200);
+    setTimeout(() => { void restoreCompact(); }, 2200);
   } catch (error) {
-    if (islandWindow) await islandWindow.show().catch(() => undefined);
-    notify(`截图工具启动失败：${String((error as Error).message || error)}`, true);
+    if (islandWindow) await restoreCompact().catch(() => undefined);
+    islandError.value = `截图工具启动失败：${String((error as Error).message || error)}`;
   }
 }
 async function generateShortcut() {
@@ -486,6 +524,7 @@ async function resizeIsland(open: boolean) {
   }
 }
 function expand() {
+  if (Date.now() < suppressExpandUntil) return;
   if (collapseTimer) clearTimeout(collapseTimer);
   if (collapseResizeTimer) clearTimeout(collapseResizeTimer);
   if (shortcutCopiedTimer) clearTimeout(shortcutCopiedTimer);
@@ -693,6 +732,7 @@ onUnmounted(() => {
     </header>
     <Transition name="todo-island-panel">
       <div v-if="expanded" class="todo-island-panel">
+        <p v-if="islandError" class="todo-island-inline-error" role="status">{{ islandError }}</p>
         <div v-if="showSettings" class="todo-island-settings">
           <div class="todo-island-setting-row"><span>透明度</span><input :value="opacity" type="range" min="0.55" max="1" step="0.05" @input="saveOpacity(($event.target as HTMLInputElement).value)" /><strong>{{ Math.round(opacity * 100) }}%</strong></div>
           <label class="todo-island-tool-toggle"><Checkbox :model-value="showScreenshot" @update:model-value="(value) => saveToolVisibility(!!value)" /><span>显示截图按钮</span></label>

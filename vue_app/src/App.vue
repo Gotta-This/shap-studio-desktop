@@ -186,7 +186,7 @@ onUnmounted(() => {
       </main>
     </div>
     <div
-      v-if="feedback.text"
+      v-if="feedback.text && !widgetShell"
       role="status"
       :class="['toast', { 'toast-error': feedback.error }]"
     >
@@ -202,7 +202,7 @@ onUnmounted(() => {
         ><X :size="15"
       /></Button>
     </div>
-    <Dialog v-model:open="searchOpen"
+    <Dialog v-if="!widgetShell" v-model:open="searchOpen"
       ><DialogContent class="sm:max-w-xl"
         ><DialogHeader
           ><DialogTitle>搜索任务与文件</DialogTitle

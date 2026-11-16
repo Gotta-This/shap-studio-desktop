@@ -2626,6 +2626,11 @@ code {
   padding-top: 12px;
   border-top: 1px solid var(--border);
 }
+.quickshot-permission-status { display: flex; flex-basis: 100%; flex-wrap: wrap; gap: 8px; color: var(--muted-foreground); font-size: 11px; }
+.quickshot-permission-status span { padding: 4px 7px; border: 1px solid var(--border); border-radius: 999px; }
+.quickshot-permission-status:not(.ready) span { color: #c56b58; border-color: color-mix(in srgb, #c56b58 35%, var(--border)); }
+.quickshot-current-shortcuts { flex-basis: 100%; color: var(--muted-foreground); font-size: 11px; font-weight: 500; }
+.quickshot-save-status { flex-basis: 100%; margin: 0; color: var(--primary); font-size: 11px; }
 .quickshot-launch-card > .field-error {
   grid-column: 1 / -1;
 }
@@ -3041,6 +3046,7 @@ body:has(.widget-shell),
 .todo-island-generate { display: inline-flex; align-items: center; justify-content: center; gap: 5px; width: 100%; height: 27px; border-radius: 6px; background: #4e8062; color: white; font-size: 11px; }
 .todo-island-generate:disabled { opacity: .55; }
 .todo-island-tool-error { color: #ffb8b8; font-size: 10px; }
+.todo-island-inline-error { margin: 0 0 8px; color: #ffc4c4; font-size: 11px; line-height: 1.4; }
 .todo-island-tool-result { display: flex; align-items: center; justify-content: space-between; color: #b7d2bd; font-size: 10px; }
 .todo-island-calculator-display {
   display: flex;
