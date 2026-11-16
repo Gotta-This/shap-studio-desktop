@@ -1,5 +1,6 @@
 name: Build test and release Vue V3
 # Release commits may be retried after a transient platform validation failure.
+# Keep the workflow path changed so a release retry is dispatched explicitly.
 on:
   workflow_dispatch:
   push:
