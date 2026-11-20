@@ -44,6 +44,7 @@ class EngineServiceTests(unittest.TestCase):
             time.sleep(.01)
         self.assertEqual(state['status'],'done',state)
         self.assertEqual(len(state['result']['values']),70)
+        self.assertTrue(all(value > 0 for value in state['result']['values']))
         self.assertEqual(self.call('state')['result']['todos'][0]['text'],'生成时也能保存待办')
 
     def test_accepted_job_finishes_after_client_disconnects(self):

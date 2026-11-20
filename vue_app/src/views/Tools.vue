@@ -275,7 +275,7 @@ onUnmounted(() => { if (generationCopiedTimer) clearTimeout(generationCopiedTime
                   type="number"
                   step="any"
                   aria-label="数值下限"
-                  placeholder="不限制"
+                  :placeholder="'默认 ' + (1 / 10 ** numeric.digits)"
                   @update:model-value="
                     (v) => (numeric.lower = v === '' ? null : Number(v))
                   "
@@ -305,6 +305,7 @@ onUnmounted(() => { if (generationCopiedTimer) clearTimeout(generationCopiedTime
             </div>
             <p class="tool-note">
               生成结果为模拟数据。均数与标准差为近似匹配，不保证正态分布。
+              下限留空时仅生成正数；填 0 可包含零，填负数才允许负数。
             </p>
             <Button
               :disabled="busy"

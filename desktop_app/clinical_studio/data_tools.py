@@ -173,7 +173,8 @@ class NumericTool(QWidget):
         self.digits=QComboBox();self.digits.addItems(['0','1','2','3','4'])
         self.lower=QLineEdit('7');self.upper=QLineEdit('50')
         self.seed=QLineEdit();self.seed.setPlaceholderText('留空，每次生成新数据')
-        for field in [self.lower,self.upper]:field.setPlaceholderText('不限制（可留空）')
+        self.lower.setPlaceholderText('留空仅生成正数')
+        self.upper.setPlaceholderText('不限制（可留空）')
         for title,widget in [('均数',self.mean),('标准差',self.sd),('例数',self.n),('小数点后位数',self.digits),('最小值',self.lower),('最大值',self.upper)]:form.addRow(title,widget)
         form.addRow('随机种子（可选）',self.seed)
         form.setLabelAlignment(Qt.AlignRight);left.addWidget(fields)
@@ -184,7 +185,7 @@ class NumericTool(QWidget):
         self.stop_button=QPushButton('停止');self.stop_button.setEnabled(False);left.addWidget(self.stop_button)
         self.stop_button.clicked.connect(self.stop_generation)
         self.error=QLabel('');self.error.setWordWrap(True);self.error.setStyleSheet('color:#B34334');left.addWidget(self.error)
-        note=QLabel('样本标准差使用 n−1。统计目标为近似匹配，结果不保证正态分布。\n\n上下限可留空；按范围均匀随机模式需填写两个边界。\n\n生成结果仅为模拟数据，请核对实际统计值与偏差。');note.setWordWrap(True);left.addWidget(note);left.addStretch()
+        note=QLabel('样本标准差使用 n−1。统计目标为近似匹配，结果不保证正态分布。\n\n下限留空时仅生成正数；填 0 可包含零，填负数才允许负数。上限可留空；按范围均匀随机模式需填写两个边界。\n\n生成结果仅为模拟数据，请核对实际统计值与偏差。');note.setWordWrap(True);left.addWidget(note);left.addStretch()
         self.result=ResultPanel('Value','均数标准差模拟数据',histogram=True);self.splitter=split_panels(layout,group,self.result)
         self.generate_button.clicked.connect(self.generate)
     def mode_changed(self):

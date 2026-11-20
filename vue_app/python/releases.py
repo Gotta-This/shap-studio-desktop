@@ -13,8 +13,8 @@ from urllib.request import Request, urlopen
 import certifi
 from release_assets import versioned_name
 
-# v3.2.37 QuickShot shortcut persistence and macOS application-level shortcut release.
-VERSION = "3.2.37"
+# v3.2.38 Numeric simulations default to positive values unless a lower bound is supplied.
+VERSION = "3.2.38"
 REPO = "Gotta-This/shap-studio-desktop"
 PREFIX = f"https://github.com/{REPO}/releases/download/"
 

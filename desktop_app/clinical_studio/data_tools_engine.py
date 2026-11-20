@@ -44,7 +44,8 @@ def numeric_numbers(n=70, mean=27.92, sd=14.87, digits=0, lower=None, upper=None
             raise ValueError('边界必须是有效数字或留空。')
     f=10**digits
     reach=max(sd*(n-1)/math.sqrt(n),1/f)
-    low=lower if lower is not None else mean-reach-2/f
+    # A blank lower bound allows only positive values at the chosen precision.
+    low=lower if lower is not None else 1/f
     high=upper if upper is not None else mean+reach+2/f
     lo,hi=math.ceil(low*f),math.floor(high*f)
     if lo>hi or max(abs(lo),abs(hi))>1e8:
@@ -52,7 +53,7 @@ def numeric_numbers(n=70, mean=27.92, sd=14.87, digits=0, lower=None, upper=None
     if mode=='target':
         if not lo/f<=mean<=hi/f:
             raise ValueError('目标均数不在可用范围内。')
-        if lower is not None and upper is not None:
+        if upper is not None:
             max_sd=math.sqrt(max(0,(hi/f-mean)*(mean-lo/f)*n/(n-1)))
             if sd>max_sd+1e-9:
                 raise ValueError('目标标准差超出当前范围可实现的界限。')
