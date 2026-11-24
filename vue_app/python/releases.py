@@ -13,8 +13,8 @@ from urllib.request import Request, urlopen
 import certifi
 from release_assets import versioned_name
 
-# v3.2.38 Numeric simulations default to positive values unless a lower bound is supplied.
-VERSION = "3.2.38"
+# v3.2.39 Preserve desktop layout across scaling changes and resolve 360 slot conflicts.
+VERSION = "3.2.39"
 REPO = "Gotta-This/shap-studio-desktop"
 PREFIX = f"https://github.com/{REPO}/releases/download/"
 

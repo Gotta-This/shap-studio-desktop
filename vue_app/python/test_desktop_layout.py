@@ -31,11 +31,64 @@ class PlanningTests(unittest.TestCase):
         current['display']['workareas']=[dict(left=0,top=0,right=100,bottom=200),dict(left=300,top=0,right=500,bottom=100)]
         p=layout.plan(old,current)
         self.assertEqual({(i['x'],i['y']) for i in p['items']},{(0,0),(0,100),(300,0),(400,0)})
-    def test_no_space_and_offscreen_backup_fail_before_moving(self):
+    def test_no_space_fails_before_moving_and_offscreen_icons_use_empty_cells(self):
         old=screen([icon('a',0,0)]);now=screen([icon('a',0,0),icon('b',0,0)]);now['display']['workareas']=[dict(left=0,top=0,right=100,bottom=100)]
         with self.assertRaisesRegex(ValueError,'没有足够'):layout.plan(old,now)
         old['icons'][0]['x']=1000
-        with self.assertRaisesRegex(ValueError,'无法容纳'):layout.plan(old,now)
+        result=layout.plan(old,screen([icon('a',0,0)]))
+        self.assertEqual((result['items'][0]['x'],result['items'][0]['y']),(0,0))
+        self.assertEqual(result['reflowed_count'],1)
+
+    def test_smaller_scaling_preserves_original_rows_columns_and_gaps(self):
+        old=screen([icon('a',0,0),icon('bottom',0,300),icon('next-column',100,300),icon('gap',300,0)])
+        now=screen([icon(i['key'],0,0) for i in old['icons']]);now['display']['spacing']=[50,50];now['display']['dpi']=48
+        result=layout.plan(old,now)
+        self.assertEqual({i['key']:(i['x'],i['y']) for i in result['items']},{'a':(0,0),'bottom':(0,150),'next-column':(50,150),'gap':(150,0)})
+        self.assertEqual((result['retained_count'],result['reflowed_count']),(4,0));self.assertTrue(result['spacing_changed'])
+
+    def test_larger_scaling_moves_only_overflow_and_reserves_all_upper_targets(self):
+        old=screen([icon('a',0,0),icon('b',0,100),icon('bottom',0,200),icon('c',100,0),icon('d',100,100)])
+        now=screen([icon(i['key'],0,0) for i in old['icons']]);now['display']['spacing']=[150,150];now['display']['dpi']=144
+        result=layout.plan(old,now);positions={i['key']:(i['x'],i['y']) for i in result['items']}
+        self.assertEqual(positions,dict(a=(0,0),b=(0,150),bottom=(300,0),c=(150,0),d=(150,150)))
+        self.assertEqual((result['retained_count'],result['reflowed_count'],result['new_count']),(4,1,0))
+
+    def test_overflow_has_priority_over_new_icons(self):
+        old=screen([icon('top',0,0),icon('bottom',0,300)])
+        now=screen([icon('top',0,0),icon('bottom',0,0),icon('new',0,0)])
+        now['display']['spacing']=[150,150]
+        result=layout.plan(old,now);positions={i['key']:(i['x'],i['y']) for i in result['items']}
+        self.assertEqual(positions,dict(top=(0,0),bottom=(150,0),new=(150,150)))
+        self.assertEqual((result['restored_count'],result['new_count'],result['reflowed_count']),(2,1,1))
+
+    def test_scaling_uses_local_monitor_coordinates_and_current_grid_origin(self):
+        old=screen([icon('main',10,5),icon('secondary',710,105)])
+        areas=[dict(left=0,top=0,right=400,bottom=400),dict(left=600,top=0,right=1000,bottom=400)]
+        old['display']['workareas']=areas
+        now=screen([icon('main',5,3),icon('secondary',605,3)])
+        now['display']['workareas']=areas;now['display']['spacing']=[50,50]
+        result=layout.plan(old,now);positions={i['key']:(i['x'],i['y']) for i in result['items']}
+        self.assertEqual(positions,dict(main=(5,3),secondary=(655,53)))
+
+    def test_reduced_workarea_moves_partly_clipped_icons_to_free_space(self):
+        old=screen([icon('top',0,0),icon('bottom',0,300)])
+        now=screen([icon('top',0,0),icon('bottom',100,0)])
+        now['display']['workareas']=[dict(left=0,top=0,right=600,bottom=350)]
+        result=layout.plan(old,now);positions={i['key']:(i['x'],i['y']) for i in result['items']}
+        self.assertEqual(positions,dict(top=(0,0),bottom=(100,0)))
+        self.assertEqual(result['reflowed_count'],1)
+
+    def test_overlapping_targets_keep_upper_icon_and_relocate_lower_one(self):
+        old=screen([icon('lower',0,50),icon('upper',0,0),icon('right',100,0)])
+        now=screen([icon(i['key'],0,0) for i in old['icons']])
+        result=layout.plan(old,now);positions={i['key']:(i['x'],i['y']) for i in result['items']}
+        self.assertEqual(positions,dict(upper=(0,0),right=(100,0),lower=(200,0)))
+        self.assertEqual(result['reflowed_count'],1)
+
+    def test_larger_scaling_without_enough_space_stops_during_planning(self):
+        old=screen([icon('a',0,0),icon('b',0,100),icon('c',100,0)])
+        now=screen([icon(i['key'],0,0) for i in old['icons']]);now['display']['spacing']=[300,300]
+        with self.assertRaisesRegex(ValueError,'没有足够'):layout.plan(old,now)
     def test_auto_arrange_and_empty_matches_are_rejected(self):
         old=screen([icon('a',0,0)]);now=screen([icon('a',0,0)]);now['auto_arrange']=True
         with self.assertRaisesRegex(ValueError,'自动排列'):layout.plan(old,now)
@@ -55,6 +108,33 @@ class DesktopFixture:
     def tearDown(self):self.native.stop();self.windows.stop();self.assistant.stop();self.tmp.cleanup()
 
 class StorageTests(DesktopFixture,unittest.TestCase):
+    def test_scaled_restore_preserves_upper_rows_and_backs_up_current_layout(self):
+        self.fake.current=screen([icon('a',0,0),icon('b',0,100),icon('bottom',0,200),icon('c',100,0),icon('d',100,100)])
+        saved=layout.backup(self.root,dict(protected=True))
+        self.fake.current['display']['spacing']=[150,150];self.fake.current['display']['dpi']=144
+        for item in self.fake.current['icons']:item.update(x=0,y=0)
+        preview=layout.preview(self.root,dict(id=saved['id']))
+        self.assertEqual((preview['retained_count'],preview['reflowed_count']),(4,1))
+        result=layout.restore(self.root,dict(id=saved['id'],fingerprint=preview['fingerprint']))
+        self.assertEqual(result['unmatched_positions'],0);self.assertEqual(result['reflowed_count'],1)
+        positions={i['key']:(i['x'],i['y']) for i in self.fake.current['icons']}
+        self.assertEqual(positions,dict(a=(0,0),b=(0,150),bottom=(300,0),c=(150,0),d=(150,150)))
+        self.assertEqual(layout._read(layout._path(self.root,saved['id']))['display']['spacing'],[100,100])
+        safety=layout._read(layout._path(self.root,result['safety_backup']['id']))
+        self.assertEqual(safety['display']['spacing'],[150,150])
+        self.assertTrue(all(i['x']==i['y']==0 for i in safety['icons']))
+        events=json.loads(layout.diagnostics(self.root)['content'])['events']
+        planned=next(e for e in events if e['event']=='restore.plan')
+        self.assertEqual(planned['reflowed_count'],1);self.assertTrue(planned['spacing_changed'])
+
+    def test_scaling_change_after_preview_requires_a_new_preview(self):
+        saved=layout.backup(self.root,{})
+        preview=layout.preview(self.root,dict(id=saved['id']))
+        self.fake.current['display']['spacing']=[150,150];self.fake.current['display']['dpi']=144
+        with self.assertRaisesRegex(ValueError,'桌面已发生变化'):
+            layout.restore(self.root,dict(id=saved['id'],fingerprint=preview['fingerprint']))
+        self.assertEqual(self.fake.calls,[])
+
     def test_diagnostics_distinguish_no_op_from_real_restore_and_hide_paths(self):
         saved=layout.backup(self.root,dict(label='私人备份名称'))
         preview=layout.preview(self.root,dict(id=saved['id']))
@@ -134,6 +214,35 @@ class StorageTests(DesktopFixture,unittest.TestCase):
             self.assertEqual(layout.info(self.root)['message'],'非windows电脑无法使用')
             with self.assertRaisesRegex(ValueError,layout.UNSUPPORTED):layout.backup(self.root,{})
             with self.assertRaisesRegex(ValueError,layout.UNSUPPORTED):layout.protect(self.root,dict(id='x',protected=True))
+
+class SyncTests(DesktopFixture,unittest.TestCase):
+    def test_partial_360_verification_keeps_completed_sync_and_reports_difference(self):
+        import desktop_layout_sync as sync
+        written=dict(matched_count=83,changed_count=82,message='已按 Windows 位置对齐 83 个图标。')
+        verification=dict(mismatches=1,verified_count=82,expected_count=83)
+        with patch.object(sync,'system_to_360',return_value=written),patch.object(sync,'verify_system_to_360',return_value=verification):
+            result=layout.sync(self.root,dict(direction='system_to_360'))
+        self.assertTrue(result['partial']);self.assertIn('82 个图标',result['message']);self.assertIn('1 个仍有差异',result['message'])
+        self.assertEqual(result['verification'],verification)
+        events=json.loads(layout.diagnostics(self.root)['content'])['events']
+        self.assertTrue(any(e['event']=='sync.partial' for e in events))
+        self.assertEqual(events[-1]['event'],'sync.complete');self.assertTrue(events[-1]['partial'])
+        self.assertFalse(any(e['event']=='sync.error' for e in events))
+
+    def test_total_360_verification_failure_is_not_reported_as_success(self):
+        import desktop_layout_sync as sync
+        written=dict(matched_count=2,changed_count=2,message='planned')
+        with patch.object(sync,'system_to_360',return_value=written),patch.object(sync,'verify_system_to_360',return_value=dict(mismatches=2,verified_count=0,expected_count=2)):
+            with self.assertRaisesRegex(ValueError,'所有已匹配图标'):
+                layout.sync(self.root,dict(direction='system_to_360'))
+        events=json.loads(layout.diagnostics(self.root)['content'])['events']
+        self.assertEqual(events[-1]['event'],'sync.error')
+
+    def test_write_failure_still_fails_sync(self):
+        import desktop_layout_sync as sync
+        with patch.object(sync,'system_to_360',side_effect=PermissionError('write denied')):
+            with self.assertRaises(PermissionError):layout.sync(self.root,dict(direction='system_to_360'))
+
 
 class ScheduleTests(DesktopFixture,unittest.TestCase):
     def test_factory_defaults_use_ten_minutes_and_144_snapshots(self):

@@ -163,6 +163,42 @@ def _require_enabled(profile):
 
 def fingerprint(current):return hashlib.sha256(json.dumps(current,ensure_ascii=False,sort_keys=True,separators=(',',':')).encode('utf8')).hexdigest()
 
+def _scaled_positions(saved,current,items):
+    """Keep rows and columns relative to each monitor when spacing changes."""
+    sx,sy=current['display']['spacing']
+    old_sx,old_sy=saved['display'].get('spacing',[sx,sy])
+    if any(type(v) is not int or not 1<=v<=10000 for v in (old_sx,old_sy)):
+        raise ValueError('备份中的桌面网格间距无效。')
+    if (old_sx,old_sy)==(sx,sy):return items,False
+    old_areas=sorted(saved['display'].get('workareas',[]),key=lambda a:(a['left'],a['top']))
+    areas=sorted(current['display']['workareas'],key=lambda a:(a['left'],a['top']))
+    def points(icons,area):
+        return [i for i in icons if area['left']<=i['x']<area['right'] and area['top']<=i['y']<area['bottom']]
+    origins={}
+    for index,source in enumerate(old_areas):
+        # Prefer the same monitor origin. Scaling its local coordinates must
+        # never scale the offset of a secondary monitor from the desktop.
+        target=next((a for a in areas if (a['left'],a['top'])==(source['left'],source['top'])),None)
+        if target is None:
+            if index>=len(areas):continue
+            target=areas[index]
+        before=points(saved['icons'],source);now=points(current['icons'],target)
+        ox=min((i['x']-source['left'] for i in before),default=0)%old_sx
+        oy=min((i['y']-source['top'] for i in before),default=0)%old_sy
+        nx=min((i['x']-target['left'] for i in now),default=round(ox*sx/old_sx))%sx
+        ny=min((i['y']-target['top'] for i in now),default=round(oy*sy/old_sy))%sy
+        origins[index]=(target,ox,oy,nx,ny)
+    result=[]
+    for item in items:
+        source_index=next((index for index,a in enumerate(old_areas) if a['left']<=item['x']<a['right'] and a['top']<=item['y']<a['bottom']),None)
+        if source_index not in origins:
+            result.append(item);continue
+        source=old_areas[source_index];target,ox,oy,nx,ny=origins[source_index]
+        x=target['left']+nx+round((item['x']-source['left']-ox)*sx/old_sx)
+        y=target['top']+ny+round((item['y']-source['top']-oy)*sy/old_sy)
+        result.append(dict(item,x=x,y=y))
+    return result,True
+
 def plan(saved,current):
     previous=_icons(saved['icons']);present=_icons(current['icons']);display=current['display']
     if current.get('auto_arrange'):raise ValueError('请先在 Windows 桌面右键 → 查看中关闭“自动排列图标”，再恢复。')
@@ -173,10 +209,18 @@ def plan(saved,current):
     def inside(x,y,whole=False):return any(a['left']<=x and a['top']<=y and x+(sx if whole else 0)<=(a['right'] if whole else a['right']-1) and y+(sy if whole else 0)<=(a['bottom'] if whole else a['bottom']-1) for a in areas)
     matched=[dict(present[key],x=previous[key]['x'],y=previous[key]['y']) for key in present if key in previous]
     if not matched:raise ValueError('当前桌面没有与此备份匹配的图标，未执行恢复。')
-    if any(not inside(i['x'],i['y']) for i in matched):raise ValueError('当前屏幕无法容纳备份中的图标位置，请先恢复原来的分辨率、缩放或显示器排列。')
+    matched,scaled=_scaled_positions(saved,current,matched)
     new=sorted([v for k,v in present.items() if k not in previous],key=lambda i:(i['name'].casefold(),i['key']))
-    occupied=[(i['x'],i['y']) for i in matched];placed=[]
-    origin_x=min(i['x'] for i in matched)%sx;origin_y=min(i['y'] for i in matched)%sy
+    occupied=[];kept=[];overflow=[];placed=[]
+    # Retain all valid targets before filling holes. Top rows win if larger
+    # icons make previously separate positions overlap.
+    for item in sorted(matched,key=lambda i:(i['y'],i['x'],i['key'].casefold())):
+        x,y=item['x'],item['y']
+        if inside(x,y,True) and all(abs(x-a)>=sx or abs(y-b)>=sy for a,b in occupied):
+            kept.append(item);occupied.append((x,y))
+        else:overflow.append(item)
+    anchors=kept or current['icons']
+    origin_x=min(i['x'] for i in anchors)%sx;origin_y=min(i['y'] for i in anchors)%sy
     candidates=[]
     for area in areas:
         left=origin_x+math.ceil((area['left']-origin_x)/sx)*sx;top=origin_y+math.ceil((area['top']-origin_y)/sy)*sy
@@ -184,15 +228,15 @@ def plan(saved,current):
             for y in range(top,area['bottom']-sy+1,sy):
                 if len(candidates)>100000:raise ValueError('桌面网格数量异常。')
                 candidates.append((x,y))
-    edge=max(i['x'] for i in matched)+sx
+    edge=max((i['x'] for i in kept),default=-sx)+sx
     candidates=sorted(set(candidates),key=lambda v:(v[0]<edge,v[0],v[1]))
     cursor=iter(candidates)
-    for item in new:
+    for item in overflow+new:
         for x,y in cursor:
             if inside(x,y,True) and all(abs(x-a)>=sx or abs(y-b)>=sy for a,b in occupied):
                 placed.append(dict(item,x=x,y=y));occupied.append((x,y));break
-        else:raise ValueError('当前桌面没有足够的空位置放置新增图标，未移动任何图标。请扩大可用桌面或整理图标后重试。')
-    return dict(items=matched+placed,restored_count=len(matched),new_count=len(placed),missing_count=len(previous.keys()-present.keys()),fingerprint=fingerprint(current),display_changed=saved['display']!=display)
+        else:raise ValueError('当前桌面没有足够的空位置放置溢出或新增图标，未移动任何图标。请扩大可用桌面或整理图标后重试。')
+    return dict(items=kept+placed,restored_count=len(matched),retained_count=len(kept),reflowed_count=len(overflow),new_count=len(new),missing_count=len(previous.keys()-present.keys()),fingerprint=fingerprint(current),display_changed=saved['display']!=display,spacing_changed=scaled)
 
 def _native_warning():
     state=assistant.probe()
@@ -211,7 +255,7 @@ def preview(profile,p):
                 saved=_read(_path(profile,p.get('id')));current=view.capture();result=plan(saved,current)
                 actual=_icons(current['icons'])
                 changed=sum((actual[i['key'].casefold()]['x'],actual[i['key'].casefold()]['y'])!=(i['x'],i['y']) for i in result['items'])
-                diagnostic.record(profile,'preview.complete',operation,backup_id=saved['id'],backup_reason=saved['reason'],backup_created_at=saved['created_at'],source_count=len(saved['icons']),current_count=len(current['icons']),restored_count=result['restored_count'],new_count=result['new_count'],missing_count=result['missing_count'],needs_move_count=changed,display=current['display'],source_display=saved['display'],auto_arrange=current.get('auto_arrange'))
+                diagnostic.record(profile,'preview.complete',operation,backup_id=saved['id'],backup_reason=saved['reason'],backup_created_at=saved['created_at'],source_count=len(saved['icons']),current_count=len(current['icons']),restored_count=result['restored_count'],retained_count=result['retained_count'],reflowed_count=result['reflowed_count'],spacing_changed=result['spacing_changed'],new_count=result['new_count'],missing_count=result['missing_count'],needs_move_count=changed,display=current['display'],source_display=saved['display'],auto_arrange=current.get('auto_arrange'))
                 return {**{k:v for k,v in result.items() if k!='items'},'needs_move_count':changed,'assistant_warning':warning}
         except Exception as error:
             diagnostic.record(profile,'preview.error',operation,error=diagnostic.failure(error));raise
@@ -236,7 +280,7 @@ def restore(profile,p):
                 before=_icons(current['icons'])
                 changed=sum((before[i['key'].casefold()]['x'],before[i['key'].casefold()]['y'])!=(i['x'],i['y']) for i in result['items'])
                 positions=[dict(icon=diagnostic.token(i['key']),before=[before[i['key'].casefold()]['x'],before[i['key'].casefold()]['y']],target=[i['x'],i['y']]) for i in result['items']]
-                diagnostic.record(profile,'restore.plan',operation,backup_id=saved['id'],backup_reason=saved['reason'],backup_created_at=saved['created_at'],source_count=len(saved['icons']),current_count=len(current['icons']),restored_count=result['restored_count'],new_count=result['new_count'],missing_count=result['missing_count'],needs_move_count=changed,positions=positions,display=current['display'],source_display=saved['display'],auto_arrange=current.get('auto_arrange'))
+                diagnostic.record(profile,'restore.plan',operation,backup_id=saved['id'],backup_reason=saved['reason'],backup_created_at=saved['created_at'],source_count=len(saved['icons']),current_count=len(current['icons']),restored_count=result['restored_count'],retained_count=result['retained_count'],reflowed_count=result['reflowed_count'],spacing_changed=result['spacing_changed'],new_count=result['new_count'],missing_count=result['missing_count'],needs_move_count=changed,positions=positions,display=current['display'],source_display=saved['display'],auto_arrange=current.get('auto_arrange'))
                 safety=_save(profile,current,'恢复前自动备份',False,'before_restore')
                 diagnostic.record(profile,'restore.safety_saved',operation,backup_id=safety['id'])
                 view.position(result['items'])
@@ -334,7 +378,7 @@ def sync(profile,p):
                     result={k:v for k,v in plan.items() if k!='items'}|{'direction':direction,'applied_count':len(plan['items'])}
                 else:
                     result=system_to_360(current)|{'direction':direction}
-                    diagnostic.record(profile,'sync.360_write',operation,dtf_records=result.get('dtf_records'),matched_count=result.get('matched_count'),missing_count=result.get('missing_count'),ignored_count=result.get('ignored_count'),changed_count=result.get('changed_count'),position_conflicts=result.get('position_conflicts'),position_unmapped_count=result.get('position_unmapped_count'),match_modes=result.get('match_modes'))
+                    diagnostic.record(profile,'sync.360_write',operation,dtf_records=result.get('dtf_records'),matched_count=result.get('matched_count'),missing_count=result.get('missing_count'),ignored_count=result.get('ignored_count'),changed_count=result.get('changed_count'),position_conflicts=result.get('position_conflicts'),position_unmapped_count=result.get('position_unmapped_count'),fallback_count=result.get('fallback_count'),relocated_count=result.get('relocated_count'),match_modes=result.get('match_modes'))
             if cycle:
                 resumed=cycle.resume()
                 diagnostic.record(profile,'sync.assistant_resumed',operation,restarted=bool(resumed))
@@ -346,12 +390,18 @@ def sync(profile,p):
                     time.sleep(.5)
                 verification=verify_system_to_360(result)
                 diagnostic.record(profile,'sync.360_verify',operation,**verification)
+                result['verification']=verification
                 if verification['mismatches']:
-                    raise ValueError('360 重开后未保留 Windows 坐标对应的布局槽位，请检查 360 权限或配置文件。')
+                    if not verification['verified_count']:
+                        raise ValueError('360 布局校验未通过，所有已匹配图标的槽位均与写入结果不一致，请导出诊断日志。')
+                    result['partial']=True
+                    result['message']=f"已尽量同步排列：{verification['verified_count']} 个图标的槽位通过校验，另有 {verification['mismatches']} 个仍有差异。"
+                    diagnostic.record(profile,'sync.partial',operation,**verification)
             result['360_was_running']=bool(cycle)
             result['360_restarted']=resumed
-            result['message'] += ' 已暂时退出 360 并完成同步。' + ('已重新打开 360。' if resumed else '请手动打开 360 检查排列。' if cycle else '')
-            diagnostic.record(profile,'sync.complete',operation,direction=direction,matched_count=result.get('matched_count'),changed_count=result.get('changed_count'),applied_count=result.get('applied_count'))
+            if cycle:
+                result['message'] += ' 已重新打开 360。' if resumed else ' 请手动打开 360 检查排列。'
+            diagnostic.record(profile,'sync.complete',operation,direction=direction,matched_count=result.get('matched_count'),changed_count=result.get('changed_count'),applied_count=result.get('applied_count'),partial=result.get('partial',False))
             return result
         except Exception as error:
             diagnostic.record(profile,'sync.error',operation,error=diagnostic.failure(error),direction=direction)

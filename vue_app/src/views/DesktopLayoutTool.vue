@@ -76,6 +76,9 @@ interface Plan {
   new_count: number;
   missing_count: number;
   needs_move_count?: number;
+  retained_count?: number;
+  reflowed_count?: number;
+  spacing_changed?: boolean;
   display_changed: boolean;
   fingerprint: string;
   assistant_warning?: string;
@@ -348,8 +351,12 @@ async function confirm() {
       restoreSummary.value = result.unmatched_positions
         ? `Windows 有 ${result.unmatched_positions} 个图标未按预期落位。恢复前排列已自动备份，请导出诊断日志。`
         : result.needs_move_count === 0
-          ? "所选备份与当前排列一致，没有需要移动的图标。请确认选择的是打乱排列之前的备份。"
+          ? result.display_changed
+            ? "当前排列已符合此备份在当前显示设置下的布局，无需移动图标。"
+            : "所选备份与当前排列一致，没有需要移动的图标。请确认选择的是打乱排列之前的备份。"
           : `已恢复 ${restored} / ${restored + missing} 个备份图标；${missing} 个未匹配并跳过；${result.new_count ?? action.plan!.new_count} 个新增图标已放入空网格。`;
+      if (!restoreFailed.value && result.reflowed_count)
+        restoreSummary.value += ` 其中 ${result.reflowed_count} 个越界或重叠的图标已安排到空白位置。`;
       if (result.assistant_warning)
         restoreSummary.value += " " + result.assistant_warning;
       if (result.diagnostic_id)
@@ -799,10 +806,17 @@ async function confirm() {
             {{ pending.plan.missing_count }} 个图标已不在当前桌面，会跳过。
           </p>
           <p v-if="pending.plan.needs_move_count === 0" class="field-error">
-            这份备份与当前排列一致，没有需要移动的图标。请确认没有选到刚生成的“恢复前自动备份”。
+            {{
+              pending.plan.display_changed
+                ? "当前排列已符合此备份在当前显示设置下的布局，无需移动图标。"
+                : "这份备份与当前排列一致，没有需要移动的图标。请确认没有选到刚生成的‘恢复前自动备份’。"
+            }}
           </p>
           <p v-if="pending.plan.display_changed" class="muted">
-            当前显示设置与备份不同，将按保存的坐标恢复。
+            当前显示设置与备份不同，将按当前网格间距保持原来的行列排列。
+          </p>
+          <p v-if="pending.plan.reflowed_count" class="muted">
+            {{ pending.plan.reflowed_count }} 个越界或重叠的图标将放入空白位置，其余图标保留原排列。
           </p>
           <p v-if="pending.plan.assistant_warning" class="field-error">
             {{ pending.plan.assistant_warning }}

@@ -12,6 +12,7 @@ import re
 import struct
 import tempfile
 import hashlib
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -334,8 +335,9 @@ def system_to_360(current: dict[str, Any]) -> dict[str, Any]:
     layout_records = _layout_records(records)
     cells = _grid_cells(current)
     ordered_icons = sorted(current["icons"], key=lambda item: (item["x"], item["y"], item["name"].casefold()))
-    matched: list[tuple[dict[str, Any], dict[str, Any], int]] = []
-    used: set[str] = set()
+    matched: list[tuple[dict[str, Any], dict[str, Any], int | None]] = []
+    used: set[int] = set()
+    unmapped = 0
     match_modes: dict[str, int] = {"path": 0, "name": 0, "basename": 0, "stem": 0, "ambiguous": 0, "unmatched": 0}
     for icon in ordered_icons:
         record = None
@@ -350,8 +352,7 @@ def system_to_360(current: dict[str, Any]) -> dict[str, Any]:
         if record:
             slot = _icon_slot(icon, cells)
             if slot is None:
-                match_modes["unmatched"] += 1
-                continue
+                unmapped += 1
             matched.append((record, icon, slot))
             used.add(record["offset"])
             match_modes[reason or "unmatched"] = match_modes.get(reason or "unmatched", 0) + 1
@@ -362,26 +363,46 @@ def system_to_360(current: dict[str, Any]) -> dict[str, Any]:
     if not matched:
         raise ValueError(f"未找到可匹配的 Windows 桌面图标（360记录 {len(layout_records)}，Windows图标 {len(current['icons'])}），未修改 360 排列。请确认 360 与 Windows 使用的是同一批桌面快捷方式。")
     remaining = [record for record in layout_records if record["offset"] not in used]
-    occupied = {int(record["index"]) for record in remaining if int(record["index"]) >= 0}
-    used_slots: set[int] = set(occupied)
-    changed = 0
+    if len(layout_records) > len(cells):
+        raise ValueError("桌面没有足够的空白网格放置 360 图标，未修改 360 排列。")
+    # Reserve every Windows target before allocating fallback slots. Otherwise
+    # an early conflict can take a later icon's target and displace the rest.
+    used_slots: set[int] = set()
+    assignments: list[tuple[dict[str, Any], int]] = []
+    fallback: list[dict[str, Any]] = []
     conflicts = 0
+    for record, icon, slot in matched:
+        if slot is None or slot in used_slots:
+            fallback.append(record)
+            conflicts += int(slot is not None)
+        else:
+            used_slots.add(slot)
+            assignments.append((record, slot))
+    # Unmatched 360 entries may keep a free position, but cannot push a
+    # matched Windows icon away from its target.
+    relocated: list[dict[str, Any]] = []
+    for record in remaining:
+        slot = int(record["index"])
+        if 0 <= slot < len(cells) and slot not in used_slots:
+            used_slots.add(slot)
+            assignments.append((record, slot))
+        else:
+            conflicts += int(slot in used_slots)
+            relocated.append(record)
+    free_slots = iter(slot for slot in range(len(cells)) if slot not in used_slots)
+    for record in fallback + relocated:
+        assignments.append((record, next(free_slots)))
+    changed = 0
     output = bytearray(data)
     expected_positions: list[dict[str, Any]] = []
-    for record, icon, slot in sorted(matched, key=lambda item: (item[2], item[1]["name"].casefold())):
-        target = slot
-        if target in used_slots:
-            conflicts += 1
-            target = next((candidate for candidate in range(len(cells)) if candidate not in used_slots), None)
-            if target is None:
-                continue
-        used_slots.add(target)
+    for record, target in assignments:
         offset = record["offset"]
         value = struct.unpack_from("<i", output, offset + 5)[0]
         if value != target:
             struct.pack_into("<i", output, offset + 5, target)
             changed += 1
-        expected_positions.append({"token": _token(str(record.get("path") or record.get("name"))), "index": target})
+        if offset in used:
+            expected_positions.append({"token": _token(str(record.get("path") or record.get("name"))), "index": target})
     if changed:
         backup = path.with_suffix(path.suffix + ".bk")
         _write(backup, data)
@@ -392,23 +413,38 @@ def system_to_360(current: dict[str, Any]) -> dict[str, Any]:
         "ignored_count": max(0, len(current["icons"]) - len(matched)),
         "changed_count": changed,
         "position_conflicts": conflicts,
-        "position_unmapped_count": match_modes.get("unmatched", 0),
+        "position_unmapped_count": unmapped,
+        "fallback_count": len(fallback),
+        "relocated_count": len(relocated),
         "expected_positions": expected_positions,
         "dtf_records": len(layout_records),
         "match_modes": match_modes,
         "dtf_path": str(path),
-        "message": ("Windows 坐标对应的 360 槽位无需修改。" if changed == 0 else f"已将 Windows 坐标写入 360，修改 {changed} 个槽位。") + f" 匹配 {len(matched)} 个图标，保留 {len(remaining)} 个 360 未匹配槽位。",
+        "message": (
+            f"已按 Windows 位置对齐 {len(matched) - len(fallback)} 个图标；"
+            f"{len(fallback)} 个位置冲突或无法对应的图标、{len(relocated)} 个 360 额外记录已放到空白位置。"
+            + (f"另有 {len(current['icons']) - len(matched)} 个 Windows 图标在 360 中没有可匹配记录。" if len(current["icons"]) > len(matched) else "")
+        ),
     }
 
 
 def verify_system_to_360(result: dict[str, Any]) -> dict[str, Any]:
     """Re-read the DTF file after 360 is restarted and verify written slots."""
-    expected = {item["token"]: int(item["index"]) for item in result.get("expected_positions", [])}
+    expected = Counter((item["token"], int(item["index"])) for item in result.get("expected_positions", []))
     if not expected:
         return {"mismatches": 0, "verified_count": 0, "expected_count": 0}
     path = Path(result["dtf_path"])
     records = _layout_records(parse(path.read_bytes()))
-    actual = {_token(str(record.get("path") or record.get("name"))): int(record["index"]) for record in records}
-    mismatches = sum(1 for token, index in expected.items() if actual.get(token) != index)
-    return {"mismatches": mismatches, "verified_count": len(expected) - mismatches, "expected_count": len(expected)}
+    # Preserve duplicate paths instead of letting a later stale record replace
+    # the matched record in a dictionary keyed only by its path token.
+    actual = Counter((_token(str(record.get("path") or record.get("name"))), int(record["index"])) for record in records)
+    wrong = expected - actual
+    mismatches = sum(wrong.values())
+    count = sum(expected.values())
+    return {
+        "mismatches": mismatches,
+        "verified_count": count - mismatches,
+        "expected_count": count,
+        "sample": [{"token": token, "expected_index": index, "count": amount} for (token, index), amount in list(wrong.items())[:12]],
+    }
 

@@ -39,6 +39,8 @@ async function windows(page: Page, dueNow = false) {
     failPreview: false,
     unmatched: 0,
     needsMove: 2,
+    displayChanged: false,
+    reflowed: 0,
     lastBackup: null as any,
   };
   await page.route("**/api/bridge", async (route) => {
@@ -113,7 +115,8 @@ async function windows(page: Page, dueNow = false) {
           new_count: 1,
           missing_count: 1,
           needs_move_count: store.needsMove,
-          display_changed: false,
+          display_changed: store.displayChanged,
+          reflowed_count: store.reflowed,
           fingerprint: "confirmed-layout",
           assistant_warning: store.assistant.running
             ? "360 正在运行：仅恢复 Windows 原生布局，不会修改 360 布局。"
@@ -129,6 +132,8 @@ async function windows(page: Page, dueNow = false) {
           new_count: 1,
           missing_count: 1,
           needs_move_count: store.needsMove,
+          display_changed: store.displayChanged,
+          reflowed_count: store.reflowed,
           diagnostic_id: "diagnostic-operation-123",
           diagnostic_saved: true,
           assistant_warning: store.assistant.running
@@ -360,6 +365,30 @@ test("unchanged layout is explained before and after restore", async ({
   await expect(
     page.locator(".layout-backup-page .layout-restore-summary"),
   ).toContainText("所选备份与当前排列一致");
+});
+
+test("scaling overflow is explained in preview and restore result", async ({ page }) => {
+  const store = await windows(page);
+  store.displayChanged = true;
+  store.reflowed = 1;
+  await page.goto("/#/tools/desktop-layout");
+  await page.getByRole("button", { name: "恢复备份 备份 1", exact: true }).click();
+  await expect(page.getByRole("dialog")).toContainText("保持原来的行列排列");
+  await expect(page.getByRole("dialog")).toContainText("1 个越界或重叠的图标将放入空白位置");
+  await page.getByRole("button", { name: "确认恢复排列", exact: true }).click();
+  await expect(page.locator(".layout-backup-page .layout-restore-summary")).toContainText("1 个越界或重叠的图标已安排到空白位置");
+});
+
+test("already adapted layout does not suggest the wrong backup after scaling", async ({ page }) => {
+  const store = await windows(page);
+  store.displayChanged = true;
+  store.needsMove = 0;
+  await page.goto("/#/tools/desktop-layout");
+  await page.getByRole("button", { name: "恢复备份 备份 1", exact: true }).click();
+  await expect(page.getByRole("dialog")).toContainText("当前排列已符合此备份在当前显示设置下的布局");
+  await expect(page.getByRole("dialog")).not.toContainText("请确认没有选到");
+  await page.getByRole("button", { name: "确认恢复排列", exact: true }).click();
+  await expect(page.locator(".layout-backup-page .layout-restore-summary")).toContainText("当前排列已符合此备份在当前显示设置下的布局");
 });
 
 test("feature switch disables capture and restore but retains history after reload", async ({
